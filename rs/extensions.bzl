@@ -7,9 +7,11 @@ load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
 load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
-load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "download_sparse_registry_configs", "new_downloader_state", "parse_git_url", "sharded_path", "start_crate_registry_downloads", "start_github_downloads")
+load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_repository.bzl", "git_repository")
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
+load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
+load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name")
 load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:resolver.bzl", "resolve")
 load("//rs/private:select_utils.bzl", "compute_select")
@@ -251,7 +253,6 @@ def _generate_hub_and_spokes(
         cargo_lock_path,
         workspace_cargo_toml_json,
         all_packages,
-        sparse_registry_configs,
         platform_triples,
         cargo_credentials,
         cargo_config,
@@ -270,7 +271,6 @@ def _generate_hub_and_spokes(
         cargo_lock_path (path): Cargo.lock path
         workspace_cargo_toml_json (dict): Parsed workspace Cargo.toml
         all_packages: list[package]: from cargo lock parsing
-        sparse_registry_configs: dict[source, sparse registry config]
         platform_triples (list[string]): Triples to resolve for
         cargo_credentials (dict): Mapping of registry to auth token.
         cargo_config (label): .cargo/config.toml file
@@ -779,25 +779,19 @@ crate.annotation(
 
         if source.startswith("sparse+"):
             checksum = package["checksum"]
-            url = sparse_registry_configs[source].format(**{
-                "crate": crate_name,
-                "version": version,
-                "prefix": sharded_path(crate_name),
-                "lowerprefix": sharded_path(crate_name.lower()),
-                "sha256-checksum": checksum,
-            })
 
             if dry_run:
                 continue
 
             qualifiers = {}
-            if source != "sparse+https://index.crates.io/":
+            if source != CRATES_IO_REGISTRY:
                 qualifiers["repository_url"] = source.split("+", 1)[1]
 
             crate_repository(
                 name = repo_name,
-                url = url,
-                strip_prefix = "%s-%s" % (crate_name, version),
+                crate_name = crate_name,
+                version = version,
+                registry_config = "@%s//:dl" % registry_config_repo_name(hub_name, source),
                 sbom_extra_qualifiers = qualifiers,
                 checksum = checksum,
                 # The repository will need to recompute these, but this lets us avoid serializing them.
@@ -1233,16 +1227,32 @@ def _crate_impl(mctx):
                 cargo_credentials = {}
 
             cargo_credentials_by_hub_name[cfg.name] = cargo_credentials
-            start_crate_registry_downloads(mctx, downloader_state, annotations, packages_by_hub_name[cfg.name], cargo_credentials, cfg.debug)
+            packages = packages_by_hub_name[cfg.name]
+            registry_sources = set()
+
+            for package in packages:
+                source = package.get("source")
+                if source == "registry+https://github.com/rust-lang/crates.io-index":
+                    source = CRATES_IO_REGISTRY
+                    package["source"] = source
+
+                if source and source.startswith("sparse+"):
+                    registry_sources.add(source)
+
+            start_crate_registry_downloads(mctx, downloader_state, annotations, packages, cargo_credentials, cfg.debug)
+
+            for source in sorted(registry_sources):
+                registry_config_repository(
+                    name = registry_config_repo_name(cfg.name, source),
+                    source = source,
+                    cargo_config = cfg.cargo_config,
+                    use_home_cargo_credentials = cfg.use_home_cargo_credentials,
+                )
 
     for fetch_state in downloader_state.in_flight_git_crate_fetches_by_url.values():
         fetch_state.download_token.wait()
 
     download_metadata_for_git_crates(mctx, downloader_state, annotations_by_hub_name)
-
-    # TODO(zbarsky): Unfortunate that we block on the download for crates.io even though it's well-known.
-    # Should we hardcode it?
-    sparse_registry_configs = download_sparse_registry_configs(mctx, downloader_state)
 
     facts = {}
     direct_deps = []
@@ -1263,9 +1273,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
 
     # Lay down the git repos we will need; per-crate git_repository can clone from these.
     git_sources = set()
