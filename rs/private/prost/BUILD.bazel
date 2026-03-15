@@ -32,6 +32,7 @@ rust_binary(
         "@rrprd//:prost",
         "@rrprd//:prost-types",
     ],
+    tags = ["manual"],
 )
 
 rust_library_group(
@@ -39,6 +40,7 @@ rust_library_group(
     deps = [
         "@rrprd//:prost",
     ],
+    tags = ["manual"],
 )
 
 rust_library_group(
@@ -47,6 +49,7 @@ rust_library_group(
         ":prost_runtime",
         "@rrprd//:tonic",
     ],
+    tags = ["manual"],
 )
 
 rust_prost_toolchain(
@@ -62,4 +65,5 @@ rust_prost_toolchain(
     tonic_plugin = "@rrprd//:protoc-gen-tonic__protoc-gen-tonic",
     tonic_plugin_flag = "--plugin=protoc-gen-tonic=%s",
     tonic_runtime = ":tonic_runtime",
+    tags = ["manual"],
 )
