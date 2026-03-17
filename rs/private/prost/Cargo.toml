@@ -8,11 +8,12 @@ publish = false
 path = "src/lib.rs"
 
 [dependencies]
-h2 = "=0.4.6"
-prost = "=0.13.1"
-prost-types = "=0.13.1"
-protoc-gen-prost = "=0.4.0"
-protoc-gen-tonic = "=0.4.1"
-tokio = { version = "=1.39.3", features = ["full"] }
-tokio-stream = "=0.1.15"
-tonic = "=0.12.1"
+h2 = "=0.4.13"
+prost = "=0.14.3"
+prost-types = "=0.14.3"
+protoc-gen-prost = "=0.5.0"
+protoc-gen-tonic = "=0.5.0"
+tokio = { version = "=1.50.0", features = ["full"] }
+tokio-stream = "=0.1.18"
+tonic = "=0.14.5"
+tonic-prost = "=0.14.5"
