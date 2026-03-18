@@ -122,6 +122,27 @@ bzl_library(
 )
 
 bzl_library(
+    name = "rust_analyzer_repository",
+    srcs = ["rust_analyzer_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "//rs/private:rust_repository_utils",
+        "@rules_rust//rust/platform:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "rust_src_repository",
+    srcs = ["rust_src_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "@bazel_tools//tools/build_defs/repo:utils.bzl",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
     name = "rustc_repository",
     srcs = ["rustc_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
@@ -148,6 +169,7 @@ bzl_library(
     srcs = ["toolchains_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
+        "//rs/experimental/toolchains:declare_rust_analyzer_toolchains",
         "//rs/experimental/toolchains:declare_rustc_toolchains",
         "//rs/experimental/toolchains:declare_rustfmt_toolchains",
     ],

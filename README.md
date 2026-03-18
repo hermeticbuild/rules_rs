@@ -93,6 +93,18 @@ register_toolchains("@rust_toolchains//:all")
 
 In this mode, keep `use_experimental_platforms = False` (the default) in `crate.from_cargo(...)`.
 
+## rust-analyzer Integration
+
+`rust-analyzer` targets are accessible via either the legacy `@rules_rust` paths or `@rules_rs` paths.
+
+Example usage:
+
+```bzl
+bazel run @rules_rs//tools/rust_analyzer:gen_rust_project -- --help
+```
+
+See https://bazelbuild.github.io/rules_rust/rust_analyzer.html#vscode and the sections below that for more setup instructions.
+
 ## Dependency Resolution
 
 `rules_rs` uses its own `crate_universe` implementation through `crate.from_cargo`:

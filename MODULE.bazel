@@ -49,7 +49,7 @@ use_repo(
 bazel_dep(name = "bazel_lib", version = "3.0.0")
 bazel_dep(name = "bazel_features", version = "1.32.0")
 bazel_dep(name = "bazel_skylib", version = "1.4.1")
-bazel_dep(name = "package_metadata", version = "0.0.5")
+bazel_dep(name = "package_metadata", version = "0.0.7")
 bazel_dep(name = "platforms", version = "0.0.5")
 bazel_dep(name = "protobuf", version = "34.0.bcr.1", repo_name = "com_google_protobuf")
 bazel_dep(name = "rules_cc", version = "0.2.8")
@@ -61,6 +61,20 @@ tel = use_extension("@aspect_tools_telemetry//:extension.bzl", "telemetry")
 use_repo(tel, "aspect_tools_telemetry_report")
 
 crate = use_extension("//rs:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "rrra",
+    cargo_lock = "//tools/rust_analyzer:Cargo.lock",
+    cargo_toml = "//tools/rust_analyzer:Cargo.toml",
+    platform_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu",
+    ],
+    use_experimental_platforms = True,
+)
 crate.from_cargo(
     name = "rrprd",
     cargo_lock = "//rs/private/prost:Cargo.lock",
@@ -85,6 +99,7 @@ crate.annotation(
     crate = "protoc-gen-tonic",
     gen_binaries = ["protoc-gen-tonic"],
 )
+use_repo(crate, "rrra")
 use_repo(crate, "rrprd")
 
 rules_rust_prost = use_extension("//rs/experimental:rules_rust_prost.bzl", "rules_rust_prost")

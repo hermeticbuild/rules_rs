@@ -14,6 +14,18 @@ bzl_library(
 )
 
 bzl_library(
+    name = "declare_rust_analyzer_toolchains",
+    srcs = ["declare_rust_analyzer_toolchains.bzl"],
+    deps = [
+        ":toolchain_utils",
+        "//rs/experimental/platforms:triples",
+        "@rules_rust//rust:bzl_lib",
+        "@rules_rust//rust/platform:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
     name = "declare_rustfmt_toolchains",
     srcs = ["declare_rustfmt_toolchains.bzl"],
     deps = [
@@ -33,7 +45,9 @@ bzl_library(
         "//rs/private:cargo_repository",
         "//rs/private:clippy_repository",
         "//rs/private:host_tools_repository",
+        "//rs/private:rust_analyzer_repository",
         "//rs/private:rust_repository_utils",
+        "//rs/private:rust_src_repository",
         "//rs/private:rustc_repository",
         "//rs/private:rustfmt_repository",
         "//rs/private:stdlib_repository",
