@@ -146,6 +146,7 @@ TESTS = [
     "platform_dep_features",
     "target_workspace_dep_feature",
     "vendored_crate_override",
+    "vendored_workspace_dep",
     "workspace_member_annotation_features",
     "workspace_path_dependency",
     "workspace_hyphen_dep_aliases",

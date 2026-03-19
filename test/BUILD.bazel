@@ -131,6 +131,26 @@ genquery(
     scope = ["@workspace_member_annotation_features//:dep_leaf-0.1.0"],
 )
 
+genquery(
+    name = "vendored_workspace_dep_itoa_deps",
+    expression = "deps(@vendored_workspace_dep//:itoa-1.0.11)",
+    scope = ["@vendored_workspace_dep//:itoa-1.0.11"],
+)
+
+genrule(
+    name = "verify_vendored_workspace_dep",
+    srcs = [":vendored_workspace_dep_itoa_deps"],
+    outs = ["verify_vendored_workspace_dep.txt"],
+    cmd = """
+        if grep 'vendored_workspace_dep//:mylib' $(location :vendored_workspace_dep_itoa_deps); then
+            echo "FAIL: itoa should not have a hub dep on workspace member mylib"
+            exit 1
+        fi
+        grep '//vendored_workspace_dep/mylib' $(location :vendored_workspace_dep_itoa_deps)
+        echo ok > $@
+    """,
+)
+
 verify_alias(
     name = "verify_workspace_hyphen_dep_aliases",
     aliases = workspace_hyphen_dep_aliases_aliases(package_name = "workspace_hyphen_dep_aliases/consumer"),
@@ -215,6 +235,7 @@ filegroup(
         ":verify_target_workspace_dep_feature_feature_absent",
         ":verify_workspace_hyphen_dep_aliases",
         ":verify_workspace_member_annotation_features",
+        ":verify_vendored_workspace_dep",
         ":verify_workspace_renamed_path_dep_aliases",
         "//prost:echo_rust_proto",
         "@binaries//:protoc-gen-prost-extra",
