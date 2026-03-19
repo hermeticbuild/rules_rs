@@ -354,7 +354,8 @@ def _resolve_possible_deps(
         platform_cfg_attrs,
         cfg_match_cache,
         dep_label_prefix,
-        allow_missing_resolved_deps):
+        allow_missing_resolved_deps,
+        workspace_member_labels = {}):
     for package in packages:
         name = package["name"]
         deps_by_name = {}
@@ -395,7 +396,11 @@ def _resolve_possible_deps(
                 if allow_missing_resolved_deps:
                     continue
                 fail("Resolved %s dependency %s but no crate metadata was available" % (name, dep_fq))
-            dep["bazel_target"] = "%s%s" % (dep_label_prefix or ("@%s//:" % hub_name), dep_fq)
+            workspace_label = workspace_member_labels.get((dep_package, resolved_version))
+            if workspace_label:
+                dep["bazel_target"] = workspace_label
+            else:
+                dep["bazel_target"] = "%s%s" % (dep_label_prefix or ("@%s//:" % hub_name), dep_fq)
             dep["feature_resolutions"] = feature_resolutions_by_fq_crate[dep_fq]
 
             target = dep.get("target")
@@ -424,7 +429,8 @@ def resolve_cargo_workspace_members(
         dep_label_prefix = None,
         allow_missing_resolved_deps = False,
         watch_manifests = False,
-        use_legacy_rules_rust_platforms = False):
+        use_legacy_rules_rust_platforms = False,
+        workspace_member_labels = {}):
     platform_cfg_attrs = [triple_to_cfg_attrs(triple) for triple in platform_triples]
     platform_cfg_attrs_by_triple = {}
     for cfg_attr in platform_cfg_attrs:
@@ -480,6 +486,7 @@ def resolve_cargo_workspace_members(
         cfg_match_cache,
         dep_label_prefix,
         allow_missing_resolved_deps,
+        workspace_member_labels = workspace_member_labels,
     )
 
     workspace_fq_deps = compute_workspace_fq_deps(workspace_members, resolver_versions_by_name)

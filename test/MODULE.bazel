@@ -148,6 +148,7 @@ TESTS = [
     "target_workspace_dep_feature",
     "vendored_crate_override",
     "workspace_default_features",
+    "vendored_workspace_dep",
     "workspace_member_annotation_features",
     "workspace_git_dep",
     "workspace_path_dependency",

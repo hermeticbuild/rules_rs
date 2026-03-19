@@ -15,6 +15,7 @@ load(
     "split_lockfile_packages",
     "workspace_dep_data",
     _fq_crate = "fq_crate",
+    _manifest_package_dir = "manifest_package_dir",
     _normalize_path = "normalize_path",
     _select = "select_items",
 )
@@ -144,6 +145,14 @@ def _generate_hub_and_spokes(
     packages = split_packages.packages
     workspace_members = split_packages.workspace_members
 
+    workspace_root = _normalize_path(cargo_metadata["workspace_root"])
+    workspace_package = _label_directory(cargo_lock_path)
+    workspace_member_labels = {}
+    for package in cargo_metadata["packages"]:
+        package_dir = _manifest_package_dir(package["manifest_path"], workspace_root)
+        bazel_package = paths.join(workspace_package, package_dir) if package_dir else workspace_package
+        workspace_member_labels[(package["name"], package["version"])] = "@@//" + bazel_package
+
     mctx.report_progress("Computing dependencies and features")
 
     facts_by_fq_crate = {}
@@ -268,6 +277,7 @@ def _generate_hub_and_spokes(
         debug = debug,
         watch_manifests = watch_manifests,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        workspace_member_labels = workspace_member_labels,
     )
     cfg_match_cache = workspace_resolution.cfg_match_cache
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
