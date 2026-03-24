@@ -992,7 +992,11 @@ RESOLVED_PLATFORMS = select({{
         for dep in package["dependencies"]:
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
-                bazel_target = "//" + paths.join(workspace_package, _normalize_path(dep["path"]).removeprefix(repo_root + "/"))
+                dep_path = dep.get("path")
+                if not dep_path:
+                    # Registry crate without a path — handled via the crate hub, skip.
+                    continue
+                bazel_target = "//" + paths.join(workspace_package, _normalize_path(dep_path).removeprefix(repo_root + "/"))
 
             if dep.get("rename"):
                 aliases[bazel_target] = dep["rename"].replace("-", "_")
