@@ -412,36 +412,37 @@ def _generate_hub_and_spokes(
                     # Nest a serialized JSON since max path depth is 5.
                     facts[key] = json.encode(fact)
         elif source.startswith("path+"):
+            # Always re-read path-dep Cargo.toml instead of using cached facts.
+            # Path deps are local (fast to read), and their Cargo.toml can change
+            # features/deps without changing the facts key, causing stale resolution.
+            # Also watch the file so Bazel re-runs the extension when it changes.
             key = source + "_" + name
-            fact = existing_facts.get(key)
-            if fact:
-                facts[key] = fact
-                fact = json.decode(fact)
-            else:
-                annotation = annotation_for(annotations, name, package["version"])
-                cargo_toml_json = run_toml2json(mctx, paths.join(package["local_path"], "Cargo.toml"))
+            cargo_toml_path = paths.join(package["local_path"], "Cargo.toml")
+            mctx.watch(mctx.path(cargo_toml_path))
+            annotation = annotation_for(annotations, name, package["version"])
+            cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
 
-                dependencies = [
-                    _spec_to_dep_dict(dep, spec, annotation, {})
-                    for dep, spec in cargo_toml_json.get("dependencies", {}).items()
-                ] + [
-                    _spec_to_dep_dict(dep, spec, annotation, {}, is_build = True)
-                    for dep, spec in cargo_toml_json.get("build-dependencies", {}).items()
-                ]
+            dependencies = [
+                _spec_to_dep_dict(dep, spec, annotation, {})
+                for dep, spec in cargo_toml_json.get("dependencies", {}).items()
+            ] + [
+                _spec_to_dep_dict(dep, spec, annotation, {}, is_build = True)
+                for dep, spec in cargo_toml_json.get("build-dependencies", {}).items()
+            ]
 
-                for target, value in cargo_toml_json.get("target", {}).items():
-                    for dep, spec in value.get("dependencies", {}).items():
-                        converted = _spec_to_dep_dict(dep, spec, annotation, {})
-                        converted["target"] = target
-                        dependencies.append(converted)
+            for target, value in cargo_toml_json.get("target", {}).items():
+                for dep, spec in value.get("dependencies", {}).items():
+                    converted = _spec_to_dep_dict(dep, spec, annotation, {})
+                    converted["target"] = target
+                    dependencies.append(converted)
 
-                fact = dict(
-                    features = cargo_toml_json.get("features", {}),
-                    dependencies = dependencies,
-                    strip_prefix = "",
-                )
+            fact = dict(
+                features = cargo_toml_json.get("features", {}),
+                dependencies = dependencies,
+                strip_prefix = "",
+            )
 
-                facts[key] = json.encode(fact)
+            facts[key] = json.encode(fact)
             package["strip_prefix"] = fact.get("strip_prefix", "")
         elif source.startswith("git+"):
             key = source + "_" + name
