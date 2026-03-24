@@ -1,3 +1,5 @@
+"""Repository rule for git-sourced crates with strip_prefix support."""
+
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
 load(":repository_utils.bzl", "common_attrs", "generate_build_file")
 load(":toml2json.bzl", "run_toml2json")
@@ -32,7 +34,7 @@ def _crate_git_repository_implementation(rctx):
         "--force",
         "--force",
         "--detach",
-        "HEAD"
+        "HEAD",
     ])
     if result.return_code != 0:
         fail(result.stderr)
@@ -42,7 +44,18 @@ def _crate_git_repository_implementation(rctx):
         if not dest_link.exists:
             fail("strip_prefix at {} does not exist in repo".format(strip_prefix))
         for item in dest_link.readdir():
-            rctx.symlink(item, root.get_child(item.basename))
+            # Use relative symlinks so the repo remains valid when served from
+            # Bazel's repository_cache to a different output base.  Absolute
+            # symlinks (what rctx.symlink produces) embed the original output
+            # base path and break on reuse.
+            ln_result = rctx.execute([
+                "ln",
+                "-sf",
+                ".tmp_git_root/" + strip_prefix + "/" + item.basename,
+                str(root.get_child(item.basename)),
+            ])
+            if ln_result.return_code != 0:
+                fail("symlink failed for {}: {}".format(item.basename, ln_result.stderr))
 
     patch(rctx)
 
