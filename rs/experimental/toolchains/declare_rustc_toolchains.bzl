@@ -101,7 +101,7 @@ def declare_rustc_toolchains(
             default_edition = edition,
             extra_exec_rustc_flags = extra_exec_rustc_flags.get(triple),
             extra_rustc_flags = select(
-                {"@rules_rs//rs/experimental/platforms/config:" + triple: flags for triple, flags in extra_rustc_flags.items} |
+                {"@rules_rs//rs/experimental/platforms/config:" + triple: flags for triple, flags in extra_rustc_flags.items()} |
                 {"//conditions:default": []},
             ),
             exec_triple = triple,
