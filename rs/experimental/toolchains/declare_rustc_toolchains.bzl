@@ -59,11 +59,11 @@ def declare_rustc_toolchains(
             allocator_library = None,
             global_allocator_library = None,
             binary_ext = select({
+                "@platforms//cpu:wasm32": ".wasm",
+                "@platforms//cpu:wasm64": ".wasm",
                 "@platforms//os:emscripten": ".js",
                 "@platforms//os:uefi": ".efi",
                 "@platforms//os:windows": ".exe",
-                "@platforms//cpu:wasm32": ".wasm",
-                "@platforms//cpu:wasm64": ".wasm",
                 "//conditions:default": "",
             }),
             staticlib_ext = select({
@@ -76,7 +76,6 @@ def declare_rustc_toolchains(
             dylib_ext = select({
                 "@platforms//cpu:wasm32": ".wasm",
                 "@platforms//cpu:wasm64": ".wasm",
-                "@platforms//os:none": ".so",
                 "@platforms//os:android": ".so",
                 "@platforms//os:emscripten": ".js",
                 "@platforms//os:fuchsia": ".so",
