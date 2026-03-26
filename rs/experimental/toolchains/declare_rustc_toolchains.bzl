@@ -10,6 +10,12 @@ def _channel(version):
         return "beta"
     return "stable"
 
+def _rustc_flags_to_select(rustc_flags_by_triple):
+    return select(
+        {"@rules_rs//rs/experimental/platforms/config:" + triple: flags for triple, flags in rustc_flags_by_triple.items()} |
+        {"//conditions:default": []},
+    )
+
 def declare_rustc_toolchains(
         *,
         version,
@@ -98,11 +104,8 @@ def declare_rustc_toolchains(
                 "//conditions:default": [],
             }),
             default_edition = edition,
-            extra_exec_rustc_flags = extra_exec_rustc_flags.get(triple),
-            extra_rustc_flags = select(
-                {"@rules_rs//rs/experimental/platforms/config:" + triple: flags for triple, flags in extra_rustc_flags.items()} |
-                {"//conditions:default": []},
-            ),
+            extra_exec_rustc_flags = _rustc_flags_to_select(extra_exec_rustc_flags),
+            extra_rustc_flags = _rustc_flags_to_select(extra_rustc_flags),
             exec_triple = triple,
             target_triple = select(target_triple_select),
             visibility = ["//visibility:public"],

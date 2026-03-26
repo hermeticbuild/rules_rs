@@ -158,6 +158,11 @@ rust_crate(
 
     binaries = {bin["name"]: bin["path"] for bin in cargo_toml.get("bin", []) if bin["name"] in rctx.attr.gen_binaries}
 
+    implicit_binary_name = package["name"]
+    implicit_binary_path = "src/main.rs"
+    if implicit_binary_name in rctx.attr.gen_binaries and implicit_binary_name not in binaries and rctx.path(implicit_binary_path).exists:
+        binaries[implicit_binary_name] = implicit_binary_path
+
     return build_content.format(
         name = repr(name),
         hub_name = rctx.attr.hub_name,
