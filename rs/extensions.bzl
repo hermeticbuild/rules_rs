@@ -379,7 +379,10 @@ def _generate_hub_and_spokes(
 
                 # TODO(zbarsky): Should we also dedupe this parsing?
                 metadatas = mctx.read(name + ".jsonl").strip().split("\n")
+                version_needle = '"vers":"%s"' % version
                 for metadata in metadatas:
+                    if version_needle not in metadata:
+                        continue
                     metadata = json.decode(metadata)
                     if metadata["vers"] != version:
                         continue
