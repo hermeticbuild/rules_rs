@@ -1,5 +1,5 @@
-load(":semver.bzl", "parse_full_version")
 load(":select_utils.bzl", "compute_select")
+load(":semver.bzl", "parse_full_version")
 
 def _platform(triple, use_experimental_platforms):
     if use_experimental_platforms:
@@ -94,14 +94,17 @@ def generate_build_file(rctx, cargo_toml):
     crate_name = lib.get("name")
     links = package.get("links")
 
+    package_name = package.get("name")
+
     build_content = \
-"""load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+        """load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
 rust_crate(
     name = {name},
     crate_name = {crate_name},
+    package_name = {package_name},
     version = {version},
     aliases = {{
         {aliases}
@@ -167,6 +170,7 @@ rust_crate(
         name = repr(name),
         hub_name = rctx.attr.hub_name,
         crate_name = repr(crate_name),
+        package_name = repr(package_name),
         version = repr(version),
         aliases = ",\n        ".join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
         deps = ",\n        ".join(['"%s"' % d for d in sorted(deps)]),
