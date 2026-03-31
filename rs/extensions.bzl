@@ -778,13 +778,15 @@ crate.annotation(
             if dry_run:
                 continue
 
+            qualifiers = {}
+            if source != "sparse+https://index.crates.io/":
+                qualifiers["repository_url"] = source.split("+", 1)[1]
+
             crate_repository(
                 name = repo_name,
                 url = url,
                 strip_prefix = "%s-%s" % (crate_name, version),
-                sbom_extra_qualifiers = {
-                    "repository_url": source.split("+", 1)[1],
-                },
+                sbom_extra_qualifiers = qualifiers,
                 checksum = checksum,
                 # The repository will need to recompute these, but this lets us avoid serializing them.
                 use_home_cargo_credentials = use_home_cargo_credentials,
