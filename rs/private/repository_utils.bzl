@@ -1,4 +1,4 @@
-load("//rs/private/purl:builder.bzl", purl_builder = "builder")
+load("@package_metadata//purl:purl.bzl", "purl")
 load(":select_utils.bzl", "compute_select")
 load(":semver.bzl", "parse_full_version")
 
@@ -97,11 +97,9 @@ def generate_build_file(rctx, cargo_toml, purl_qualifiers = {}):
 
     package_name = package.get("name")
 
-    purl_build = purl_builder().type("cargo").name(package_name).version(version)
+    purl_build = purl.builder().type("cargo").name(package_name).version(version)
     for k, v in purl_qualifiers.items():
         purl_build.add_qualifier(k, v).build()
-
-    purl = purl_build.build()
 
     build_content = """\
 load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
@@ -177,7 +175,7 @@ rust_crate(
         name = repr(name),
         hub_name = rctx.attr.hub_name,
         crate_name = repr(crate_name),
-        purl = repr(purl),
+        purl = repr(purl_build.build()),
         version = repr(version),
         aliases = ",\n        ".join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
         deps = ",\n        ".join(['"%s"' % d for d in sorted(deps)]),

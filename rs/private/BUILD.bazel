@@ -71,7 +71,6 @@ bzl_library(
     srcs = ["repository_utils.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
-        "//rs/private/purl:builder",
         ":select_utils",
         ":semver",
     ],
