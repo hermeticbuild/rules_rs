@@ -1,4 +1,3 @@
-load("@package_metadata//purl:purl.bzl", "purl")
 load(":select_utils.bzl", "compute_select")
 load(":semver.bzl", "parse_full_version")
 
@@ -40,6 +39,15 @@ def render_select_build_script_env(platform_items, use_experimental_platforms):
 
 def _exclude_deps_from_features(features):
     return [f for f in features if not f.startswith("dep:")]
+
+def _cargo_purl(package_name, version, qualifiers = {}):
+    purl = "pkg:cargo/{}@{}".format(package_name, version)
+    if qualifiers:
+        purl += "?" + "&".join([
+            "{}={}".format(key, qualifiers[key])
+            for key in sorted(qualifiers)
+        ])
+    return purl
 
 def generate_build_file(rctx, cargo_toml, purl_qualifiers = {}):
     attr = rctx.attr
@@ -96,10 +104,7 @@ def generate_build_file(rctx, cargo_toml, purl_qualifiers = {}):
     links = package.get("links")
 
     package_name = package.get("name")
-
-    purl_build = purl.builder().type("cargo").name(package_name).version(version)
-    for k, v in purl_qualifiers.items():
-        purl_build.add_qualifier(k, v).build()
+    cargo_purl = _cargo_purl(package_name, version, purl_qualifiers)
 
     build_content = """\
 load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
@@ -175,7 +180,7 @@ rust_crate(
         name = repr(name),
         hub_name = rctx.attr.hub_name,
         crate_name = repr(crate_name),
-        purl = repr(purl_build.build()),
+        purl = repr(cargo_purl),
         version = repr(version),
         aliases = ",\n        ".join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
         deps = ",\n        ".join(['"%s"' % d for d in sorted(deps)]),

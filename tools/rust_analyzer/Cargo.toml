@@ -1,0 +1,18 @@
+[package]
+name = "rules_rs_rust_analyzer"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "cargo_metadata_stub.rs"
+
+[dependencies]
+anyhow = "=1.0.102"
+camino = { version = "=1.2.2", features = ["serde1"] }
+clap = { version = "=4.6.0", features = ["derive", "env"] }
+env_logger = "=0.11.10"
+itertools = "=0.14.0"
+log = "=0.4.29"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.149"

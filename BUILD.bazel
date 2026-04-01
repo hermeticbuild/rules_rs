@@ -17,3 +17,11 @@ license(
     kind = "@package_metadata//licenses/spdx:Apache-2.0",
     text = "LICENSE",
 )
+
+platform(
+    name = "local_gnu_platform",
+    parents = ["@platforms//host"],
+    constraint_values = [
+        "@llvm//constraints/libc:gnu.2.28",
+    ],
+)

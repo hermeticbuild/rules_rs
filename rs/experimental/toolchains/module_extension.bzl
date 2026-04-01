@@ -12,6 +12,8 @@ load("//rs/experimental/toolchains:toolchain_utils.bzl", "sanitize_triple", "san
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
 load("//rs/private:host_tools_repository.bzl", "host_tools_repository")
+load("//rs/private:rust_analyzer_repository.bzl", "rust_analyzer_repository")
+load("//rs/private:rust_src_repository.bzl", "rust_src_repository")
 load("//rs/private:rustc_repository.bzl", "rustc_repository")
 load("//rs/private:rustfmt_repository.bzl", "rustfmt_repository")
 load("//rs/private:stdlib_repository.bzl", "stdlib_repository")
@@ -65,6 +67,10 @@ _TOOLCHAIN_TAG = tag_class(
             doc = "Rustfmt version (e.g. 1.86.0 or nightly/2025-04-03)",
             default = "",
         ),
+        "rust_analyzer_version": attr.string(
+            doc = "Rust-analyzer version (e.g. 1.86.0 or nightly/2025-04-03)",
+            default = "",
+        ),
         "edition": attr.string(
             doc = "Default edition to apply to toolchains.",
             default = _DEFAULT_EDITION,
@@ -106,6 +112,7 @@ def _toolchains_impl(mctx):
             name = _DEFAULT_TOOLCHAIN_REPO_NAME,
             version = _DEFAULT_RUSTC_VERSION,
             rustfmt_version = "",
+            rust_analyzer_version = "",
             edition = _DEFAULT_EDITION,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
@@ -113,10 +120,12 @@ def _toolchains_impl(mctx):
 
     versions = set([])
     rustfmt_versions = set([])
+    rust_analyzer_versions = set([])
 
     for tag in version_tags:
         versions.add(tag.version)
         rustfmt_versions.add(tag.rustfmt_version or tag.version)
+        rust_analyzer_versions.add(tag.rust_analyzer_version or tag.version)
 
     existing_facts = getattr(mctx, "facts", {}) or {}
     pending_downloads = {}
@@ -165,6 +174,17 @@ def _toolchains_impl(mctx):
             for tool_name in ["rustc", "rustfmt"]:
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
 
+    for version in rust_analyzer_versions:
+        base_version, iso_date = _parse_version(version)
+
+        _request_sha("rust-src", base_version, iso_date, None)
+
+        for triple in SUPPORTED_EXEC_TRIPLES:
+            exec_triple = _parse_triple(triple)
+
+            for tool_name in ["rustc", "rust-analyzer"]:
+                _request_sha(tool_name, base_version, iso_date, exec_triple)
+
     # Finish downloads and record facts.
     for archive_path, req in pending_downloads.items():
         req.token.wait()
@@ -182,7 +202,7 @@ def _toolchains_impl(mctx):
     host_arch = _normalize_arch_name(mctx.os.arch)
     host_cargo_repo = None
 
-    for version in versions | rustfmt_versions:
+    for version in versions | rustfmt_versions | rust_analyzer_versions:
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
 
@@ -249,6 +269,29 @@ def _toolchains_impl(mctx):
                 rustc_repo_build_file = "@rustc_{}_{}//:BUILD.bazel".format(triple_suffix, version_key),
             )
 
+    for version in rust_analyzer_versions:
+        version_key = sanitize_version(version)
+        base_version, iso_date = _parse_version(version)
+
+        rust_src_repository(
+            name = "rust_src_{}".format(version_key),
+            version = base_version,
+            iso_date = iso_date,
+            sha256 = _sha_for("rust-src", base_version, iso_date, None),
+        )
+
+        for triple in SUPPORTED_EXEC_TRIPLES:
+            exec_triple = _parse_triple(triple)
+            triple_suffix = exec_triple.system + "_" + exec_triple.arch
+
+            rust_analyzer_repository(
+                name = "rust_analyzer_{}_{}".format(triple_suffix, version_key),
+                triple = triple,
+                version = base_version,
+                iso_date = iso_date,
+                sha256 = _sha_for("rust-analyzer", base_version, iso_date, exec_triple),
+            )
+
     host_tools_repository(
         name = "rs_rust_host_tools",
         host_cargo_repo = host_cargo_repo,
@@ -264,10 +307,12 @@ def _toolchains_impl(mctx):
     for tag in version_tags:
         repo_name = tag.name
         rustfmt_version = tag.rustfmt_version or tag.version
+        rust_analyzer_version = tag.rust_analyzer_version or tag.version
         existing = repo_configs.get(repo_name)
         if existing and (
             existing.version != tag.version or
             (existing.rustfmt_version or existing.version) != rustfmt_version or
+            (existing.rust_analyzer_version or existing.version) != rust_analyzer_version or
             existing.edition != tag.edition or
             existing.extra_rustc_flags != tag.extra_rustc_flags or
             existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags
@@ -280,6 +325,7 @@ def _toolchains_impl(mctx):
                 name = repo_name,
                 version = tag.version,
                 rustfmt_version = rustfmt_version,
+                rust_analyzer_version = rust_analyzer_version,
                 edition = tag.edition,
                 extra_rustc_flags = tag.extra_rustc_flags,
                 extra_exec_rustc_flags = tag.extra_exec_rustc_flags,

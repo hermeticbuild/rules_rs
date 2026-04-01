@@ -184,12 +184,25 @@ genrule(
     }),
 )
 
+genrule(
+    name = "verify_rust_analyzer_toolchain",
+    srcs = ["@rules_rust//rust/private:rust_analyzer_detect_sysroot"],
+    outs = ["verify_rust_analyzer_toolchain.txt"],
+    cmd = """
+        grep '"sysroot"' $(location @rules_rust//rust/private:rust_analyzer_detect_sysroot)
+        grep '"sysroot_src"' $(location @rules_rust//rust/private:rust_analyzer_detect_sysroot)
+        grep 'lib/rustlib/src/library' $(location @rules_rust//rust/private:rust_analyzer_detect_sysroot)
+        echo ok > $@
+    """,
+)
+
 filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         ":rust_binary",
         ":verify_cfg_feature_target_dep",
         ":verify_first_party_feature_propagation",
+        ":verify_rust_analyzer_toolchain",
         ":verify_target_workspace_dep_feature_dep_absent",
         ":verify_target_workspace_dep_feature_feature_absent",
         ":verify_workspace_hyphen_dep_aliases",
