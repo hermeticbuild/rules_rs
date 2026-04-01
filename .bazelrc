@@ -9,4 +9,8 @@ common --repo_env=BAZEL_NO_APPLE_CPP_TOOLCHAIN=1
 common --repo_contents_cache=~/bazel_repo_contents_cache
 common --disk_cache=~/bazel_cache
 
+common --@llvm//config:experimental_stub_libgcc_s
+common --enable_platform_specific_config
+common:linux --host_platform=//:local_gnu_platform
+
 common:remote --jobs=800

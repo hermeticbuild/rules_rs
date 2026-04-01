@@ -237,6 +237,7 @@ At minimum, set an explicit `--host_platform` that adds your ABI constraint on t
 `.bazelrc`:
 
 ```bazelrc
+common --enable_platform_specific_config
 common:linux --host_platform=//platforms:local_gnu
 common:windows --host_platform=//platforms:local_windows_msvc
 ```
