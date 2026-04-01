@@ -99,5 +99,9 @@ rust_clippy(
 
 bzl_library(
     name = "bzl_lib",
-    srcs = ["deps.bzl"],
+    srcs = ["defs.bzl"],
+    deps = [
+        "@bazel_features//:features",
+        "@rules_rust//rust:bzl_lib",
+    ],
 )
