@@ -1,5 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
 load(":repository_utils.bzl", "common_attrs", "generate_build_file")
+load(":symlink_utils.bzl", "relative_symlink")
 load(":toml2json.bzl", "run_toml2json")
 
 _INHERITABLE_FIELDS = [
@@ -86,7 +87,7 @@ def _crate_git_repository_implementation(rctx):
         if not dest_link.exists:
             fail("strip_prefix at {} does not exist in repo".format(strip_prefix))
         for item in dest_link.readdir():
-            rctx.symlink(item, root.get_child(item.basename))
+            relative_symlink(rctx, item, root.get_child(item.basename))
 
     patch(rctx)
 

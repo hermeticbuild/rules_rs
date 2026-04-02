@@ -35,6 +35,7 @@ bzl_library(
     visibility = ["//rs:__subpackages__"],
     deps = [
         ":repository_utils",
+        ":symlink_utils",
         ":toml2json",
         "@bazel_tools//tools/build_defs/repo:git_worker.bzl",
         "@bazel_tools//tools/build_defs/repo:utils.bzl",
@@ -182,6 +183,16 @@ bzl_library(
     deps = [
         "@bazel_tools//tools/build_defs/repo:utils.bzl",
         "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "symlink_utils",
+    srcs = ["symlink_utils.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "@bazel_features//:features",
+        "@bazel_lib//lib:paths",
     ],
 )
 
