@@ -109,6 +109,9 @@ def _crate_git_repository_implementation(rctx):
 
     rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml, purl_qualifiers = {"vcs_url": vcs_url}))
 
+    # Since we're using `git` to download the repo, remove
+    # the `.git` to make sure it's reproducible.
+    rctx.delete(root.get_child(".git"))
     return rctx.repo_metadata(reproducible = True)
 
 crate_git_repository = repository_rule(

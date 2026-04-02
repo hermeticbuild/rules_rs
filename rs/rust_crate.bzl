@@ -46,6 +46,7 @@ def rust_crate(
         include = ["**"],
         exclude = [
             "**/* *",
+            ".git",
             ".tmp_git_root/**/*",
             "BUILD",
             "BUILD.bazel",
