@@ -177,7 +177,7 @@ def start_crate_registry_downloads(
                         remote = remote,
                         init_submodules = True,
                         recursive_init_submodules = True,
-                        verbose = debug,
+                        verbose = False,
                     ),
                 ),
                 packages = [package],
