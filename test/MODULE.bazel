@@ -113,8 +113,9 @@ toolchains = use_extension("@rules_rs//rs/experimental/toolchains:module_extensi
 toolchains.toolchain(
     edition = "2024",
     version = "1.92.0",
+    source_rust_std = "@//source_stdlib:rust_std",
 )
-use_repo(toolchains, "default_rust_toolchains")
+use_repo(toolchains, "default_rust_toolchains", "rust_src_1_92_0")
 
 register_toolchains("@default_rust_toolchains//:all")
 
@@ -176,6 +177,20 @@ TESTS = [
 ]
 
 [use_repo(crate, test) for test in TESTS]
+
+crate.from_cargo(
+    name = "rust_stdlib_source",
+    cargo_lock = "@rust_src_1_92_0//lib/rustlib/src:library/Cargo.lock",
+    cargo_toml = "@rust_src_1_92_0//lib/rustlib/src:library/Cargo.toml",
+    cargo_env = {"RUSTC_BOOTSTRAP": "1"},
+    platform_triples = [
+        "aarch64-apple-darwin",
+    ],
+    use_experimental_platforms = True,
+    validate_lockfile = False,
+)
+
+use_repo(crate, "rust_stdlib_source")
 
 crate.annotation(
     crate = "rustls",

@@ -56,15 +56,16 @@ def _local_crate_repository_impl(rctx):
 
     patch(rctx)
 
-    cargo_toml = run_toml2json(rctx, "Cargo.toml")
+    cargo_toml = run_toml2json(rctx, rctx.attr.cargo_toml)
 
-    rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
+    rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml, cargo_toml_path = rctx.attr.cargo_toml))
 
     return rctx.repo_metadata(reproducible = True)
 
 local_crate_repository = repository_rule(
     implementation = _local_crate_repository_impl,
     attrs = {
+        "cargo_toml": attr.string(default = "Cargo.toml"),
         "path": attr.string(mandatory = True),
     } | common_attrs,
 )

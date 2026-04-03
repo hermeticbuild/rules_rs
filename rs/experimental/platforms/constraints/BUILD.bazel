@@ -4,6 +4,10 @@ constraint_setting(
     name = "windows_abi",
 )
 
+constraint_setting(
+    name = "rust_stdlib",
+)
+
 constraint_value(
     name = "windows_gnu",
     constraint_setting = ":windows_abi",
@@ -17,4 +21,9 @@ constraint_value(
 constraint_value(
     name = "windows_msvc",
     constraint_setting = ":windows_abi",
+)
+
+constraint_value(
+    name = "rust_stdlib_source",
+    constraint_setting = ":rust_stdlib",
 )

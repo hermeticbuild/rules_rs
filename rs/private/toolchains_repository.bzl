@@ -11,6 +11,7 @@ declare_rustc_toolchains(
     edition = {edition},
     extra_rustc_flags = {extra_rustc_flags},
     extra_exec_rustc_flags = {extra_exec_rustc_flags},
+    source_rust_std = {source_rust_std},
 )
 
 declare_rustfmt_toolchains(
@@ -30,6 +31,7 @@ declare_rust_analyzer_toolchains(
             edition = repr(rctx.attr.edition),
             extra_rustc_flags = repr(rctx.attr.extra_rustc_flags),
             extra_exec_rustc_flags = repr(rctx.attr.extra_exec_rustc_flags),
+            source_rust_std = repr(rctx.attr.source_rust_std),
         ),
     )
 
@@ -44,5 +46,6 @@ toolchains_repository = repository_rule(
         "edition": attr.string(mandatory = True),
         "extra_rustc_flags": attr.string_list_dict(),
         "extra_exec_rustc_flags": attr.string_list_dict(),
+        "source_rust_std": attr.string(),
     },
 )

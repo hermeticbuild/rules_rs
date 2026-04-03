@@ -1,0 +1,20 @@
+load("@rules_rs//rs/experimental/toolchains:source_stdlib.bzl", "rust_stdlib_from_deps")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
+load(":defs.bzl", "with_source_stdlib")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_stdlib_from_deps(
+    name = "rust_std",
+    roots = ["@rust_stdlib_source//:std"],
+)
+
+rust_binary(
+    name = "smoke",
+    srcs = ["main.rs"],
+)
+
+with_source_stdlib(
+    name = "smoke_with_source_stdlib",
+    dep = ":smoke",
+)

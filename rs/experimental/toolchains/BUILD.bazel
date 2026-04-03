@@ -58,6 +58,15 @@ bzl_library(
 )
 
 bzl_library(
+    name = "source_stdlib",
+    srcs = ["source_stdlib.bzl"],
+    deps = [
+        "@rules_rust//rust:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
     name = "toolchain_utils",
     srcs = ["toolchain_utils.bzl"],
 )

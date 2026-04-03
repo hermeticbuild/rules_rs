@@ -72,6 +72,53 @@ register_toolchains("@default_rust_toolchains//:all")
 
 Make sure you set `use_experimental_platforms = True` in `crate.from_cargo(...)`.
 
+To register both the default prebuilt stdlib toolchains and a source-built stdlib variant, pass
+`source_rust_std` and select it by targeting the matching `_source` platform:
+
+```bzl
+toolchains = use_extension("@rules_rs//rs/experimental/toolchains:module_extension.bzl", "toolchains")
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+
+toolchains.toolchain(
+    edition = "2024",
+    version = "1.92.0",
+    source_rust_std = "@//source_stdlib:rust_std",
+)
+
+use_repo(toolchains, "default_rust_toolchains", "rust_src_1_92_0")
+register_toolchains("@default_rust_toolchains//:all")
+
+crate.from_cargo(
+    name = "rust_stdlib_source",
+    cargo_toml = "@rust_src_1_92_0//lib/rustlib/src:library/Cargo.toml",
+    cargo_lock = "@rust_src_1_92_0//lib/rustlib/src:library/Cargo.lock",
+    cargo_env = {"RUSTC_BOOTSTRAP": "1"},
+    platform_triples = ["aarch64-apple-darwin"],
+    use_experimental_platforms = True,
+    validate_lockfile = False,
+)
+
+use_repo(crate, "rust_stdlib_source")
+```
+
+Then build with a source platform such as
+`--platforms=@rules_rs//rs/experimental/platforms:aarch64-apple-darwin_source`.
+Exec tools still resolve against the prebuilt toolchain, so the source stdlib can bootstrap from it.
+
+Then build a stdlib filegroup from the resolved crates:
+
+```bzl
+load("@rules_rs//rs/experimental/toolchains:source_stdlib.bzl", "rust_stdlib_from_deps")
+
+rust_stdlib_from_deps(
+    name = "rust_std",
+    roots = ["@rust_stdlib_source//:std"],
+)
+```
+
+`rust_stdlib_from_deps` bootstraps the source-built stdlib with the prebuilt toolchain under the
+hood, so the source variant can coexist with the default toolchains without recursing on itself.
+
 ### Option B: Keep your existing `rules_rust` toolchain configuration.
 
 When using `rules_rust` toolchains with `rules_rs`, first provision `rules_rust` via the
@@ -129,6 +176,10 @@ crate.from_cargo(
 
 use_repo(crate, "crates")
 ```
+
+`crate.from_cargo` also accepts `cargo_env` for workspaces that need extra Cargo environment, such
+as the upstream Rust stdlib workspace, which requires `RUSTC_BOOTSTRAP=1` during `cargo metadata`.
+For that workspace, set `validate_lockfile = False` as well.
 
 `crate.spec` and vendoring mode are currently unsupported.
 

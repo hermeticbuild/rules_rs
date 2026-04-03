@@ -81,6 +81,9 @@ _TOOLCHAIN_TAG = tag_class(
         "extra_exec_rustc_flags": attr.string_list_dict(
             doc = "Additional rustc flags by exec triple.",
         ),
+        "source_rust_std": attr.label(
+            doc = "Optional label of a rust_stdlib_filegroup-compatible target built from source. When set, this extension registers both prebuilt and source stdlib toolchain variants. Select the source variant by targeting a `_source` platform from @rules_rs//rs/experimental/platforms.",
+        ),
     },
 )
 
@@ -116,6 +119,7 @@ def _toolchains_impl(mctx):
             edition = _DEFAULT_EDITION,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
+            source_rust_std = None,
         ))
 
     versions = set([])
@@ -308,6 +312,7 @@ def _toolchains_impl(mctx):
         repo_name = tag.name
         rustfmt_version = tag.rustfmt_version or tag.version
         rust_analyzer_version = tag.rust_analyzer_version or tag.version
+        rust_src_repo_name = "rust_src_{}".format(sanitize_version(rust_analyzer_version))
         existing = repo_configs.get(repo_name)
         if existing and (
             existing.version != tag.version or
@@ -315,7 +320,8 @@ def _toolchains_impl(mctx):
             (existing.rust_analyzer_version or existing.version) != rust_analyzer_version or
             existing.edition != tag.edition or
             existing.extra_rustc_flags != tag.extra_rustc_flags or
-            existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags
+            existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags or
+            str(existing.source_rust_std) != str(tag.source_rust_std)
         ):
             fail("Toolchain repo {} has conflicting tag configurations".format(repo_name))
 
@@ -329,13 +335,18 @@ def _toolchains_impl(mctx):
                 edition = tag.edition,
                 extra_rustc_flags = tag.extra_rustc_flags,
                 extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
+                source_rust_std = str(tag.source_rust_std) if tag.source_rust_std else "",
             )
         is_dev_dependency = had_tags and mctx.is_dev_dependency(tag)
         if is_dev_dependency:
             if repo_name not in direct_dev_deps:
                 direct_dev_deps.append(repo_name)
+            if tag.source_rust_std and rust_src_repo_name not in direct_dev_deps:
+                direct_dev_deps.append(rust_src_repo_name)
         elif repo_name not in direct_deps:
             direct_deps.append(repo_name)
+            if tag.source_rust_std and rust_src_repo_name not in direct_deps:
+                direct_deps.append(rust_src_repo_name)
 
     kwargs = dict(
         reproducible = True,

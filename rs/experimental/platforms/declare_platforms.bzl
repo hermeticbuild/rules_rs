@@ -9,3 +9,9 @@ def declare_platforms(targets = SUPPORTED_TARGET_TRIPLES):
             constraint_values = triple_to_constraint_set(target_triple),
             visibility = ["//visibility:public"],
         )
+
+        native.platform(
+            name = target_triple + "_source",
+            constraint_values = triple_to_constraint_set(target_triple, source_stdlib = True),
+            visibility = ["//visibility:public"],
+        )

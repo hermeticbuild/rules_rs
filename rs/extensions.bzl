@@ -242,6 +242,7 @@ def _generate_hub_and_spokes(
         suggested_annotation_snippet_paths,
         cargo_path,
         cargo_lock_path,
+        cargo_env,
         workspace_cargo_toml_json,
         all_packages,
         sparse_registry_configs,
@@ -261,6 +262,7 @@ def _generate_hub_and_spokes(
         suggested_annotation_snippet_paths (dict): Mapping crate -> snippet file path.
         cargo_path (path): Path to hermetic `cargo` binary.
         cargo_lock_path (path): Cargo.lock path
+        cargo_env (dict): Extra environment variables for `cargo metadata`
         workspace_cargo_toml_json (dict): Parsed workspace Cargo.toml
         all_packages: list[package]: from cargo lock parsing
         sparse_registry_configs: dict[source, sparse registry config]
@@ -276,6 +278,7 @@ def _generate_hub_and_spokes(
     mctx.report_progress("Reading workspace metadata")
     result = mctx.execute(
         [cargo_path, "metadata", "--no-deps", "--format-version=1", "--quiet"],
+        environment = cargo_env,
         working_directory = str(mctx.path(cargo_lock_path).dirname),
     )
     if result.return_code != 0:
@@ -322,6 +325,7 @@ def _generate_hub_and_spokes(
 
     workspace_members = []
     packages = []
+    emit_workspace_member_repos = cargo_lock_path.repo_name != ""
 
     for package in all_packages:
         pkg = dict(package)
@@ -419,9 +423,13 @@ def _generate_hub_and_spokes(
             # Path deps are local (fast to read), and their Cargo.toml can change
             # features/deps without changing the facts key, causing stale resolution.
             # Also watch the file so Bazel re-runs the extension when it changes.
+            # External-repo manifests are already covered by watching the top-level
+            # labels passed to crate.from_cargo; module extensions cannot watch
+            # arbitrary absolute paths outside the current workspace.
             key = source + "_" + name
             cargo_toml_path = paths.join(package["local_path"], "Cargo.toml")
-            mctx.watch(mctx.path(cargo_toml_path))
+            if cargo_lock_path.repo_name == "":
+                mctx.watch(mctx.path(cargo_toml_path))
             annotation = annotation_for(annotations, name, package["version"])
             cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
 
@@ -636,12 +644,12 @@ def _generate_hub_and_spokes(
             if not dep_fq:
                 continue
 
-            if not is_first_party_dep:
+            if not is_first_party_dep or emit_workspace_member_repos:
                 dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
 
             feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
-            if not is_first_party_dep:
+            if not is_first_party_dep or emit_workspace_member_repos:
                 versions = workspace_dep_versions_by_name.get(dep_name)
                 if not versions:
                     versions = set()
@@ -652,7 +660,7 @@ def _generate_hub_and_spokes(
             match_info = _cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
 
             for triple in match_info.matches:
-                if not is_first_party_dep:
+                if not is_first_party_dep or emit_workspace_member_repos:
                     workspace_dep_labels_by_triple[triple].add(":" + dep_name)
                 feature_resolutions.features_enabled[triple].update(features)
 
@@ -697,6 +705,14 @@ def _generate_hub_and_spokes(
     mctx.report_progress("Initializing spokes")
 
     use_home_cargo_credentials = bool(cargo_credentials)
+    bootstrap_rustc_env = {}
+    bootstrap_rustc_flags = []
+    if cargo_env.get("RUSTC_BOOTSTRAP"):
+        bootstrap_rustc_env = {"RUSTC_BOOTSTRAP": cargo_env["RUSTC_BOOTSTRAP"]}
+        bootstrap_rustc_flags = [
+            "-Zforce-unstable-if-unmarked",
+            "-Zcrate-attr=feature(rustc_private)",
+        ]
 
     for package in packages:
         crate_name = package["name"]
@@ -747,7 +763,8 @@ crate.annotation(
             build_script_tags = annotation.build_script_tags,
             build_script_tools_select = annotation.build_script_tools_select,
             build_script_env_select = annotation.build_script_env_select,
-            rustc_flags = annotation.rustc_flags,
+            rustc_env = bootstrap_rustc_env,
+            rustc_flags = annotation.rustc_flags + bootstrap_rustc_flags,
             rustc_flags_select = annotation.rustc_flags_select,
             data = annotation.data,
             deps = annotation.deps,
@@ -826,6 +843,56 @@ crate.annotation(
         else:
             fail("Unknown source %s for crate %s" % (source, crate_name))
 
+    if emit_workspace_member_repos:
+        for package in cargo_metadata["packages"]:
+            crate_name = package["name"]
+            version = package["version"]
+            package_dir = _normalize_path(package["manifest_path"]).removeprefix(workspace_root + "/").removesuffix("/Cargo.toml")
+            feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
+            annotation = annotation_for(annotations, crate_name, version)
+
+            kwargs = dict(
+                hub_name = hub_name,
+                additive_build_file = annotation.additive_build_file,
+                additive_build_file_content = annotation.additive_build_file_content,
+                gen_build_script = annotation.gen_build_script,
+                build_script_deps = [],
+                build_script_deps_select = _select(feature_resolutions.build_deps),
+                build_script_data = annotation.build_script_data,
+                build_script_data_select = annotation.build_script_data_select,
+                build_script_env = annotation.build_script_env,
+                build_script_toolchains = annotation.build_script_toolchains,
+                build_script_tools = annotation.build_script_tools,
+                build_script_tags = annotation.build_script_tags,
+                build_script_tools_select = annotation.build_script_tools_select,
+                build_script_env_select = annotation.build_script_env_select,
+                rustc_env = bootstrap_rustc_env,
+                rustc_flags = annotation.rustc_flags + bootstrap_rustc_flags,
+                rustc_flags_select = annotation.rustc_flags_select,
+                data = annotation.data,
+                deps = annotation.deps,
+                crate_tags = annotation.tags,
+                deps_select = _select(feature_resolutions.deps),
+                aliases = feature_resolutions.aliases,
+                gen_binaries = annotation.gen_binaries,
+                crate_features = annotation.crate_features,
+                crate_features_select = _select(feature_resolutions.features_enabled),
+                patch_args = annotation.patch_args,
+                patch_tool = annotation.patch_tool,
+                patches = annotation.patches,
+                use_experimental_platforms = use_experimental_platforms,
+            )
+
+            if dry_run:
+                continue
+
+            local_crate_repository(
+                name = _spoke_repo(hub_name, crate_name, version),
+                cargo_toml = paths.join(package_dir, "Cargo.toml") if package_dir else "Cargo.toml",
+                path = workspace_root,
+                **kwargs
+            )
+
     _date(mctx, "created repos")
 
     mctx.report_progress("Initializing hub")
@@ -867,6 +934,38 @@ alias(
     name = "{name}__{binary}",
     actual = ":{fq}__{binary}",
 )""".format(name = name, fq = fq, binary = binary))
+
+    if emit_workspace_member_repos:
+        for package in cargo_metadata["packages"]:
+            name = package["name"]
+            version = package["version"]
+            binaries = annotation_for(annotations, name, version).gen_binaries
+            spoke_repo = _spoke_repo(hub_name, name, version)
+
+            hub_contents.append("""
+alias(
+    name = "{name}-{version}",
+    actual = "@{spoke_repo}//:{name}",
+)""".format(name = name, version = version, spoke_repo = spoke_repo))
+
+            hub_contents.append("""
+alias(
+    name = "{name}",
+    actual = ":{name}-{version}",
+)""".format(name = name, version = version))
+
+            for binary in binaries:
+                hub_contents.append("""
+alias(
+    name = "{name}-{version}__{binary}",
+    actual = "@{spoke_repo}//:{binary}__bin",
+)""".format(name = name, version = version, binary = binary, spoke_repo = spoke_repo))
+
+                hub_contents.append("""
+alias(
+    name = "{name}__{binary}",
+    actual = ":{name}-{version}__{binary}",
+)""".format(name = name, version = version, binary = binary))
 
     workspace_deps, conditional_workspace_deps = render_select(
         [],
@@ -1217,9 +1316,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_experimental_platforms, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cfg.cargo_env, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_experimental_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_experimental_platforms)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cfg.cargo_env, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_experimental_platforms)
 
     # Lay down the git repos we will need; per-crate git_repository can clone from these.
     git_sources = set()
@@ -1264,6 +1363,9 @@ _from_cargo = tag_class(
         ),
         "cargo_lock": attr.label(),
         "cargo_config": attr.label(),
+        "cargo_env": attr.string_dict(
+            doc = "Extra environment variables to pass to `cargo metadata`.",
+        ),
         "use_home_cargo_credentials": attr.bool(
             doc = "If set, the ruleset will load `~/cargo/credentials.toml` and attach those credentials to registry requests.",
         ),

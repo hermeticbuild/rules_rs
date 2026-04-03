@@ -40,6 +40,15 @@ def render_select_build_script_env(platform_items, use_experimental_platforms):
 def _exclude_deps_from_features(features):
     return [f for f in features if not f.startswith("dep:")]
 
+def _prefix_repo_relative_path(prefix, path):
+    if not path:
+        return path
+
+    path = path.removeprefix("./")
+    if prefix and not path.startswith("/"):
+        return prefix + "/" + path
+    return path
+
 def _cargo_purl(package_name, version, qualifiers = {}):
     purl = "pkg:cargo/{}@{}".format(package_name, version)
     if qualifiers:
@@ -49,17 +58,29 @@ def _cargo_purl(package_name, version, qualifiers = {}):
         ])
     return purl
 
-def generate_build_file(rctx, cargo_toml, purl_qualifiers = {}):
+def generate_build_file(rctx, cargo_toml, purl_qualifiers = {}, cargo_toml_path = "Cargo.toml"):
     attr = rctx.attr
     package = cargo_toml["package"]
+    cargo_toml_dir = cargo_toml_path
+    if cargo_toml_dir == "Cargo.toml":
+        cargo_toml_dir = ""
+    elif cargo_toml_dir.endswith("/Cargo.toml"):
+        cargo_toml_dir = cargo_toml_dir.removesuffix("/Cargo.toml")
+    elif "/" in cargo_toml_dir:
+        cargo_toml_dir = cargo_toml_dir.rsplit("/", 1)[0]
+    else:
+        cargo_toml_dir = ""
 
     name = package["name"]
     version = package["version"]
     parsed_version = parse_full_version(version)
 
     readme = package.get("readme", "")
-    if (not readme or readme == True) and rctx.path("README.md").exists:
-        readme = "README.md"
+    default_readme = _prefix_repo_relative_path(cargo_toml_dir, "README.md")
+    if (not readme or readme == True) and rctx.path(default_readme).exists:
+        readme = default_readme
+    elif type(readme) == "string":
+        readme = _prefix_repo_relative_path(cargo_toml_dir, readme)
 
     cargo_toml_env_vars = {
         "CARGO_PKG_VERSION": version,
@@ -91,13 +112,15 @@ def generate_build_file(rctx, cargo_toml, purl_qualifiers = {}):
         # What does `gen_build_script="on"` do? Fail the build if we don't detect one?
         build_script = package.get("build")
         if build_script:
-            build_script = build_script.removeprefix("./")
-        elif rctx.path("build.rs").exists:
-            build_script = "build.rs"
+            build_script = _prefix_repo_relative_path(cargo_toml_dir, build_script)
+        else:
+            default_build_script = _prefix_repo_relative_path(cargo_toml_dir, "build.rs")
+            if rctx.path(default_build_script).exists:
+                build_script = default_build_script
 
     lib = cargo_toml.get("lib", {})
     is_proc_macro = lib.get("proc-macro") or lib.get("proc_macro") or False
-    crate_root = (lib.get("path") or "src/lib.rs").removeprefix("./")
+    crate_root = _prefix_repo_relative_path(cargo_toml_dir, lib.get("path") or "src/lib.rs")
 
     edition = package.get("edition", "2015")
     crate_name = lib.get("name")
@@ -130,6 +153,7 @@ rust_crate(
     conditional_crate_features = {conditional_crate_features},
     crate_root = {crate_root},
     edition = {edition},
+    rustc_env = {rustc_env},
     rustc_flags = {rustc_flags}{conditional_rustc_flags},
     tags = {tags},
     target_compatible_with = RESOLVED_PLATFORMS,
@@ -169,10 +193,14 @@ rust_crate(
 
     conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_experimental_platforms)
 
-    binaries = {bin["name"]: bin["path"] for bin in cargo_toml.get("bin", []) if bin["name"] in rctx.attr.gen_binaries}
+    binaries = {
+        bin["name"]: _prefix_repo_relative_path(cargo_toml_dir, bin["path"])
+        for bin in cargo_toml.get("bin", [])
+        if bin["name"] in rctx.attr.gen_binaries
+    }
 
     implicit_binary_name = package["name"]
-    implicit_binary_path = "src/main.rs"
+    implicit_binary_path = _prefix_repo_relative_path(cargo_toml_dir, "src/main.rs")
     if implicit_binary_name in rctx.attr.gen_binaries and implicit_binary_name not in binaries and rctx.path(implicit_binary_path).exists:
         binaries[implicit_binary_name] = implicit_binary_path
 
@@ -191,6 +219,7 @@ rust_crate(
         conditional_crate_features = repr(conditional_crate_features),
         crate_root = repr(crate_root),
         edition = repr(edition),
+        rustc_env = repr(attr.rustc_env),
         rustc_flags = repr(rustc_flags),
         conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),
@@ -226,6 +255,7 @@ common_attrs = {
     "build_script_tools": attr.label_list(default = []),
     "build_script_tools_select": attr.string_list_dict(),
     "build_script_tags": attr.string_list(),
+    "rustc_env": attr.string_dict(),
     "rustc_flags": attr.string_list(),
     "rustc_flags_select": attr.string_list_dict(),
     "crate_tags": attr.string_list(),

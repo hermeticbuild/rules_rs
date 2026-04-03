@@ -10,7 +10,12 @@ _WINDOWS_ABI_CONSTRAINTS = {
     "msvc": "@rules_rs//rs/experimental/platforms/constraints:windows_msvc",
 }
 
-def triple_to_constraint_set(target_triple):
+SOURCE_STDLIB_CONSTRAINT = "@rules_rs//rs/experimental/platforms/constraints:rust_stdlib_source"
+
+def source_platform_label(target_triple):
+    return "@rules_rs//rs/experimental/platforms:{}_source".format(target_triple)
+
+def triple_to_constraint_set(target_triple, source_stdlib = False):
     constraints = _triple_to_constraint_set(target_triple)
     t = triple(target_triple)
 
@@ -23,6 +28,9 @@ def triple_to_constraint_set(target_triple):
             constraints.append("@llvm//constraints/libc:gnu.2.28")
     elif t.system == "windows":
         constraints.append(_WINDOWS_ABI_CONSTRAINTS[t.abi])
+
+    if source_stdlib:
+        constraints.append(SOURCE_STDLIB_CONSTRAINT)
 
     return constraints
 
