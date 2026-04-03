@@ -112,7 +112,7 @@ def _crate_git_repository_implementation(rctx):
 
     # Since we're using `git` to download the repo, remove
     # the `.git` to make sure it's reproducible.
-    rctx.delete(root.get_child(".git"))
+    rctx.delete(dest_dir.get_child(".git"))
     return rctx.repo_metadata(reproducible = True)
 
 crate_git_repository = repository_rule(
