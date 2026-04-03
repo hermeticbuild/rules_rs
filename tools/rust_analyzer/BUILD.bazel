@@ -52,10 +52,10 @@ rust_binary(
     },
     toolchains = ["@rules_rust//rust/toolchain:current_rust_analyzer_toolchain"],
     deps = [
-        "@rules_rust//rust/runfiles",
         "@rrra//:clap",
         "@rrra//:env_logger",
         "@rrra//:log",
+        "@rules_rust//rust/runfiles",
     ],
 )
 
@@ -71,13 +71,13 @@ rust_library(
     ],
     edition = "2018",
     deps = [
-        "@rules_rust//rust/runfiles",
         "@rrra//:anyhow",
         "@rrra//:camino",
         "@rrra//:clap",
         "@rrra//:log",
         "@rrra//:serde",
         "@rrra//:serde_json",
+        "@rules_rust//rust/runfiles",
     ],
 )
 
@@ -99,7 +99,6 @@ rust_clippy(
 
 bzl_library(
     name = "bzl_lib",
-    srcs = ["defs.bzl"],
     deps = [
         "@bazel_features//:features",
         "@rules_rust//rust:bzl_lib",

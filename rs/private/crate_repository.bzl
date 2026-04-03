@@ -1,3 +1,4 @@
+load("@bazel_features//:features.bzl", "bazel_features")
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
 load(":cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
@@ -60,7 +61,9 @@ def _local_crate_repository_impl(rctx):
 
     rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
 
-    return rctx.repo_metadata(reproducible = True)
+    return rctx.repo_metadata(
+        reproducible = bazel_features.external_deps.repo_rules_relativize_symlinks,
+    )
 
 local_crate_repository = repository_rule(
     implementation = _local_crate_repository_impl,
