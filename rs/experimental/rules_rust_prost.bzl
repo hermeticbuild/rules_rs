@@ -75,9 +75,12 @@ _rules_rust_prost_repo = repository_rule(
 )
 
 def _rules_rust_prost_impl(mctx):
+    prost_workspace = mctx.path(Label("@rules_rust//:extensions/prost/WORKSPACE.bzlmod"))
+    mctx.read(prost_workspace)
+
     local_repository(
         name = "rules_rust_prost_upstream",
-        path = str(mctx.path(Label("@rules_rust//:extensions/prost/WORKSPACE.bzlmod")).dirname),
+        path = str(prost_workspace.dirname),
     )
 
     _rules_rust_prost_repo(
