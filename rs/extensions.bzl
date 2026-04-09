@@ -833,7 +833,7 @@ crate.annotation(
     hub_contents = []
     for name, versions in versions_by_name.items():
         for version in versions:
-            binaries = annotation_for(annotations, name, version).gen_binaries
+            annotation = annotation_for(annotations, name, version)
             spoke_repo = _spoke_repo(hub_name, name, version)
 
             hub_contents.append("""
@@ -842,18 +842,30 @@ alias(
     actual = "@{spoke_repo}//:{name}",
 )""".format(name = name, version = version, spoke_repo = spoke_repo))
 
-            for binary in binaries:
+            for binary in annotation.gen_binaries:
                 hub_contents.append("""
 alias(
     name = "{name}-{version}__{binary}",
     actual = "@{spoke_repo}//:{binary}__bin",
 )""".format(name = name, version = version, binary = binary, spoke_repo = spoke_repo))
 
+            for alias_name, target in sorted(annotation.extra_aliased_targets.items()):
+                hub_contents.append("""
+alias(
+    name = "{alias_name}-{version}",
+    actual = "@{spoke_repo}//:{target}",
+)""".format(
+                    alias_name = alias_name,
+                    version = version,
+                    target = target,
+                    spoke_repo = spoke_repo,
+                ))
+
         workspace_versions = workspace_dep_versions_by_name.get(name)
         if workspace_versions:
             fq = sorted(workspace_versions)[-1]
             default_version = fq[len(name) + 1:]
-            binaries = annotation_for(annotations, name, default_version).gen_binaries
+            annotation = annotation_for(annotations, name, default_version)
 
             hub_contents.append("""
 alias(
@@ -861,12 +873,22 @@ alias(
     actual = ":{fq}",
 )""".format(name = name, fq = fq))
 
-            for binary in binaries:
+            for binary in annotation.gen_binaries:
                 hub_contents.append("""
 alias(
     name = "{name}__{binary}",
     actual = ":{fq}__{binary}",
 )""".format(name = name, fq = fq, binary = binary))
+
+            for alias_name in sorted(annotation.extra_aliased_targets.keys()):
+                hub_contents.append("""
+alias(
+    name = "{alias_name}",
+    actual = ":{alias_name}-{default_version}",
+)""".format(
+                    alias_name = alias_name,
+                    default_version = default_version,
+                ))
 
     workspace_deps, conditional_workspace_deps = render_select(
         [],
@@ -1379,9 +1401,9 @@ _annotation = tag_class(
         # "disable_pipelining": attr.bool(
         #     doc = "If True, disables pipelining for library targets for this crate.",
         # ),
-        # "extra_aliased_targets": attr.string_dict(
-        #     doc = "A list of targets to add to the generated aliases in the root crate_universe repository.",
-        # ),
+        "extra_aliased_targets": attr.string_dict(
+            doc = "A list of targets to add to the generated aliases in the root crate repository.",
+        ),
         # "gen_all_binaries": attr.bool(
         #     doc = "If true, generates `rust_binary` targets for all of the crates bins",
         # ),

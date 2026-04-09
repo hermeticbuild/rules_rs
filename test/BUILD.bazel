@@ -209,6 +209,7 @@ filegroup(
         ":verify_workspace_member_annotation_features",
         ":verify_workspace_renamed_path_dep_aliases",
         "//prost:echo_rust_proto",
+        "@binaries//:protoc-gen-prost-extra",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
     ] + select({
         "@platforms//os:windows": [],

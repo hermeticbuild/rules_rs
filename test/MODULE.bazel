@@ -211,6 +211,9 @@ crate.annotation(
 # Test gen_binaries
 crate.annotation(
     crate = "protoc-gen-prost",
+    extra_aliased_targets = {
+        "protoc-gen-prost-extra": "protoc-gen-prost",
+    },
     gen_binaries = ["protoc-gen-prost"],
 )
 
