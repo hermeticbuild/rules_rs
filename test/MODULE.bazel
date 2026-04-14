@@ -150,6 +150,7 @@ TESTS = [
     "workspace_path_dependency",
     "workspace_hyphen_dep_aliases",
     "workspace_renamed_path_dep_aliases",
+    "workspace_git_dep",
     "binaries",
     "uv",
 ]
