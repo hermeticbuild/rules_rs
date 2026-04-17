@@ -140,6 +140,13 @@ def _label_directory(label):
 
     return paths.join(label.package, label.name[:idx])
 
+def _manifest_package_dir(manifest_path, repo_root):
+    package_dir = _normalize_path(manifest_path).removeprefix(repo_root + "/")
+    if package_dir == "Cargo.toml":
+        return ""
+
+    return package_dir.removesuffix("/Cargo.toml")
+
 def _spec_to_dep_dict_inner(dep, spec, is_build = False):
     if type(spec) == "string":
         dep = {"name": dep}
@@ -999,7 +1006,7 @@ RESOLVED_PLATFORMS = select({{
         deps = {triple: set() for triple in platform_triples}
         build_deps = {triple: set() for triple in platform_triples}
         dev_deps = {triple: set() for triple in platform_triples}
-        package_dir = _normalize_path(package["manifest_path"]).removeprefix(repo_root + "/").removesuffix("/Cargo.toml")
+        package_dir = _manifest_package_dir(package["manifest_path"], repo_root)
         binaries = {}
         shared_libraries = {}
         feature_resolutions = feature_resolutions_by_fq_crate.get(_fq_crate(package["name"], package["version"]))
@@ -1062,7 +1069,7 @@ RESOLVED_PLATFORMS = select({{
             for triple in platform_triples:
                 crate_features[triple].update(_exclude_deps_from_features(feature_resolutions.features_enabled[triple]))
 
-        bazel_package = paths.join(workspace_package, package_dir)
+        bazel_package = paths.join(workspace_package, package_dir) if package_dir else workspace_package
 
         crate_features, crate_features_by_platform = _shared_and_per_platform(crate_features, use_experimental_platforms)
         deps, deps_by_platform = _shared_and_per_platform(deps, use_experimental_platforms)

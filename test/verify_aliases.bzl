@@ -39,6 +39,22 @@ _verify_absent = rule(
     },
 )
 
+def _verify_present_impl(ctx):
+    if ctx.attr.expected not in ctx.attr.items:
+        fail("Expected %r in %r" % (ctx.attr.expected, ctx.attr.items))
+
+    out = ctx.actions.declare_file(ctx.label.name + ".txt")
+    ctx.actions.write(out, "ok\n")
+    return [DefaultInfo(files = depset([out]))]
+
+_verify_present = rule(
+    implementation = _verify_present_impl,
+    attrs = {
+        "expected": attr.string(mandatory = True),
+        "items": attr.string_list(mandatory = True),
+    },
+)
+
 def verify_dep_absent(name, dep_data, unexpected):
     items = list(dep_data.get("deps", []))
     for values in dep_data.get("deps_by_platform", {}).values():
@@ -48,6 +64,17 @@ def verify_dep_absent(name, dep_data, unexpected):
         name = name,
         items = sorted(items),
         unexpected = unexpected,
+    )
+
+def verify_dep_present(name, dep_data, expected):
+    items = list(dep_data.get("deps", []))
+    for values in dep_data.get("deps_by_platform", {}).values():
+        items.extend(values)
+
+    _verify_present(
+        name = name,
+        expected = expected,
+        items = sorted(items),
     )
 
 def verify_crate_feature_absent(name, dep_data, unexpected):

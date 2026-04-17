@@ -1,10 +1,11 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@target_workspace_dep_feature//:data.bzl", target_workspace_dep_feature_dep_data = "DEP_DATA")
 load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
 load("@workspace_renamed_path_dep_aliases//:defs.bzl", workspace_renamed_path_dep_aliases_aliases = "aliases")
-load("//:verify_aliases.bzl", "verify_alias", "verify_crate_feature_absent", "verify_dep_absent")
+load("//:verify_aliases.bzl", "verify_alias", "verify_crate_feature_absent", "verify_dep_absent", "verify_dep_present")
 
 sh_test(
     name = "dummy_test",
@@ -144,6 +145,12 @@ verify_alias(
     expected_label = "//workspace_renamed_path_dep_aliases/dep-crate",
 )
 
+verify_dep_present(
+    name = "verify_single_crate_dep_data_key",
+    dep_data = build_script_aliases_dep_data["build_script_aliases"],
+    expected = "@build_script_aliases//:wasmtime-internal-jit-debug-37.0.0",
+)
+
 genrule(
     name = "verify_workspace_member_annotation_features",
     srcs = [":workspace_member_annotation_features_dep_leaf_deps"],
@@ -203,6 +210,7 @@ filegroup(
         ":verify_cfg_feature_target_dep",
         ":verify_first_party_feature_propagation",
         ":verify_rust_analyzer_toolchain",
+        ":verify_single_crate_dep_data_key",
         ":verify_target_workspace_dep_feature_dep_absent",
         ":verify_target_workspace_dep_feature_feature_absent",
         ":verify_workspace_hyphen_dep_aliases",
