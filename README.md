@@ -296,6 +296,7 @@ See https://registry.bazel.build/docs/rules_rs
 
 - [OpenAI Codex](https://github.com/openai/codex)
 - [Aspect CLI](https://github.com/aspect-build/aspect-cli)
+- [Astradot](https://astradot.com)
 - [Datadog Agent](https://github.com/DataDog/datadog-agent)
 - [ZML](https://github.com/zml/zml/tree/zml/v2)
 - [rules_py](https://github.com/aspect-build/rules_py)
