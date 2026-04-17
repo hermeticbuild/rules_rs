@@ -296,9 +296,11 @@ def _generate_hub_and_spokes(
 
     workspace_root = _normalize_path(cargo_metadata["workspace_root"])
     workspace_root_prefix = workspace_root + "/"
+    workspace_package = _label_directory(cargo_lock_path)
     workspace_member_keys = {}
     for package in cargo_metadata["packages"]:
-        workspace_member_keys[(package["name"], package["version"])] = True
+        package_dir = _normalize_path(package["manifest_path"]).removeprefix(workspace_root_prefix).removesuffix("/Cargo.toml")
+        workspace_member_keys[(package["name"], package["version"])] = "@@//" + paths.join(workspace_package, package_dir)
 
     dep_paths_by_name = {}
     for package in cargo_metadata["packages"]:
@@ -583,7 +585,13 @@ def _generate_hub_and_spokes(
                     continue
 
             dep_fq = _fq_crate(dep_package, resolved_version)
-            dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
+
+            workspace_member_label = workspace_member_keys.get((dep_package, resolved_version))
+            if workspace_member_label:
+                dep["bazel_target"] = workspace_member_label
+            else:
+                dep["bazel_target"] = "@%s//:%s" % (hub_name, dep_fq)
+
             dep["feature_resolutions"] = feature_resolutions_by_fq_crate[dep_fq]
 
             target = dep.get("target")
@@ -997,7 +1005,6 @@ RESOLVED_PLATFORMS = select({{
     _date(mctx, "done")
 
     repo_root = _normalize_path(cargo_metadata["workspace_root"])
-    workspace_package = _label_directory(cargo_lock_path)
 
     workspace_dep_stanzas = []
     for package in cargo_metadata["packages"]:
