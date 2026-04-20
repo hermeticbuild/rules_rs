@@ -3,9 +3,10 @@ load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DA
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@target_workspace_dep_feature//:data.bzl", target_workspace_dep_feature_dep_data = "DEP_DATA")
+load("@workspace_default_features//:data.bzl", workspace_default_features_dep_data = "DEP_DATA")
 load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
 load("@workspace_renamed_path_dep_aliases//:defs.bzl", workspace_renamed_path_dep_aliases_aliases = "aliases")
-load("//:verify_aliases.bzl", "verify_alias", "verify_crate_feature_absent", "verify_dep_absent", "verify_dep_present")
+load("//:verify_aliases.bzl", "verify_alias", "verify_crate_feature_absent", "verify_crate_feature_present", "verify_dep_absent", "verify_dep_present")
 
 sh_test(
     name = "dummy_test",
@@ -173,6 +174,24 @@ verify_crate_feature_absent(
     unexpected = "force-cfg",
 )
 
+verify_dep_present(
+    name = "verify_workspace_default_features_dep_present",
+    dep_data = workspace_default_features_dep_data["workspace_default_features/app"],
+    expected = "@workspace_default_features//:itoa-1.0.17",
+)
+
+verify_crate_feature_present(
+    name = "verify_workspace_default_features_default_present",
+    dep_data = workspace_default_features_dep_data["workspace_default_features/app"],
+    expected = "default",
+)
+
+verify_crate_feature_present(
+    name = "verify_workspace_default_features_subfeature_present",
+    dep_data = workspace_default_features_dep_data["workspace_default_features/app"],
+    expected = "with_itoa",
+)
+
 genrule(
     name = "verify_annotation_tags",
     srcs = [
@@ -213,6 +232,9 @@ filegroup(
         ":verify_single_crate_dep_data_key",
         ":verify_target_workspace_dep_feature_dep_absent",
         ":verify_target_workspace_dep_feature_feature_absent",
+        ":verify_workspace_default_features_default_present",
+        ":verify_workspace_default_features_dep_present",
+        ":verify_workspace_default_features_subfeature_present",
         ":verify_workspace_hyphen_dep_aliases",
         ":verify_workspace_member_annotation_features",
         ":verify_workspace_renamed_path_dep_aliases",
