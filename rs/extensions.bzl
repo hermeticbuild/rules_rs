@@ -610,6 +610,11 @@ def _generate_hub_and_spokes(
         if watch_manifests:
             mctx.watch(package["manifest_path"])
 
+        package_feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(package["name"], package["version"])]
+        if "default" in package.get("features", {}):
+            for triple in platform_triples:
+                package_feature_resolutions.features_enabled[triple].add("default")
+
         fq_deps = workspace_fq_deps[package["name"]]
 
         for dep in package["dependencies"]:

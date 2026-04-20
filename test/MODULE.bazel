@@ -146,11 +146,12 @@ TESTS = [
     "platform_dep_features",
     "target_workspace_dep_feature",
     "vendored_crate_override",
+    "workspace_default_features",
     "workspace_member_annotation_features",
+    "workspace_git_dep",
     "workspace_path_dependency",
     "workspace_hyphen_dep_aliases",
     "workspace_renamed_path_dep_aliases",
-    "workspace_git_dep",
     "binaries",
     "uv",
 ]

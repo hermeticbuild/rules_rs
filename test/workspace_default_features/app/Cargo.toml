@@ -1,0 +1,13 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+itoa = { version = "=1.0.17", optional = true }
+
+[features]
+default = ["with_itoa"]
+with_itoa = ["dep:itoa"]

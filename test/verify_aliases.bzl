@@ -87,3 +87,14 @@ def verify_crate_feature_absent(name, dep_data, unexpected):
         items = sorted(items),
         unexpected = unexpected,
     )
+
+def verify_crate_feature_present(name, dep_data, expected):
+    items = list(dep_data.get("crate_features", []))
+    for values in dep_data.get("crate_features_by_platform", {}).values():
+        items.extend(values)
+
+    _verify_present(
+        name = name,
+        items = sorted(items),
+        expected = expected,
+    )
