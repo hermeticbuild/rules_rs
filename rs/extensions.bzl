@@ -407,7 +407,7 @@ def _generate_hub_and_spokes(
                             dep.pop("default_features")
                         if not dep["features"]:
                             dep.pop("features")
-                        if not dep["target"]:
+                        if dep.get("target", "") == None:
                             dep.pop("target")
                         if dep["kind"] == "normal":
                             dep.pop("kind")
