@@ -61,7 +61,8 @@ def declare_rustc_toolchains(
             cargo_clippy = "{}cargo_clippy_bin".format(clippy_repo_label),
             llvm_cov = "@llvm//tools:llvm-cov",
             llvm_profdata = "@llvm//tools:llvm-profdata",
-            rustc_lib = "{}rustc_lib".format(rustc_repo_label),
+            rust_objcopy = "{}rust-objcopy".format(rustc_repo_label),
+            rustc_lib = "{}rustc_lib_with_objcopy".format(rustc_repo_label),
             allocator_library = None,
             global_allocator_library = None,
             binary_ext = select({
