@@ -2,7 +2,7 @@ bcr_test_module:
   module_path: "."
   matrix:
     platform: ["debian10", "macos", "ubuntu2004"]
-    bazel: ["8.4.2"]
+    bazel: ["8.5.0"]
   tasks:
     run_tests:
       name: "Run tests"
@@ -16,7 +16,7 @@ bcr_test_module:
 #  module_path: "test"
 #  matrix:
 #    platform: ["debian10", "macos", "ubuntu2004"] # "windows" doesn't work until we get toml2json prebuilts
-#    bazel: ["8.4.2"]
+#    bazel: ["8.5.0"]
 #  tasks:
 #    run_tests:
 #      name: "Run test module"

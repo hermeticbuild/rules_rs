@@ -1,4 +1,7 @@
-module(name = "rules_rs")
+module(
+    name = "rules_rs",
+    bazel_compatibility = [">=8.5.0"],
+)
 
 ########### BECOME THE RULES_RUST FACADE ################
 rules_rust = use_extension("//rs/experimental:rules_rust.bzl", "rules_rust")

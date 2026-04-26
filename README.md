@@ -20,6 +20,8 @@ It is designed to:
 bazel_dep(name = "rules_rs", version = "0.0.33")
 ```
 
+Requires Bazel 8.5.0 or newer.
+
 ## Rules
 
 Recommended: use `rules_rs` rule wrappers.
