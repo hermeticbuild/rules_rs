@@ -73,10 +73,12 @@ def declare_rustc_toolchains(
                 "//conditions:default": "",
             }),
             staticlib_ext = select({
+                "@rules_rs//rs/experimental/platforms/constraints:windows_gnu": ".a",
+                "@rules_rs//rs/experimental/platforms/constraints:windows_gnullvm": ".a",
+                "@rules_rs//rs/experimental/platforms/constraints:windows_msvc": ".lib",
                 "@platforms//os:none": "",
                 "@platforms//os:emscripten": ".js",
                 "@platforms//os:uefi": ".lib",
-                "@platforms//os:windows": ".lib",
                 "//conditions:default": ".a",
             }),
             dylib_ext = select({
@@ -100,7 +102,14 @@ def declare_rustc_toolchains(
                 "@platforms//os:nixos": ["-ldl", "-lpthread"],
                 "@platforms//os:openbsd": ["-lpthread"],
                 "@platforms//os:ios": ["-lSystem", "-lobjc", "-Wl,-framework,Security", "-Wl,-framework,Foundation", "-lresolv"],
-                # TODO: windows
+                "@rules_rs//rs/experimental/platforms/constraints:windows_gnu": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
+                "@rules_rs//rs/experimental/platforms/constraints:windows_gnullvm": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
+                "@rules_rs//rs/experimental/platforms/constraints:windows_msvc": [
+                    "advapi32.lib",
+                    "ws2_32.lib",
+                    "userenv.lib",
+                    "Bcrypt.lib",
+                ],
                 "//conditions:default": [],
             }),
             default_edition = edition,
