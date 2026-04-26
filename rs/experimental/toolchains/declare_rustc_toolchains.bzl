@@ -51,8 +51,7 @@ def declare_rustc_toolchains(
             rust_std_select[config_label] = "@rust_stdlib_{}_{}//:rust_std-{}".format(target_key, version_key, target_triple)
             target_triple_select[config_label] = target_triple
 
-        rust_toolchain(
-            name = rust_toolchain_name,
+        rust_toolchain_kwargs = dict(
             rust_doc = "{}rustdoc".format(rustc_repo_label),
             rust_std = select(rust_std_select),
             rustc = "{}rustc".format(rustc_repo_label),
@@ -122,6 +121,19 @@ def declare_rustc_toolchains(
             tags = ["rust_version={}".format(version)],
         )
 
+        rust_toolchain(
+            name = rust_toolchain_name,
+            process_wrapper = "@rules_rust//util/process_wrapper",
+            **rust_toolchain_kwargs
+        )
+
+        rust_toolchain(
+            name = rust_toolchain_name + "_bootstrap",
+            bootstrapping = True,
+            process_wrapper = "@rules_rust//util/process_wrapper:bootstrap_process_wrapper",
+            **rust_toolchain_kwargs
+        )
+
         for target_triple in targets:
             target_key = sanitize_triple(target_triple)
 
@@ -133,9 +145,26 @@ def declare_rustc_toolchains(
                 ],
                 target_compatible_with = triple_to_constraint_set(target_triple),
                 target_settings = [
+                    "@rules_rust//rust/private:bootstrapped",
                     "@rules_rust//rust/toolchain/channel:" + channel,
                 ],
                 toolchain = rust_toolchain_name,
+                toolchain_type = "@rules_rust//rust:toolchain_type",
+                visibility = ["//visibility:public"],
+            )
+
+            native.toolchain(
+                name = "{}_{}_to_{}_{}_bootstrap".format(exec_triple.system, exec_triple.arch, target_key, version_key),
+                exec_compatible_with = [
+                    "@platforms//os:" + exec_triple.system,
+                    "@platforms//cpu:" + exec_triple.arch,
+                ],
+                target_compatible_with = triple_to_constraint_set(target_triple),
+                target_settings = [
+                    "@rules_rust//rust/private:bootstrapping",
+                    "@rules_rust//rust/toolchain/channel:" + channel,
+                ],
+                toolchain = rust_toolchain_name + "_bootstrap",
                 toolchain_type = "@rules_rust//rust:toolchain_type",
                 visibility = ["//visibility:public"],
             )
