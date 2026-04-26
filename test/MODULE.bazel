@@ -112,9 +112,12 @@ toolchains.toolchain(
     edition = "2024",
     version = "1.92.0",
 )
-use_repo(toolchains, "default_rust_toolchains")
+toolchains.experimental_miri(version = "nightly/2026-04-20")
+use_repo(toolchains, "default_rust_toolchains", "miri_toolchains")
 
 register_toolchains("@default_rust_toolchains//:all")
+
+register_toolchains("@miri_toolchains//:all")
 
 register_toolchains(
     "@rules_rust//extensions/prost:default_prost_toolchain",

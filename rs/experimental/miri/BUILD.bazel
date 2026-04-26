@@ -1,0 +1,25 @@
+load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+
+package(default_visibility = ["//visibility:private"])
+
+toolchain_type(
+    name = "toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
+toolchain_type(
+    name = "sysroot_toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
+bzl_library(
+    name = "miri_test",
+    srcs = ["miri_test.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//rs/experimental/miri/private:compile",
+        "//rs/experimental/miri/private:providers",
+        "//rs/experimental/miri/private:toolchain",
+        "@hermetic_launcher//launcher:lib_bzl",
+    ],
+)

@@ -7,6 +7,7 @@ load(
     "check_version_valid",
     "produce_tool_suburl",
 )
+load("//rs/experimental/miri/private:miri_repository.bzl", "miri_repository")
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_AND_2_TRIPLES")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
@@ -101,6 +102,49 @@ def _parse_version(version):
 
     return base_version, iso_date
 
+_EXPERIMENTAL_MIRI_TAG = tag_class(
+    attrs = {
+        "name": attr.string(
+            default = "miri_toolchains",
+            doc = "Name of the generated Miri toolchain repo.",
+        ),
+        "version": attr.string(
+            mandatory = True,
+            doc = "Miri version (e.g. nightly/2026-04-20).",
+        ),
+        "exec_triples": attr.string_list(
+            default = SUPPORTED_EXEC_TRIPLES,
+            doc = "Execution triples to declare Miri toolchains for.",
+        ),
+    },
+)
+
+def _miri_toolchains_repository_impl(rctx):
+    rctx.file(
+        "BUILD.bazel",
+        """\
+load("@rules_rs//rs/experimental/miri/private:declare_toolchains.bzl", "declare_miri_toolchains")
+
+declare_miri_toolchains(
+    version = {version},
+    execs = {execs},
+)
+""".format(
+            version = repr(rctx.attr.version),
+            execs = repr(rctx.attr.execs),
+        ),
+    )
+
+    return rctx.repo_metadata(reproducible = True)
+
+_miri_toolchains_repository = repository_rule(
+    implementation = _miri_toolchains_repository_impl,
+    attrs = {
+        "version": attr.string(mandatory = True),
+        "execs": attr.string_list(mandatory = True),
+    },
+)
+
 def _toolchains_impl(mctx):
     root_module_name = None
     for mod in mctx.modules:
@@ -135,6 +179,32 @@ def _toolchains_impl(mctx):
         rustfmt_versions.add(tag.rustfmt_version or tag.version)
         rust_analyzer_versions.add(tag.rust_analyzer_version or tag.version)
 
+    miri_versions = set([])
+    miri_repo_configs = {}
+    miri_repo_tags = []
+    for mod in mctx.modules:
+        for tag in mod.tags.experimental_miri:
+            _parse_version(tag.version)
+            if not tag.exec_triples:
+                fail("Miri toolchain repo {} must declare at least one exec triple".format(tag.name))
+            for exec_triple in tag.exec_triples:
+                if exec_triple not in SUPPORTED_EXEC_TRIPLES:
+                    fail("Miri exec triple {} is not supported".format(exec_triple))
+
+            existing = miri_repo_configs.get(tag.name)
+            if existing and (
+                existing.version != tag.version or
+                existing.exec_triples != tag.exec_triples
+            ):
+                fail("Miri toolchain repo {} has conflicting tag configurations".format(tag.name))
+
+            if not existing:
+                miri_repo_configs[tag.name] = tag
+                miri_repo_tags.append(tag)
+                miri_versions.add(tag.version)
+
+    rust_versions = versions | miri_versions
+
     existing_facts = getattr(mctx, "facts", {}) or {}
     pending_downloads = {}
     new_facts = {}
@@ -165,13 +235,17 @@ def _toolchains_impl(mctx):
         )
 
     # First pass: enqueue all sha downloads we don't already have.
-    for version in versions:
+    for version in rust_versions:
         base_version, iso_date = _parse_version(version)
 
         for triple in SUPPORTED_EXEC_TRIPLES:
             exec_triple = _parse_triple(triple)
-            for tool_name in ["rustc", "clippy", "cargo"]:
+            for tool_name in ["rustc", "cargo"]:
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
+            if version in versions:
+                _request_sha("clippy", base_version, iso_date, exec_triple)
+            if version in miri_versions:
+                _request_sha("miri", base_version, iso_date, exec_triple)
 
         for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES:
             _request_sha("rust-std", base_version, iso_date, _parse_triple(target_triple))
@@ -214,10 +288,10 @@ def _toolchains_impl(mctx):
 
     host_os = _normalize_os_name(mctx.os.name)
     host_arch = _normalize_arch_name(mctx.os.arch)
-    host_cargo_repo = None
-    host_rustc_repo = None
+    host_cargo_repos = {}
+    host_rustc_repos = {}
 
-    for version in versions | rustfmt_versions | rust_analyzer_versions:
+    for version in rust_versions | rustfmt_versions | rust_analyzer_versions:
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
 
@@ -235,12 +309,11 @@ def _toolchains_impl(mctx):
                 sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
             )
 
-            if version in versions:
+            if version in rust_versions:
                 cargo_name = "cargo_{}_{}".format(triple_suffix, version_key)
-                if host_cargo_repo == None and exec_triple.arch == host_arch and exec_triple.system == host_os:
-                    host_cargo_repo = cargo_name
-                if host_rustc_repo == None and exec_triple.arch == host_arch and exec_triple.system == host_os:
-                    host_rustc_repo = rustc_name
+                if exec_triple.arch == host_arch and exec_triple.system == host_os:
+                    host_cargo_repos[version] = cargo_name
+                    host_rustc_repos[version] = rustc_name
 
                 cargo_repository(
                     name = cargo_name,
@@ -250,6 +323,7 @@ def _toolchains_impl(mctx):
                     sha256 = _sha_for("cargo", base_version, iso_date, exec_triple),
                 )
 
+            if version in versions:
                 clippy_repository(
                     name = "clippy_{}_{}".format(triple_suffix, version_key),
                     triple = triple,
@@ -259,7 +333,17 @@ def _toolchains_impl(mctx):
                     rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
                 )
 
-        if version in versions:
+            if version in miri_versions:
+                miri_repository(
+                    name = "miri_{}_{}".format(triple_suffix, version_key),
+                    triple = triple,
+                    version = base_version,
+                    iso_date = iso_date,
+                    sha256 = _sha_for("miri", base_version, iso_date, exec_triple),
+                    rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                )
+
+        if version in rust_versions:
             for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES:
                 stdlib_repository(
                     name = "rust_stdlib_{}_{}".format(sanitize_triple(target_triple), version_key),
@@ -309,21 +393,14 @@ def _toolchains_impl(mctx):
                 sha256 = _sha_for("rust-analyzer", base_version, iso_date, exec_triple),
             )
 
-    if host_cargo_repo == None:
+    if len(host_cargo_repos) != len(rust_versions):
         fail("Could not find host Cargo repository for {}-{}".format(host_os, host_arch))
-    if host_rustc_repo == None:
+    if len(host_rustc_repos) != len(rust_versions):
         fail("Could not find host rustc repository for {}-{}".format(host_os, host_arch))
     host_exe_suffix = ".exe" if host_os == "windows" else ""
-    host_cargo = "@{}//:bin/cargo{}".format(
-        host_cargo_repo,
-        host_exe_suffix,
-    )
-    host_rustc = "@{}//:bin/rustc{}".format(
-        host_rustc_repo,
-        host_exe_suffix,
-    )
+    host_cargo = "@{}//:bin/cargo{}".format(host_cargo_repos[version_tags[0].version], host_exe_suffix)
 
-    for version in versions:
+    for version in rust_versions:
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
         rustc_src_repository(
@@ -331,8 +408,8 @@ def _toolchains_impl(mctx):
             version = base_version,
             iso_date = iso_date,
             sha256 = new_facts[_rustc_src_archive_path(base_version, iso_date)],
-            cargo = host_cargo,
-            rustc = host_rustc,
+            cargo = "@{}//:bin/cargo{}".format(host_cargo_repos[version], host_exe_suffix),
+            rustc = "@{}//:bin/rustc{}".format(host_rustc_repos[version], host_exe_suffix),
         )
 
     host_tools_repository(
@@ -379,6 +456,22 @@ def _toolchains_impl(mctx):
         elif repo_name not in direct_deps:
             direct_deps.append(repo_name)
 
+    for tag in miri_repo_tags:
+        if tag.name in repo_configs:
+            fail("Miri toolchain repo {} conflicts with a Rust toolchain repo of the same name".format(tag.name))
+
+        _miri_toolchains_repository(
+            name = tag.name,
+            version = tag.version,
+            execs = tag.exec_triples,
+        )
+
+        if mctx.is_dev_dependency(tag):
+            if tag.name not in direct_dev_deps:
+                direct_dev_deps.append(tag.name)
+        elif tag.name not in direct_deps:
+            direct_deps.append(tag.name)
+
     kwargs = dict(
         reproducible = True,
         root_module_direct_deps = direct_deps,
@@ -392,5 +485,8 @@ def _toolchains_impl(mctx):
 
 toolchains = module_extension(
     implementation = _toolchains_impl,
-    tag_classes = {"toolchain": _TOOLCHAIN_TAG},
+    tag_classes = {
+        "experimental_miri": _EXPERIMENTAL_MIRI_TAG,
+        "toolchain": _TOOLCHAIN_TAG,
+    },
 )

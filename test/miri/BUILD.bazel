@@ -1,0 +1,84 @@
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+load("@rules_rs//rs:rust_proc_macro.bzl", "rust_proc_macro")
+load("@rules_rs//rs:rust_test.bzl", "rust_test")
+load(
+    "@rules_rs//rs/experimental/miri:miri_test.bzl",
+    "miri_test",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+NOT_WINDOWS = select({
+    "@platforms//os:windows": ["@platforms//:incompatible"],
+    "//conditions:default": [],
+})
+
+miri_test(
+    name = "miri_cfg_test",
+    timeout = "long",
+    srcs = ["miri_cfg_test.rs"],
+    edition = "2024",
+    target_compatible_with = NOT_WINDOWS,
+)
+
+rust_library(
+    name = "miri_leaf",
+    srcs = ["miri_leaf.rs"],
+    crate_name = "miri_leaf",
+    edition = "2024",
+)
+
+rust_library(
+    name = "miri_dep",
+    srcs = ["miri_dep.rs"],
+    crate_name = "miri_dep",
+    edition = "2024",
+    deps = [":miri_leaf"],
+)
+
+miri_test(
+    name = "miri_dep_graph_test",
+    timeout = "long",
+    srcs = ["miri_dep_graph_test.rs"],
+    edition = "2024",
+    target_compatible_with = NOT_WINDOWS,
+    deps = [":miri_dep"],
+)
+
+rust_proc_macro(
+    name = "miri_proc_macro",
+    srcs = ["miri_proc_macro.rs"],
+    edition = "2024",
+)
+
+miri_test(
+    name = "miri_proc_macro_test",
+    timeout = "long",
+    srcs = ["miri_proc_macro_test.rs"],
+    edition = "2024",
+    target_compatible_with = NOT_WINDOWS,
+    deps = [":miri_proc_macro"],
+)
+
+miri_test(
+    name = "miri_detects_use_after_free",
+    timeout = "long",
+    srcs = ["miri_detects_use_after_free.rs"],
+    edition = "2024",
+    tags = ["manual"],
+    target_compatible_with = NOT_WINDOWS,
+)
+
+rust_test(
+    name = "miri_detects_use_after_free_failure_test",
+    timeout = "long",
+    srcs = ["expect_miri_failure.rs"],
+    args = [
+        "$(rootpath :miri_detects_use_after_free)",
+        "Undefined Behavior",
+    ],
+    data = [":miri_detects_use_after_free"],
+    edition = "2024",
+    target_compatible_with = NOT_WINDOWS,
+    use_libtest_harness = False,
+)

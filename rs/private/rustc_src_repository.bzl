@@ -4,7 +4,7 @@ load(
     "@rules_rust//rust/private:repository_utils.bzl",
     "DEFAULT_STATIC_RUST_URL_TEMPLATES",
 )
-load("//rs/platforms:triples.bzl", "SUPPORTED_TIER_3_TRIPLES")
+load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
     "fq_crate",
@@ -53,10 +53,24 @@ def _rustc_src_tool_suburl(version, iso_date = None):
     path = _rustc_src_tool_path(version)
     return iso_date + "/" + path if (iso_date and version in ("beta", "nightly")) else path
 
-_SRCS_FILEGROUP = """\
+def _srcs_filegroup(extra_srcs = None):
+    srcs = 'glob(["**/*"])'
+    if extra_srcs:
+        srcs = "%s + %s" % (srcs, repr(extra_srcs))
+
+    return """\
 filegroup(
     name = "srcs",
-    srcs = glob(["**/*"]),
+    srcs = %s,
+    visibility = ["//visibility:public"],
+)
+""" % srcs
+
+def _rustc_srcs_filegroup():
+    return """\
+filegroup(
+    name = "rustc_srcs",
+    srcs = [":srcs"],
     visibility = ["//visibility:public"],
 )
 """
@@ -172,7 +186,7 @@ load("//{source_root}:defs.bzl", "RESOLVED_PLATFORMS")
 
 {srcs_filegroup}{rust_crate_call}{package_metadata_bazel_additive_build_file_content}""".format(
         source_root = source_root,
-        srcs_filegroup = _SRCS_FILEGROUP,
+        srcs_filegroup = _srcs_filegroup(),
         rust_crate_call = render_rust_crate_call(
             crate_attr,
             values,
@@ -257,14 +271,16 @@ source_stdlib(
 )
 """,
     ]
-    _generate_source_stdlib_build_files(rctx, _SOURCE_ROOT, root_build)
+    rustc_srcs = _generate_source_stdlib_build_files(rctx, _SOURCE_ROOT, root_build)
+    root_build.extend([
+        _srcs_filegroup(extra_srcs = rustc_srcs),
+        _rustc_srcs_filegroup(),
+    ])
     rctx.file(paths.join(_SOURCE_ROOT, "BUILD.bazel"), "\n".join(root_build))
 
     return rctx.repo_metadata(reproducible = True)
 
 def _generate_source_stdlib_build_files(rctx, source_root, root_build):
-    platform_triples = sorted(SUPPORTED_TIER_3_TRIPLES)
-
     cargo = rctx.path(rctx.attr.cargo)
     rustc = rctx.path(rctx.attr.rustc)
     result = rctx.execute(
@@ -295,7 +311,7 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
     package_metadata_info = resolve_cargo_metadata_packages(
         source_packages,
         cargo_metadata,
-        platform_triples,
+        ALL_TARGET_TRIPLES,
         skip_internal_rustc_placeholder_crates = False,
     )
     resolution = resolve_cargo_workspace_members(
@@ -313,7 +329,7 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
                 ),
             },
         },
-        platform_triples = platform_triples,
+        platform_triples = ALL_TARGET_TRIPLES,
         materialize_workspace_members = True,
         dep_label_prefix = "//{}:".format(source_root),
         skip_internal_rustc_placeholder_crates = False,
@@ -324,13 +340,14 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
         cfg_match_cache = resolution.cfg_match_cache,
         feature_resolutions_by_fq_crate = resolution.feature_resolutions_by_fq_crate,
         platform_cfg_attrs = resolution.platform_cfg_attrs,
-        platform_triples = platform_triples,
+        platform_triples = ALL_TARGET_TRIPLES,
         repo_root = workspace_root,
         use_legacy_rules_rust_platforms = False,
         workspace_package = source_root,
     )
 
     crate_package_dirs = set()
+    rustc_srcs = set()
 
     for package in workspace_cargo_metadata["packages"]:
         name = package["name"]
@@ -343,6 +360,7 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
             continue
         if package_dir:
             crate_package_dirs.add(package_dir)
+            rustc_srcs.add(_target_label(bazel_package, "srcs"))
 
         root_build.append("""\
 alias(
@@ -364,11 +382,11 @@ alias(
         crate_attr = _crate_attr(
             aliases = dep_data["aliases"],
             build_script_deps = dep_data["build_deps"],
-            build_script_deps_select = _select_by_triple(platform_triples, dep_data["build_deps_by_platform"]),
+            build_script_deps_select = _select_by_triple(ALL_TARGET_TRIPLES, dep_data["build_deps_by_platform"]),
             crate_features = dep_data["crate_features"],
-            crate_features_select = _select_by_triple(platform_triples, dep_data["crate_features_by_platform"]),
+            crate_features_select = _select_by_triple(ALL_TARGET_TRIPLES, dep_data["crate_features_by_platform"]),
             deps = dep_data["deps"],
-            deps_select = _select_by_triple(platform_triples, dep_data["deps_by_platform"]),
+            deps_select = _select_by_triple(ALL_TARGET_TRIPLES, dep_data["deps_by_platform"]),
             extra_compile_data = _extra_compile_data(name, source_root),
         )
         rctx.file(paths.join(bazel_package, "BUILD.bazel"), _render_crate_build_file(source_root, crate_attr, cargo.values, cargo.bazel_metadata))
@@ -379,6 +397,7 @@ alias(
         fq = fq_crate(name, version)
         bazel_package = package["bazel_package"]
         target_name = package["target_name"]
+        rustc_srcs.add(_target_label(bazel_package, "srcs"))
         root_build.append("""\
 alias(
     name = "{fq}",
@@ -396,17 +415,19 @@ alias(
                 bazel_package,
                 workspace_cargo_toml,
                 target_name,
-                crate_attr = _resolved_crate_attr(package["feature_resolutions"], platform_triples),
+                crate_attr = _resolved_crate_attr(package["feature_resolutions"], ALL_TARGET_TRIPLES),
             ),
         )
 
     for package_dir in sorted(_SOURCE_PACKAGE_DIRS.values()):
         bazel_package = _source_package(source_root, package_dir)
         if package_dir not in crate_package_dirs:
-            rctx.file(paths.join(bazel_package, "BUILD.bazel"), _SRCS_FILEGROUP)
+            rctx.file(paths.join(bazel_package, "BUILD.bazel"), _srcs_filegroup())
+        rustc_srcs.add(_target_label(bazel_package, "srcs"))
 
     _prune_rustc_src(rctx, source_root)
     rctx.file(paths.join(source_root, "defs.bzl"), "RESOLVED_PLATFORMS = []")
+    return sorted(rustc_srcs)
 
 rustc_src_repository = repository_rule(
     implementation = _rustc_src_repository_impl,

@@ -41,6 +41,7 @@ bzl_library(
     srcs = ["module_extension.bzl"],
     deps = [
         ":toolchain_utils",
+        "//rs/experimental/miri/private:miri_repository",
         "//rs/platforms:triples",
         "//rs/private:cargo_repository",
         "//rs/private:clippy_repository",

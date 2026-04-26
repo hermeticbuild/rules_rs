@@ -52,6 +52,7 @@ use_repo(
 bazel_dep(name = "bazel_lib", version = "3.0.0")
 bazel_dep(name = "bazel_features", version = "1.45.0")
 bazel_dep(name = "bazel_skylib", version = "1.4.1")
+bazel_dep(name = "hermetic_launcher", version = "0.0.8")
 bazel_dep(name = "package_metadata", version = "0.0.7")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "protobuf", version = "34.0.bcr.1", repo_name = "com_google_protobuf")

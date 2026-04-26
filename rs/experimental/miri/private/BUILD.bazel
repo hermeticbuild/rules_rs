@@ -1,0 +1,69 @@
+load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load("//rs:rust_binary.bzl", "rust_binary")
+
+package(default_visibility = ["//rs/experimental/miri:__pkg__"])
+
+rust_binary(
+    name = "miri_test_runner",
+    srcs = ["miri_test_runner.rs"],
+    crate_name = "miri_test_runner",
+    edition = "2024",
+)
+
+bzl_library(
+    name = "providers",
+    srcs = ["providers.bzl"],
+)
+
+bzl_library(
+    name = "toolchain",
+    srcs = ["toolchain.bzl"],
+    deps = [":providers"],
+)
+
+bzl_library(
+    name = "compile",
+    srcs = ["compile.bzl"],
+    deps = [
+        ":providers",
+        ":toolchain",
+        "@bazel_skylib//lib:structs",
+        "@rules_cc//cc/common",
+        "@rules_rust//rust:bzl_lib",
+        "@rules_rust//rust/platform:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "sysroot",
+    srcs = ["sysroot.bzl"],
+    deps = [
+        ":compile",
+        ":providers",
+        ":toolchain",
+        "@bazel_lib//lib:copy_to_directory",
+    ],
+)
+
+bzl_library(
+    name = "declare_toolchains",
+    srcs = ["declare_toolchains.bzl"],
+    deps = [
+        ":sysroot",
+        ":toolchain",
+        "//rs/platforms:triples",
+        "//rs/toolchains:toolchain_utils",
+        "@rules_rust//rust/platform:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "miri_repository",
+    srcs = ["miri_repository.bzl"],
+    visibility = ["//rs/toolchains:__pkg__"],
+    deps = [
+        "//rs/private:rust_repository_utils",
+        "@rules_rust//rust/platform:bzl_lib",
+    ],
+)
