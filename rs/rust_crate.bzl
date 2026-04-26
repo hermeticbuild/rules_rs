@@ -151,6 +151,7 @@ def rust_crate(
         target_compatible_with = target_compatible_with,
         package_metadata = [name + "_package_metadata"],
         visibility = ["//visibility:public"],
+        skip_per_crate_rustc_flags = True,
     )
 
     if is_proc_macro:
