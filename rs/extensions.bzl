@@ -1012,6 +1012,7 @@ RESOLVED_PLATFORMS = select({{
         build_deps = {triple: set() for triple in platform_triples}
         dev_deps = {triple: set() for triple in platform_triples}
         package_dir = _manifest_package_dir(package["manifest_path"], repo_root)
+        package_manifest_dir = _normalize_path(package["manifest_path"]).removesuffix("/Cargo.toml")
         binaries = {}
         shared_libraries = {}
         feature_resolutions = feature_resolutions_by_fq_crate.get(_fq_crate(package["name"], package["version"]))
@@ -1036,18 +1037,21 @@ RESOLVED_PLATFORMS = select({{
 
         for dep in package["dependencies"]:
             bazel_target = dep.get("bazel_target")
+            dep_path = dep.get("path")
             if not bazel_target:
-                dep_path = dep.get("path")
                 if not dep_path:
                     # Git or registry deps without a bazel_target are resolved
                     # elsewhere (e.g., as external crate repos). Skip here.
                     continue
                 bazel_target = "//" + paths.join(workspace_package, _normalize_path(dep_path).removeprefix(repo_root + "/"))
 
-            if dep.get("rename"):
-                aliases[bazel_target] = dep["rename"].replace("-", "_")
-            elif dep.get("path"):
-                aliases[bazel_target] = dep["name"].replace("-", "_")
+            is_self_dep = dep_path and _normalize_path(dep_path) == package_manifest_dir
+
+            if not is_self_dep:
+                if dep.get("rename"):
+                    aliases[bazel_target] = dep["rename"].replace("-", "_")
+                elif dep_path:
+                    aliases[bazel_target] = dep["name"].replace("-", "_")
 
             target = dep.get("target")
             match_info = _cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
@@ -1067,6 +1071,9 @@ RESOLVED_PLATFORMS = select({{
                     triple_features = feature_resolutions.features_enabled[triple]
                     if dep_name not in triple_features and ("dep:" + dep_name) not in triple_features:
                         continue
+
+                if is_self_dep:
+                    continue
 
                 target_deps[triple].add(bazel_target)
 

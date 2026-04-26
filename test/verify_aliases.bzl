@@ -23,6 +23,13 @@ verify_alias = rule(
     },
 )
 
+def verify_alias_absent(name, aliases, unexpected_label):
+    _verify_absent(
+        name = name,
+        items = sorted(aliases.keys()),
+        unexpected = unexpected_label,
+    )
+
 def _verify_absent_impl(ctx):
     if ctx.attr.unexpected in ctx.attr.items:
         fail("Did not expect %r in %r" % (ctx.attr.unexpected, ctx.attr.items))
@@ -58,6 +65,17 @@ _verify_present = rule(
 def verify_dep_absent(name, dep_data, unexpected):
     items = list(dep_data.get("deps", []))
     for values in dep_data.get("deps_by_platform", {}).values():
+        items.extend(values)
+
+    _verify_absent(
+        name = name,
+        items = sorted(items),
+        unexpected = unexpected,
+    )
+
+def verify_dev_dep_absent(name, dep_data, unexpected):
+    items = list(dep_data.get("dev_deps", []))
+    for values in dep_data.get("dev_deps_by_platform", {}).values():
         items.extend(values)
 
     _verify_absent(

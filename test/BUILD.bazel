@@ -2,11 +2,13 @@ load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@self_dev_dependency//:data.bzl", self_dev_dependency_dep_data = "DEP_DATA")
+load("@self_dev_dependency//:defs.bzl", self_dev_dependency_aliases = "aliases")
 load("@target_workspace_dep_feature//:data.bzl", target_workspace_dep_feature_dep_data = "DEP_DATA")
 load("@workspace_default_features//:data.bzl", workspace_default_features_dep_data = "DEP_DATA")
 load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
 load("@workspace_renamed_path_dep_aliases//:defs.bzl", workspace_renamed_path_dep_aliases_aliases = "aliases")
-load("//:verify_aliases.bzl", "verify_alias", "verify_crate_feature_absent", "verify_crate_feature_present", "verify_dep_absent", "verify_dep_present")
+load("//:verify_aliases.bzl", "verify_alias", "verify_alias_absent", "verify_crate_feature_absent", "verify_crate_feature_present", "verify_dep_absent", "verify_dep_present", "verify_dev_dep_absent")
 
 sh_test(
     name = "dummy_test",
@@ -146,6 +148,24 @@ verify_alias(
     expected_label = "//workspace_renamed_path_dep_aliases/dep-crate",
 )
 
+verify_alias_absent(
+    name = "verify_self_dev_dependency_no_self_alias",
+    aliases = self_dev_dependency_aliases(package_name = "self_dev_dependency/mycrate"),
+    unexpected_label = "//self_dev_dependency/mycrate",
+)
+
+verify_dev_dep_absent(
+    name = "verify_self_dev_dependency_no_self_dev_dep",
+    dep_data = self_dev_dependency_dep_data["self_dev_dependency/mycrate"],
+    unexpected = "//self_dev_dependency/mycrate",
+)
+
+verify_crate_feature_present(
+    name = "verify_self_dev_dependency_feature_present",
+    dep_data = self_dev_dependency_dep_data["self_dev_dependency/mycrate"],
+    expected = "test-utils",
+)
+
 verify_dep_present(
     name = "verify_single_crate_dep_data_key",
     dep_data = build_script_aliases_dep_data["build_script_aliases"],
@@ -229,6 +249,9 @@ filegroup(
         ":verify_cfg_feature_target_dep",
         ":verify_first_party_feature_propagation",
         ":verify_rust_analyzer_toolchain",
+        ":verify_self_dev_dependency_feature_present",
+        ":verify_self_dev_dependency_no_self_alias",
+        ":verify_self_dev_dependency_no_self_dev_dep",
         ":verify_single_crate_dep_data_key",
         ":verify_target_workspace_dep_feature_dep_absent",
         ":verify_target_workspace_dep_feature_feature_absent",
@@ -239,6 +262,7 @@ filegroup(
         ":verify_workspace_member_annotation_features",
         ":verify_workspace_renamed_path_dep_aliases",
         "//prost:echo_rust_proto",
+        "//self_dev_dependency/mycrate",
         "@binaries//:protoc-gen-prost-extra",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
     ] + select({

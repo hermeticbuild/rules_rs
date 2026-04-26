@@ -134,6 +134,17 @@ use_repo(crate, "crates")
 
 `crate.spec` and vendoring mode are currently unsupported.
 
+### Self dev-dependencies
+
+Cargo workspaces sometimes use a self-referencing dev-dependency to enable extra features for tests:
+
+```toml
+[dev-dependencies]
+mycrate = { path = ".", features = ["test-utils"] }
+```
+
+`rules_rs` suppresses the generated self-edge in `aliases()` and `all_crate_deps()` so this pattern does not create a Bazel dependency cycle. The requested features are still part of the workspace feature resolution, so they may be enabled on the first-party crate more broadly than Cargo would enable them for a single targeted test command. If you need separate normal and test feature variants, model them as separate Bazel targets, with the test-only variant setting the extra `crate_features` and `testonly = True`.
+
 ### Exec vs target triple caveats
 
 - Windows: the default Windows **exec** toolchain is MSVC-flavored. The upstream `gnullvm` toolchain dynamically links `libunwind`, which may not exist on a stock Windows machine.

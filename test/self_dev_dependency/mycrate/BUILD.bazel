@@ -1,0 +1,10 @@
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+load("@self_dev_dependency//:defs.bzl", "aliases", "all_crate_deps")
+
+rust_library(
+    name = "mycrate",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = aliases(),
+    crate_name = "mycrate",
+    deps = all_crate_deps(normal = True),
+)
