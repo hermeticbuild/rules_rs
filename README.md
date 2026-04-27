@@ -25,7 +25,7 @@ This is the default setup for new users. It provisions the patched `rules_rust`,
 ### `MODULE.bazel`
 
 ```bzl
-bazel_dep(name = "rules_rs", version = "0.0.60")
+bazel_dep(name = "rules_rs", version = "0.0.61")
 bazel_dep(name = "llvm", version = "0.7.3")
 bazel_dep(name = "platforms", version = "1.0.0")
 
