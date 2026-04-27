@@ -109,6 +109,10 @@ genrule(
         grep '@@rules_rs++crate+cfg_feature_target_dep//:itoa-1.0.15' $(location :cfg_feature_target_dep_inner_deps)
         echo ok > $@
     """,
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 genquery(
@@ -126,6 +130,10 @@ genrule(
         grep '@@rules_rs++crate+first_party_feature_propagation//:ryu-1.0.23' $(location :first_party_feature_propagation_dep_leaf_deps)
         echo ok > $@
     """,
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 genquery(
@@ -180,6 +188,10 @@ genrule(
         grep '@@rules_rs++crate+workspace_member_annotation_features//:ryu-1.0.20' $(location :workspace_member_annotation_features_dep_leaf_deps)
         echo ok > $@
     """,
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 verify_dep_absent(
@@ -240,6 +252,10 @@ genrule(
         grep 'lib/rustlib/src/library' $(location @rules_rust//rust/private:rust_analyzer_detect_sysroot)
         echo ok > $@
     """,
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 filegroup(
