@@ -170,9 +170,9 @@ bzl_library(
     srcs = ["toolchains_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
-        "//rs/experimental/toolchains:declare_rust_analyzer_toolchains",
-        "//rs/experimental/toolchains:declare_rustc_toolchains",
-        "//rs/experimental/toolchains:declare_rustfmt_toolchains",
+        "//rs/toolchains:declare_rust_analyzer_toolchains",
+        "//rs/toolchains:declare_rustc_toolchains",
+        "//rs/toolchains:declare_rustfmt_toolchains",
     ],
 )
 

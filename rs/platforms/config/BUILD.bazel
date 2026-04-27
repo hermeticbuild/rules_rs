@@ -1,5 +1,5 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
-load("//rs/experimental/platforms/config:declare_config_settings.bzl", "declare_config_settings")
+load("//rs/platforms/config:declare_config_settings.bzl", "declare_config_settings")
 
 declare_config_settings()
 
@@ -7,5 +7,5 @@ bzl_library(
     name = "declare_config_settings",
     srcs = ["declare_config_settings.bzl"],
     visibility = ["//visibility:public"],
-    deps = ["//rs/experimental/platforms:triples"],
+    deps = ["//rs/platforms:triples"],
 )

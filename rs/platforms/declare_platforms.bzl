@@ -1,6 +1,6 @@
 """Platform definitions for Rust target triples."""
 
-load("//rs/experimental/platforms:triples.bzl", "triple_to_constraint_set", "SUPPORTED_TARGET_TRIPLES")
+load("//rs/platforms:triples.bzl", "SUPPORTED_TARGET_TRIPLES", "triple_to_constraint_set")
 
 def declare_platforms(targets = SUPPORTED_TARGET_TRIPLES):
     for target_triple in targets:

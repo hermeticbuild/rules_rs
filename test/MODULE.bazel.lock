@@ -3285,7 +3285,7 @@
       "zvariant_utils_2.1.0": "{\"dependencies\":[{\"name\":\"proc-macro2\",\"req\":\"^1.0.81\"},{\"name\":\"quote\",\"req\":\"^1.0.36\"},{\"features\":[\"extra-traits\",\"full\"],\"name\":\"syn\",\"req\":\"^2.0.64\"}],\"features\":{}}",
       "zvariant_utils_3.2.1": "{\"dependencies\":[{\"name\":\"proc-macro2\",\"req\":\"^1.0.81\"},{\"name\":\"quote\",\"req\":\"^1.0.36\"},{\"features\":[\"derive\"],\"name\":\"serde\",\"req\":\"^1.0.200\"},{\"features\":[\"extra-traits\",\"full\"],\"name\":\"syn\",\"req\":\"^2.0.64\"},{\"name\":\"winnow\",\"req\":\"^0.7\"}],\"features\":{\"default\":[],\"gvariant\":[]}}"
     },
-    "@@rules_rs+//rs/experimental/toolchains:module_extension.bzl%toolchains": {
+    "@@rules_rs+//rs/toolchains:module_extension.bzl%toolchains": {
       "cargo-1.92.0-aarch64-apple-darwin.tar.xz": "bce6e7def37240c5a63115828017a9fc0ebcb31e64115382f5943b62b71aa34a",
       "cargo-1.92.0-aarch64-pc-windows-msvc.tar.xz": "3fc47cc29781190c5075f807836c4b98d411aaf27c59598fbfb2aa781ccf6190",
       "cargo-1.92.0-aarch64-unknown-linux-gnu.tar.xz": "cb2ce6be6411b986e25c71ad8a813f9dfbe3461738136fd684e3644f8dd75df4",

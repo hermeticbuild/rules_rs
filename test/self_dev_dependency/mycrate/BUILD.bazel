@@ -7,4 +7,5 @@ rust_library(
     aliases = aliases(),
     crate_name = "mycrate",
     deps = all_crate_deps(normal = True),
+    visibility = ["//visibility:public"],
 )

@@ -284,7 +284,7 @@ ALL_PLATFORMS = [
     platform_transition_filegroup(
         name = "all_builds_" + platform,
         srcs = ["all_builds"],
-        target_platform = "@rules_rs//rs/experimental/platforms:" + platform,
+        target_platform = "@rules_rs//rs/platforms:" + platform,
     )
     for platform in ALL_PLATFORMS
 ]

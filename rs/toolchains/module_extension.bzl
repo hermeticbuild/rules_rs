@@ -1,4 +1,4 @@
-"""Module extension for configuring experimental Rust toolchains."""
+"""Module extension for configuring rules_rs Rust toolchains."""
 
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load(
@@ -7,8 +7,7 @@ load(
     "check_version_valid",
     "produce_tool_suburl",
 )
-load("//rs/experimental/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TARGET_TRIPLES")
-load("//rs/experimental/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
+load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TARGET_TRIPLES")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
 load("//rs/private:host_tools_repository.bzl", "host_tools_repository")
@@ -18,6 +17,7 @@ load("//rs/private:rustc_repository.bzl", "rustc_repository")
 load("//rs/private:rustfmt_repository.bzl", "rustfmt_repository")
 load("//rs/private:stdlib_repository.bzl", "stdlib_repository")
 load("//rs/private:toolchains_repository.bzl", "toolchains_repository")
+load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
 
 _DEFAULT_RUSTC_VERSION = "1.92.0"
 _DEFAULT_EDITION = "2021"

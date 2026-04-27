@@ -1,7 +1,7 @@
 load("@rules_rust//rust:toolchain.bzl", "rustfmt_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
-load("//rs/experimental/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
-load("//rs/experimental/toolchains:toolchain_utils.bzl", "sanitize_version")
+load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
+load("//rs/toolchains:toolchain_utils.bzl", "sanitize_version")
 
 def _channel(version):
     if version.startswith("nightly"):

@@ -1,7 +1,7 @@
 load("@rules_rust//rust:toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
-load("//rs/experimental/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TARGET_TRIPLES", "triple_to_constraint_set")
-load("//rs/experimental/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
+load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TARGET_TRIPLES", "triple_to_constraint_set")
+load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
 
 def _channel(version):
     if version.startswith("nightly"):
@@ -12,7 +12,7 @@ def _channel(version):
 
 def _rustc_flags_to_select(rustc_flags_by_triple):
     return select(
-        {"@rules_rs//rs/experimental/platforms/config:" + triple: flags for triple, flags in rustc_flags_by_triple.items()} |
+        {"@rules_rs//rs/platforms/config:" + triple: flags for triple, flags in rustc_flags_by_triple.items()} |
         {"//conditions:default": []},
     )
 
@@ -47,7 +47,7 @@ def declare_rustc_toolchains(
         target_triple_select = {}
         for target_triple in targets:
             target_key = sanitize_triple(target_triple)
-            config_label = "@rules_rs//rs/experimental/platforms/config:{}".format(target_triple)
+            config_label = "@rules_rs//rs/platforms/config:{}".format(target_triple)
             rust_std_select[config_label] = "@rust_stdlib_{}_{}//:rust_std-{}".format(target_key, version_key, target_triple)
             target_triple_select[config_label] = target_triple
 
@@ -73,9 +73,9 @@ def declare_rustc_toolchains(
                 "//conditions:default": "",
             }),
             staticlib_ext = select({
-                "@rules_rs//rs/experimental/platforms/constraints:windows_gnu": ".a",
-                "@rules_rs//rs/experimental/platforms/constraints:windows_gnullvm": ".a",
-                "@rules_rs//rs/experimental/platforms/constraints:windows_msvc": ".lib",
+                "@rules_rs//rs/platforms/constraints:windows_gnu": ".a",
+                "@rules_rs//rs/platforms/constraints:windows_gnullvm": ".a",
+                "@rules_rs//rs/platforms/constraints:windows_msvc": ".lib",
                 "@platforms//os:none": "",
                 "@platforms//os:emscripten": ".js",
                 "@platforms//os:uefi": ".lib",
@@ -102,9 +102,9 @@ def declare_rustc_toolchains(
                 "@platforms//os:nixos": ["-ldl", "-lpthread"],
                 "@platforms//os:openbsd": ["-lpthread"],
                 "@platforms//os:ios": ["-lSystem", "-lobjc", "-Wl,-framework,Security", "-Wl,-framework,Foundation", "-lresolv"],
-                "@rules_rs//rs/experimental/platforms/constraints:windows_gnu": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
-                "@rules_rs//rs/experimental/platforms/constraints:windows_gnullvm": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
-                "@rules_rs//rs/experimental/platforms/constraints:windows_msvc": [
+                "@rules_rs//rs/platforms/constraints:windows_gnu": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
+                "@rules_rs//rs/platforms/constraints:windows_gnullvm": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
+                "@rules_rs//rs/platforms/constraints:windows_msvc": [
                     "advapi32.lib",
                     "ws2_32.lib",
                     "userenv.lib",

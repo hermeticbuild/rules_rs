@@ -7,7 +7,7 @@ bzl_library(
     srcs = ["declare_rustc_toolchains.bzl"],
     deps = [
         ":toolchain_utils",
-        "//rs/experimental/platforms:triples",
+        "//rs/platforms:triples",
         "@rules_rust//rust:bzl_lib",
         "@rules_rust//rust/platform:bzl_lib",
     ],
@@ -18,7 +18,7 @@ bzl_library(
     srcs = ["declare_rust_analyzer_toolchains.bzl"],
     deps = [
         ":toolchain_utils",
-        "//rs/experimental/platforms:triples",
+        "//rs/platforms:triples",
         "@rules_rust//rust:bzl_lib",
         "@rules_rust//rust/platform:bzl_lib",
         "@rules_rust//rust/private:bzl_lib",
@@ -30,7 +30,7 @@ bzl_library(
     srcs = ["declare_rustfmt_toolchains.bzl"],
     deps = [
         ":toolchain_utils",
-        "//rs/experimental/platforms:triples",
+        "//rs/platforms:triples",
         "@rules_rust//rust:bzl_lib",
         "@rules_rust//rust/platform:bzl_lib",
     ],
@@ -41,7 +41,7 @@ bzl_library(
     srcs = ["module_extension.bzl"],
     deps = [
         ":toolchain_utils",
-        "//rs/experimental/platforms:triples",
+        "//rs/platforms:triples",
         "//rs/private:cargo_repository",
         "//rs/private:clippy_repository",
         "//rs/private:host_tools_repository",

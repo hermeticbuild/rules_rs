@@ -61,7 +61,7 @@ You can still use `rules_rust` toolchains when doing a gradual migration, but th
 ### Option A: `rules_rs` toolchains (recommended)
 
 ```bzl
-toolchains = use_extension("@rules_rs//rs/experimental/toolchains:module_extension.bzl", "toolchains")
+toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
 
 toolchains.toolchain(
     edition = "2024",
@@ -72,7 +72,8 @@ use_repo(toolchains, "default_rust_toolchains")
 register_toolchains("@default_rust_toolchains//:all")
 ```
 
-Make sure you set `use_experimental_platforms = True` in `crate.from_cargo(...)`.
+No platform flag is required in `crate.from_cargo(...)`; by default it uses the
+platforms published by `rules_rs`.
 
 ### Option B: Keep your existing `rules_rust` toolchain configuration.
 
@@ -80,7 +81,7 @@ When using `rules_rust` toolchains with `rules_rs`, first provision `rules_rust`
 `rules_rs` extension, then configure toolchains from `@rules_rust`:
 
 ```bzl
-rules_rust = use_extension("@rules_rs//rs/experimental:rules_rust.bzl", "rules_rust")
+rules_rust = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
 use_repo(rules_rust, "rules_rust")
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
@@ -93,7 +94,7 @@ use_repo(rust, "rust_toolchains")
 register_toolchains("@rust_toolchains//:all")
 ```
 
-In this mode, keep `use_experimental_platforms = False` (the default) in `crate.from_cargo(...)`.
+In this mode, set `use_legacy_rules_rust_platforms = True` in `crate.from_cargo(...)`.
 
 ## rust-analyzer Integration
 
@@ -124,9 +125,8 @@ crate.from_cargo(
         "x86_64-apple-darwin",
         "x86_64-unknown-linux-gnu",
     ],
-    # True when using rules_rs experimental toolchains/platforms.
-    # False (default) when using rules_rust toolchains/platforms.
-    use_experimental_platforms = True,
+    # Uses rules_rs platforms by default. Set use_legacy_rules_rust_platforms = True
+    # only when keeping an existing rules_rust platform/toolchain setup.
 )
 
 use_repo(crate, "crates")
@@ -174,7 +174,7 @@ TODO(zbarsky): Should we issue warnings if you configure the triples in an unexp
 `rules_rs` exports a `rules_rust` module extension you can use to provision the pinned `rules_rust` repo:
 
 ```bzl
-rules_rust = use_extension("@rules_rs//rs/experimental:rules_rust.bzl", "rules_rust")
+rules_rust = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
 
 # Optional: apply additional patches to the pinned rules_rust archive.
 rules_rust.patch(
@@ -207,7 +207,7 @@ archive_override(
 )
 
 # Replace the rules_rs extension's pinned rules_rust with your fork.
-rules_rust_ext = use_extension("@rules_rs//rs/experimental:rules_rust.bzl", "rules_rust")
+rules_rust_ext = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
 override_repo(rules_rust_ext, rules_rust = "rules_rust")
 
 # Configure toolchains from your fork directly.
@@ -230,7 +230,7 @@ This approach ensures that both `rules_rs` internals and your own `@rules_rust` 
 bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "protobuf", version = "34.0.bcr.1", repo_name = "com_google_protobuf")
 
-rules_rust_prost = use_extension("@rules_rs//rs/experimental:rules_rust_prost.bzl", "rules_rust_prost")
+rules_rust_prost = use_extension("@rules_rs//rs:rules_rust_prost.bzl", "rules_rust_prost")
 use_repo(rules_rust_prost, "rules_rust_prost")
 
 register_toolchains("@rules_rust_prost//:default_prost_toolchain")
@@ -272,19 +272,19 @@ platform(
     name = "local_windows_msvc",
     parents = ["@platforms//host"],
     constraint_values = [
-        "@rules_rs//rs/experimental/platforms/constraints:windows_msvc",
+        "@rules_rs//rs/platforms/constraints:windows_msvc",
     ],
 )
 ```
 
 Set host ABI constraints to match your exec toolchain choice; handle target ABI differences via target platforms and `platform_triples`.
 
-For remote execution platforms, you can inherit from a triple-based platform published in `@rules_rs//rs/experimental/platforms` and then layer exec properties:
+For remote execution platforms, you can inherit from a triple-based platform published in `@rules_rs//rs/platforms` and then layer exec properties:
 
 ```bzl
 platform(
     name = "rbe_linux_amd64_gnu",
-    parents = ["@rules_rs//rs/experimental/platforms:x86_64-unknown-linux-gnu"],
+    parents = ["@rules_rs//rs/platforms:x86_64-unknown-linux-gnu"],
     exec_properties = {
         "container-image": "docker://ghcr.io/example/rbe-linux-gnu:latest",
     },

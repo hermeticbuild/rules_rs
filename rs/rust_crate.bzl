@@ -4,10 +4,10 @@ load("//rs:rust_binary.bzl", "rust_binary")
 load("//rs:rust_library.bzl", "rust_library")
 load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
 
-def _platform(triple, use_experimental_platforms):
-    if use_experimental_platforms:
-        return "@rules_rs//rs/experimental/platforms/config:" + triple
-    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
+def _platform(triple, use_legacy_rules_rust_platforms):
+    if use_legacy_rules_rust_platforms:
+        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
+    return "@rules_rs//rs/platforms/config:" + triple
 
 def rust_crate(
         name,
@@ -35,7 +35,7 @@ def rust_crate(
         build_script_tags,
         is_proc_macro,
         binaries,
-        use_experimental_platforms):
+        use_legacy_rules_rust_platforms):
     package_metadata(
         name = name + "_package_metadata",
         purl = purl,
@@ -103,7 +103,7 @@ def rust_crate(
             # Only stamp out one target per triple when there are per-platform feature deltas.
             for triple in triples:
                 build_script_name = "_bs_" + triple
-                branches[_platform(triple, use_experimental_platforms)] = build_script_name
+                branches[_platform(triple, use_legacy_rules_rust_platforms)] = build_script_name
 
                 cargo_build_script(
                     name = build_script_name,
@@ -140,7 +140,7 @@ def rust_crate(
         deps = deps,
         data = data,
         crate_features = crate_features + select(
-            {_platform(k, use_experimental_platforms): v for k, v in conditional_crate_features.items()} |
+            {_platform(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
             {"//conditions:default": []},
         ),
         crate_root = crate_root,

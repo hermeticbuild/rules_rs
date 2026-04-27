@@ -1,5 +1,5 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
-load("//rs/experimental/platforms:declare_platforms.bzl", "declare_platforms")
+load("//rs/platforms:declare_platforms.bzl", "declare_platforms")
 
 declare_platforms()
 

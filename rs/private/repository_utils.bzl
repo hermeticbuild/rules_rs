@@ -1,10 +1,10 @@
 load(":select_utils.bzl", "compute_select")
 load(":semver.bzl", "parse_full_version")
 
-def _platform(triple, use_experimental_platforms):
-    if use_experimental_platforms:
-        return "@rules_rs//rs/experimental/platforms/config:" + triple
-    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
+def _platform(triple, use_legacy_rules_rust_platforms):
+    if use_legacy_rules_rust_platforms:
+        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
+    return "@rules_rs//rs/platforms/config:" + triple
 
 def _format_branches(branches):
     return """select({
@@ -13,20 +13,20 @@ def _format_branches(branches):
         ",\n        ".join(['"%s": %s' % branch for branch in branches])
     )
 
-def render_select(non_platform_items, platform_items, use_experimental_platforms):
+def render_select(non_platform_items, platform_items, use_legacy_rules_rust_platforms):
     common_items, branches = compute_select(non_platform_items, platform_items)
 
     if not branches:
         return common_items, ""
 
-    branches = [(_platform(k, use_experimental_platforms), repr(v)) for k, v in branches.items()]
+    branches = [(_platform(k, use_legacy_rules_rust_platforms), repr(v)) for k, v in branches.items()]
     branches.append(("//conditions:default", "[],"))
 
     return common_items, _format_branches(branches)
 
-def render_select_build_script_env(platform_items, use_experimental_platforms):
+def render_select_build_script_env(platform_items, use_legacy_rules_rust_platforms):
     branches = [
-        (_platform(triple, use_experimental_platforms), items)
+        (_platform(triple, use_legacy_rules_rust_platforms), items)
         for triple, items in platform_items.items()
     ]
 
@@ -145,7 +145,7 @@ rust_crate(
     build_script_tags = {build_script_tags},
     is_proc_macro = {is_proc_macro},
     binaries = {binaries},
-    use_experimental_platforms = {use_experimental_platforms},
+    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
 )
 """
 
@@ -160,14 +160,14 @@ rust_crate(
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
     )
-    use_experimental_platforms = rctx.attr.use_experimental_platforms
-    build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select, use_experimental_platforms)
-    build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select, use_experimental_platforms)
-    build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_experimental_platforms)
-    rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_experimental_platforms)
-    deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_experimental_platforms)
+    use_legacy_rules_rust_platforms = rctx.attr.use_legacy_rules_rust_platforms
+    build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select, use_legacy_rules_rust_platforms)
+    build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select, use_legacy_rules_rust_platforms)
+    build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_legacy_rules_rust_platforms)
+    rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_legacy_rules_rust_platforms)
+    deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_legacy_rules_rust_platforms)
 
-    conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_experimental_platforms)
+    conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_legacy_rules_rust_platforms)
 
     binaries = {bin["name"]: bin["path"] for bin in cargo_toml.get("bin", []) if bin["name"] in rctx.attr.gen_binaries}
 
@@ -208,7 +208,7 @@ rust_crate(
         build_script_tags = repr(attr.build_script_tags),
         is_proc_macro = repr(is_proc_macro),
         binaries = binaries,
-        use_experimental_platforms = use_experimental_platforms,
+        use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
     )
 
 common_attrs = {
@@ -281,5 +281,5 @@ common_attrs = {
               "which requires Bash binary to exist.",
     ),
 } | {
-    "use_experimental_platforms": attr.bool(),
+    "use_legacy_rules_rust_platforms": attr.bool(),
 }

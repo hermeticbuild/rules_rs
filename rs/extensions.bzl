@@ -25,10 +25,10 @@ def _spoke_repo(hub_name, name, version):
 def _external_repo_for_git_source(remote, commit):
     return remote.replace("/", "_").replace(":", "_").replace("@", "_") + "_" + commit
 
-def _platform(triple, use_experimental_platforms):
-    if use_experimental_platforms:
-        return "@rules_rs//rs/experimental/platforms/config:" + triple
-    return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
+def _platform(triple, use_legacy_rules_rust_platforms):
+    if use_legacy_rules_rust_platforms:
+        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
+    return "@rules_rs//rs/platforms/config:" + triple
 
 def _select(items):
     return {k: sorted(v) for k, v in items.items()}
@@ -36,13 +36,13 @@ def _select(items):
 def _exclude_deps_from_features(features):
     return [f for f in features if not f.startswith("dep:")]
 
-def _shared_and_per_platform(platform_items, use_experimental_platforms):
+def _shared_and_per_platform(platform_items, use_legacy_rules_rust_platforms):
     if not platform_items:
         return [], {}
 
     by_platform = {}
     for triple, items in platform_items.items():
-        platform = _platform(triple, use_experimental_platforms)
+        platform = _platform(triple, use_legacy_rules_rust_platforms)
         existing = by_platform.get(platform)
         if existing == None:
             by_platform[platform] = set(items)
@@ -257,7 +257,7 @@ def _generate_hub_and_spokes(
         cargo_config,
         validate_lockfile,
         debug,
-        use_experimental_platforms,
+        use_legacy_rules_rust_platforms,
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
@@ -772,7 +772,7 @@ crate.annotation(
             patch_args = annotation.patch_args,
             patch_tool = annotation.patch_tool,
             patches = annotation.patches,
-            use_experimental_platforms = use_experimental_platforms,
+            use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
 
         repo_name = _spoke_repo(hub_name, crate_name, version)
@@ -905,7 +905,7 @@ alias(
     workspace_deps, conditional_workspace_deps = render_select(
         [],
         workspace_dep_labels_by_triple,
-        use_experimental_platforms,
+        use_legacy_rules_rust_platforms,
     )
 
     hub_contents.append(
@@ -950,7 +950,7 @@ cargo_lints(
 
     resolved_platforms = []
     for triple in platform_triples:
-        platform = _platform(triple, use_experimental_platforms)
+        platform = _platform(triple, use_legacy_rules_rust_platforms)
         if platform not in resolved_platforms:
             resolved_platforms.append(platform)
 
@@ -1083,10 +1083,10 @@ RESOLVED_PLATFORMS = select({{
 
         bazel_package = paths.join(workspace_package, package_dir) if package_dir else workspace_package
 
-        crate_features, crate_features_by_platform = _shared_and_per_platform(crate_features, use_experimental_platforms)
-        deps, deps_by_platform = _shared_and_per_platform(deps, use_experimental_platforms)
-        build_deps, build_deps_by_platform = _shared_and_per_platform(build_deps, use_experimental_platforms)
-        dev_deps, dev_deps_by_platform = _shared_and_per_platform(dev_deps, use_experimental_platforms)
+        crate_features, crate_features_by_platform = _shared_and_per_platform(crate_features, use_legacy_rules_rust_platforms)
+        deps, deps_by_platform = _shared_and_per_platform(deps, use_legacy_rules_rust_platforms)
+        build_deps, build_deps_by_platform = _shared_and_per_platform(build_deps, use_legacy_rules_rust_platforms)
+        dev_deps, dev_deps_by_platform = _shared_and_per_platform(dev_deps, use_legacy_rules_rust_platforms)
 
         workspace_dep_stanzas.append("""
     {bazel_package}: {{
@@ -1263,9 +1263,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_experimental_platforms, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_experimental_platforms)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, sparse_registry_configs, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
 
     # Lay down the git repos we will need; per-crate git_repository can clone from these.
     git_sources = set()
@@ -1317,8 +1317,8 @@ _from_cargo = tag_class(
             mandatory = True,
             doc = "The set of triples to resolve for. They must correspond to the union of any exec/target platforms that will participate in your build.",
         ),
-        "use_experimental_platforms": attr.bool(
-            doc = "If true, use experimental rules_rs platforms. If false, use the stable rules_rust platforms.",
+        "use_legacy_rules_rust_platforms": attr.bool(
+            doc = "If true, use the legacy rules_rust platforms. If false, use rules_rs platforms.",
             default = False,
         ),
         "validate_lockfile": attr.bool(

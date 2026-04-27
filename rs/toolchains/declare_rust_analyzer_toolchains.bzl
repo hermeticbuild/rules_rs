@@ -4,8 +4,8 @@ load(
     "@rules_rust//rust/private:repository_utils.bzl",
     "includes_rust_analyzer_proc_macro_srv",
 )
-load("//rs/experimental/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
-load("//rs/experimental/toolchains:toolchain_utils.bzl", "sanitize_version")
+load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
+load("//rs/toolchains:toolchain_utils.bzl", "sanitize_version")
 
 def _channel(version):
     if version.startswith("nightly"):
