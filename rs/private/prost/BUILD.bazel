@@ -49,6 +49,7 @@ rust_library_group(
     deps = [
         ":prost_runtime",
         "@rrprd//:tonic",
+        "@rrprd//:tonic-prost",
     ],
 )
 
