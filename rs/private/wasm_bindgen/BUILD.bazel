@@ -1,0 +1,17 @@
+load("@rules_rust_wasm_bindgen//:defs.bzl", "rust_wasm_bindgen_toolchain")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+])
+
+# Minimal default toolchain: just `wasm_bindgen_cli`. Browser/webdriver attrs are
+# only needed by `rust_wasm_bindgen_test`, which downstream users can register
+# their own toolchain for if they want test support.
+rust_wasm_bindgen_toolchain(
+    name = "default_wasm_bindgen_toolchain_impl",
+    tags = ["manual"],
+    wasm_bindgen_cli = "@rrwbd//:wasm-bindgen-cli__wasm-bindgen",
+)

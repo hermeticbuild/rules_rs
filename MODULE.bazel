@@ -105,11 +105,37 @@ crate.annotation(
     crate = "protoc-gen-tonic",
     gen_binaries = ["protoc-gen-tonic"],
 )
+crate.from_cargo(
+    name = "rrwbd",
+    cargo_lock = "//rs/private/wasm_bindgen:Cargo.lock",
+    cargo_toml = "//rs/private/wasm_bindgen:Cargo.toml",
+    platform_triples = [
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl",
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-gnullvm",
+        "aarch64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-gnullvm",
+        "x86_64-pc-windows-msvc",
+    ],
+)
+crate.annotation(
+    crate = "wasm-bindgen-cli",
+    gen_binaries = ["wasm-bindgen", "wasm-bindgen-test-runner"],
+    repositories = ["rrwbd"],
+)
 use_repo(crate, "rrra")
 use_repo(crate, "rrprd")
+use_repo(crate, "rrwbd")
 
 rules_rust_prost = use_extension("//rs:rules_rust_prost.bzl", "rules_rust_prost")
 use_repo(rules_rust_prost, "rules_rust_prost")
+
+rules_rust_wasm_bindgen = use_extension("//rs:rules_rust_wasm_bindgen.bzl", "rules_rust_wasm_bindgen")
+use_repo(rules_rust_wasm_bindgen, "rules_rust_wasm_bindgen")
 
 bazel_dep(name = "rules_go", version = "0.59.0", dev_dependency = True)
 bazel_dep(name = "gazelle", version = "0.47.0", dev_dependency = True)
