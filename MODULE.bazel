@@ -60,6 +60,9 @@ bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "llvm", version = "0.7.5")
 bazel_dep(name = "aspect_tools_telemetry", version = "0.3.2")
 
+osx = use_extension("@llvm//extensions:osx.bzl", "osx")
+use_repo(osx, "macos_sdk")
+
 tel = use_extension("@aspect_tools_telemetry//:extension.bzl", "telemetry")
 use_repo(tel, "aspect_tools_telemetry_report")
 
