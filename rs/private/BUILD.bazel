@@ -48,6 +48,7 @@ bzl_library(
     visibility = ["//rs:__subpackages__"],
     deps = [
         ":cargo_credentials",
+        ":registry_utils",
         ":repository_utils",
         ":toml2json",
         "@bazel_tools//tools/build_defs/repo:cache.bzl",
@@ -62,9 +63,23 @@ bzl_library(
     deps = [
         ":annotations",
         ":cargo_credentials",
+        ":registry_utils",
         ":toml2json",
         "@bazel_tools//tools/build_defs/repo:git_worker.bzl",
     ],
+)
+
+bzl_library(
+    name = "registry_config_repository",
+    srcs = ["registry_config_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [":cargo_credentials"],
+)
+
+bzl_library(
+    name = "registry_utils",
+    srcs = ["registry_utils.bzl"],
+    visibility = ["//rs:__subpackages__"],
 )
 
 bzl_library(
