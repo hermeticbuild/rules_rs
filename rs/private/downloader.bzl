@@ -1,9 +1,8 @@
 load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
-load(":cargo_credentials.bzl", "registry_auth_headers")
 load(":annotations.bzl", "annotation_for")
+load(":cargo_credentials.bzl", "registry_auth_headers")
+load(":registry_utils.bzl", "CRATES_IO_REGISTRY", "sharded_path")
 load(":toml2json.bzl", "run_toml2json")
-
-CRATES_IO_REGISTRY = "sparse+https://index.crates.io/"
 
 def parse_git_url(url):
     # Drop query params (?rev=...) and keep only before '#'
@@ -33,22 +32,8 @@ def _github_source_to_raw_content_base_url(url):
 def _sanitize_path_fragment(path):
     return path.replace("/", "_").replace(":", "_")
 
-def sharded_path(crate):
-    # crates.io-index sharding rules (ASCII names)
-    n = len(crate)
-    if n == 0:
-        fail("empty crate name")
-    if n == 1:
-        return "1/" + crate
-    if n == 2:
-        return "2/" + crate
-    if n == 3:
-        return "3/%s/%s" % (crate[0], crate)
-    return "%s/%s/%s" % (crate[0:2], crate[2:4], crate)
-
 def new_downloader_state():
     return struct(
-        in_flight_sparse_registry_configs_by_source = {},
         in_flight_registry_fetches_by_crate = {},
         in_flight_git_crate_fetches_by_url = {},
         pending_git_clones_by_source = {},
@@ -108,25 +93,6 @@ def start_crate_registry_downloads(
         if source == "registry+https://github.com/rust-lang/crates.io-index":
             source = CRATES_IO_REGISTRY
             package["source"] = source
-            # We hardcode the response for crates.io to avoid a fetch in
-            # the common case when not using a custom registry.
-            # TODO(zbarsky): This could be solved more cleanly by using a repository rule
-            # to do these fetches, thus making them lazy.
-        elif source.startswith("sparse+") and source not in state.in_flight_sparse_registry_configs_by_source:
-            registry = source.removeprefix("sparse+")
-
-            state.in_flight_sparse_registry_configs_by_source[source] = mctx.download(
-                registry + "config.json",
-                _sanitize_path_fragment(source) + "config.json",
-                headers = registry_auth_headers(cargo_credentials, source),
-                block = False,
-            )
-
-    for package in packages:
-        source = package.get("source")
-        if not source:
-            continue
-
         name = package["name"]
         version = package["version"]
 
@@ -256,7 +222,8 @@ def _workspace_member_by_package_name_from_local_clone(mctx, workspace_cargo_tom
 
         member_cargo_toml_json = run_toml2json(
             mctx,
-            workspace_cargo_toml_path_str.replace("Cargo.toml", member + "/Cargo.toml"))
+            workspace_cargo_toml_path_str.replace("Cargo.toml", member + "/Cargo.toml"),
+        )
         package_name = member_cargo_toml_json.get("package", {}).get("name")
         if package_name:
             member_by_package_name[package_name] = member
@@ -389,26 +356,3 @@ def download_metadata_for_git_crates(
                 package["cargo_toml_json"] = cargo_toml_json
                 if cargo_toml_json.get("workspace"):
                     package["workspace_cargo_toml_json"] = cargo_toml_json
-
-def download_sparse_registry_configs(mctx, state):
-    # Hardcoded one to avoid the fetch...
-    sparse_registry_configs = {
-        CRATES_IO_REGISTRY: "https://static.crates.io/crates/{crate}/{version}/download",
-    }
-
-    for source, token in state.in_flight_sparse_registry_configs_by_source.items():
-        token.wait()
-        dl = json.decode(mctx.read(_sanitize_path_fragment(source) + "config.json"))["dl"]
-
-        if not (
-            "{crate}" in dl or
-            "{version}" in dl or
-            "{sha256-checksum}" in dl or
-            "{prefix}" in dl or
-            "{lowerprefix}" in dl
-        ):
-            dl += "/{crate}/{version}/download"
-
-        sparse_registry_configs[source] = dl
-
-    return sparse_registry_configs

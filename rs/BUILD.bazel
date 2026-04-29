@@ -43,6 +43,8 @@ bzl_library(
         "//rs/private:downloader",
         "//rs/private:git_repository",
         "//rs/private:lint_flags",
+        "//rs/private:registry_config_repository",
+        "//rs/private:registry_utils",
         "//rs/private:repository_utils",
         "//rs/private:resolver",
         "//rs/private:select_utils",
