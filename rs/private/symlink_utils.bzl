@@ -1,5 +1,11 @@
 load("@bazel_features//:features.bzl", "bazel_features")
 load("@bazel_lib//lib:paths.bzl", "relative_file")
+load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
+
+def _coreutils_label(rctx):
+    platform = repo_utils.platform(rctx)
+    binary = "coreutils.exe" if platform.startswith("windows_") else "coreutils"
+    return Label("@coreutils_%s//:%s" % (platform, binary))
 
 def relative_symlink(rctx, target, link_name):
     target_path = rctx.path(target)
@@ -16,6 +22,7 @@ def relative_symlink(rctx, target, link_name):
         return
 
     result = rctx.execute([
+        _coreutils_label(rctx),
         "ln",
         "-sf",
         relative_file(str(target_path), str(link_path)),

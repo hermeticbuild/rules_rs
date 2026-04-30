@@ -208,6 +208,7 @@ bzl_library(
     deps = [
         "@bazel_features//:features",
         "@bazel_lib//lib:paths",
+        "@bazel_lib//lib:repo_utils",
     ],
 )
 
