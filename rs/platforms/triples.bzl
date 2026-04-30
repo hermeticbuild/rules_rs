@@ -24,6 +24,12 @@ def triple_to_constraint_set(target_triple):
     elif t.system == "windows":
         constraints.append(_WINDOWS_ABI_CONSTRAINTS[t.abi])
 
+        # Rust links MSVCRT for both GNU Windows target specs:
+        # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnullvm.rs#L19
+        # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnu.rs#L44
+        if t.abi in ("gnu", "gnullvm"):
+            constraints.append("@llvm//toolchain:windows_crt_msvcrt")
+
     return constraints
 
 SUPPORTED_EXEC_TRIPLES = [
