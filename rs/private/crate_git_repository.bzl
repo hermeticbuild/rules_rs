@@ -82,6 +82,47 @@ def _crate_git_repository_implementation(rctx):
     if result.return_code != 0:
         fail(result.stderr)
 
+    # Recursively check out git submodules to match Cargo's git-dependency
+    # behavior. Cargo always recurses submodules for git sources, so a crate
+    # whose source includes submodules (e.g. khronos_api, which vendors the
+    # KhronosGroup/WebGL extensions registry as a submodule) would otherwise
+    # build under Cargo but silently produce empty source trees here.
+    # No-op when the worktree has no .gitmodules file.
+    submodule_paths = []
+    if dest_dir.get_child(".gitmodules").exists:
+        result = rctx.execute([
+            "git",
+            "-C",
+            str(dest_dir),
+            "submodule",
+            "update",
+            "--init",
+            "--recursive",
+        ])
+        if result.return_code != 0:
+            fail("failed to initialize submodules: " + result.stderr)
+
+        # Collect submodule paths so their gitlink files can be removed below
+        # for reproducibility. Each submodule's `.git` is a file pointing at
+        # the superproject's modules dir, which contains machine-specific
+        # absolute paths.
+        result = rctx.execute([
+            "git",
+            "-C",
+            str(dest_dir),
+            "submodule",
+            "foreach",
+            "--recursive",
+            "--quiet",
+            "echo $displaypath",
+        ])
+        if result.return_code != 0:
+            fail("failed to enumerate submodules: " + result.stderr)
+        for line in result.stdout.split("\n"):
+            line = line.strip()
+            if line:
+                submodule_paths.append(line)
+
     if strip_prefix:
         dest_link = dest_dir.get_child(strip_prefix)
         if not dest_link.exists:
@@ -110,9 +151,11 @@ def _crate_git_repository_implementation(rctx):
 
     rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml, purl_qualifiers = {"vcs_url": vcs_url}))
 
-    # Since we're using `git` to download the repo, remove
-    # the `.git` to make sure it's reproducible.
+    # Since we're using `git` to download the repo, remove the `.git` (and any
+    # submodule gitlink files) to make sure it's reproducible.
     rctx.delete(dest_dir.get_child(".git"))
+    for sub in submodule_paths:
+        rctx.delete(dest_dir.get_child(sub).get_child(".git"))
     return rctx.repo_metadata(reproducible = True)
 
 crate_git_repository = repository_rule(
