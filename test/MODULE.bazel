@@ -1,5 +1,5 @@
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "llvm", version = "0.7.6")
+bazel_dep(name = "llvm", version = "0.7.7")
 bazel_dep(name = "apple_support", version = "1.24.2", repo_name = "build_bazel_apple_support")
 
 # SBOM

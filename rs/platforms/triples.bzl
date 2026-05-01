@@ -4,12 +4,6 @@ load(
     _triple_to_constraint_set = "triple_to_constraint_set",
 )
 
-_WINDOWS_ABI_CONSTRAINTS = {
-    "gnu": "@rules_rs//rs/platforms/constraints:windows_gnu",
-    "gnullvm": "@rules_rs//rs/platforms/constraints:windows_gnullvm",
-    "msvc": "@rules_rs//rs/platforms/constraints:windows_msvc",
-}
-
 def triple_to_constraint_set(target_triple):
     constraints = _triple_to_constraint_set(target_triple)
     t = triple(target_triple)
@@ -22,13 +16,13 @@ def triple_to_constraint_set(target_triple):
         else:
             constraints.append("@llvm//constraints/libc:gnu.2.28")
     elif t.system == "windows":
-        constraints.append(_WINDOWS_ABI_CONSTRAINTS[t.abi])
+        constraints.append("@llvm//constraints/windows/abi:" + t.abi)
 
         # Rust links MSVCRT for both GNU Windows target specs:
         # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnullvm.rs#L19
         # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnu.rs#L44
         if t.abi in ("gnu", "gnullvm"):
-            constraints.append("@llvm//toolchain:windows_crt_msvcrt")
+            constraints.append("@llvm//constraints/windows/crt:msvcrt")
 
     return constraints
 
