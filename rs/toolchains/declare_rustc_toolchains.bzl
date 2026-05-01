@@ -73,9 +73,9 @@ def declare_rustc_toolchains(
                 "//conditions:default": "",
             }),
             staticlib_ext = select({
-                "@rules_rs//rs/platforms/constraints:windows_gnu": ".a",
-                "@rules_rs//rs/platforms/constraints:windows_gnullvm": ".a",
-                "@rules_rs//rs/platforms/constraints:windows_msvc": ".lib",
+                "@llvm//constraints/windows/abi:gnu": ".a",
+                "@llvm//constraints/windows/abi:gnullvm": ".a",
+                "@llvm//constraints/windows/abi:msvc": ".lib",
                 "@platforms//os:none": "",
                 "@platforms//os:emscripten": ".js",
                 "@platforms//os:uefi": ".lib",
@@ -102,9 +102,9 @@ def declare_rustc_toolchains(
                 "@platforms//os:nixos": ["-ldl", "-lpthread"],
                 "@platforms//os:openbsd": ["-lpthread"],
                 "@platforms//os:ios": ["-lSystem", "-lobjc", "-Wl,-framework,Security", "-Wl,-framework,Foundation", "-lresolv"],
-                "@rules_rs//rs/platforms/constraints:windows_gnu": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
-                "@rules_rs//rs/platforms/constraints:windows_gnullvm": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
-                "@rules_rs//rs/platforms/constraints:windows_msvc": [
+                "@llvm//constraints/windows/abi:gnu": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
+                "@llvm//constraints/windows/abi:gnullvm": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
+                "@llvm//constraints/windows/abi:msvc": [
                     "advapi32.lib",
                     "ws2_32.lib",
                     "userenv.lib",

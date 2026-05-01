@@ -26,7 +26,7 @@ This is the default setup for new users. It provisions the patched `rules_rust`,
 
 ```bzl
 bazel_dep(name = "rules_rs", version = "0.0.61")
-bazel_dep(name = "llvm", version = "0.7.3")
+bazel_dep(name = "llvm", version = "0.7.7")
 bazel_dep(name = "platforms", version = "1.0.0")
 
 toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
@@ -89,7 +89,7 @@ platform(
     name = "local_windows_msvc",
     parents = ["@platforms//host"],
     constraint_values = [
-        "@rules_rs//rs/platforms/constraints:windows_msvc",
+        "@llvm//constraints/windows/abi:msvc",
     ],
 )
 ```
