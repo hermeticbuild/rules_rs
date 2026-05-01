@@ -1,0 +1,25 @@
+package(default_visibility = ["//visibility:public"])
+
+alias(
+    name = "windows_abi",
+    actual = "@llvm//constraints/windows/abi:abi",
+    deprecation = "Use @llvm//constraints/windows/abi:abi instead.",
+)
+
+alias(
+    name = "windows_gnu",
+    actual = "@llvm//constraints/windows/abi:gnu",
+    deprecation = "Use @llvm//constraints/windows/abi:gnu instead.",
+)
+
+alias(
+    name = "windows_gnullvm",
+    actual = "@llvm//constraints/windows/abi:gnullvm",
+    deprecation = "Use @llvm//constraints/windows/abi:gnullvm instead.",
+)
+
+alias(
+    name = "windows_msvc",
+    actual = "@llvm//constraints/windows/abi:msvc",
+    deprecation = "Use @llvm//constraints/windows/abi:msvc instead.",
+)
