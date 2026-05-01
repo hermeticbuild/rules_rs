@@ -3,8 +3,28 @@ load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id"
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
 load(":cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
 load(":registry_utils.bzl", "sharded_path")
-load(":repository_utils.bzl", "common_attrs", "generate_build_file")
+load(":repository_utils.bzl", "cargo_build_file_values", "common_attrs", "render_build_file_content")
 load(":toml2json.bzl", "run_toml2json")
+
+def _cargo_purl(package_name, version, qualifiers = {}):
+    purl = "pkg:cargo/{}@{}".format(package_name, version)
+    if qualifiers:
+        purl += "?" + "&".join([
+            "{}={}".format(key, qualifiers[key])
+            for key in sorted(qualifiers)
+        ])
+    return purl
+
+def _generate_build_file(rctx, cargo_toml, purl_qualifiers = {}, package_path = ""):
+    cargo = cargo_build_file_values(rctx, cargo_toml, rctx.attr.gen_binaries, package_path = package_path)
+    package = cargo_toml["package"]
+    values = dict(cargo.values)
+    values.update({
+        "name": repr(package["name"]),
+        "purl": repr(_cargo_purl(package["name"], package["version"], purl_qualifiers)),
+        "version": repr(package["version"]),
+    })
+    return render_build_file_content(rctx, rctx.attr, values, bazel_metadata = cargo.bazel_metadata)
 
 def _crate_repository_impl(rctx):
     # TODO(zbarsky): Is there a better way than fetching this in every crate repository?
@@ -43,7 +63,7 @@ def _crate_repository_impl(rctx):
 
     cargo_toml = run_toml2json(rctx, "Cargo.toml")
 
-    rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml, purl_qualifiers = rctx.attr.sbom_extra_qualifiers))
+    rctx.file("BUILD.bazel", _generate_build_file(rctx, cargo_toml, purl_qualifiers = rctx.attr.sbom_extra_qualifiers))
 
     return rctx.repo_metadata(reproducible = True)
 
@@ -76,7 +96,7 @@ def _local_crate_repository_impl(rctx):
 
     cargo_toml = run_toml2json(rctx, "Cargo.toml")
 
-    rctx.file("BUILD.bazel", generate_build_file(rctx, cargo_toml))
+    rctx.file("BUILD.bazel", _generate_build_file(rctx, cargo_toml))
 
     return rctx.repo_metadata(
         reproducible = bazel_features.external_deps.repo_rules_relativize_symlinks,
