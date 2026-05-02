@@ -1,0 +1,32 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test")
+load("//rs:rust_library.bzl", "rust_library")
+load(":rustdoc_musl_unwind_test.bzl", "rustdoc_musl_unwind_link_flags_test")
+
+cc_library(
+    name = "rustdoc_musl_unwind_cc",
+    srcs = ["rustdoc_musl_unwind.cc"],
+)
+
+rust_library(
+    name = "rustdoc_musl_unwind",
+    srcs = ["rustdoc_musl_unwind.rs"],
+    crate_name = "rustdoc_musl_unwind",
+    edition = "2021",
+    deps = [":rustdoc_musl_unwind_cc"],
+)
+
+rust_doc_test(
+    name = "rustdoc_musl_unwind_doctest",
+    crate = ":rustdoc_musl_unwind",
+)
+
+rustdoc_musl_unwind_link_flags_test(
+    name = "rustdoc_musl_unwind_link_flags_test",
+    target_under_test = ":rustdoc_musl_unwind_doctest",
+)
+
+test_suite(
+    name = "tests",
+    tests = [":rustdoc_musl_unwind_link_flags_test"],
+)
