@@ -20,6 +20,7 @@ def declare_rustc_toolchains(
         *,
         version,
         edition,
+        include_rustc_dev = False,
         extra_rustc_flags = {},
         extra_exec_rustc_flags = {},
         execs = SUPPORTED_EXEC_TRIPLES,
@@ -61,7 +62,10 @@ def declare_rustc_toolchains(
             llvm_cov = "@llvm//tools:llvm-cov",
             llvm_profdata = "@llvm//tools:llvm-profdata",
             rust_objcopy = "{}rust-objcopy".format(rustc_repo_label),
-            rustc_lib = "{}rustc_lib".format(rustc_repo_label),
+            rustc_lib = "{}{}".format(
+                rustc_repo_label,
+                "rustc_lib_with_dev" if include_rustc_dev else "rustc_lib",
+            ),
             allocator_library = None,
             global_allocator_library = None,
             binary_ext = select({
@@ -119,6 +123,7 @@ def declare_rustc_toolchains(
             target_triple = select(target_triple_select),
             visibility = ["//visibility:public"],
             tags = ["rust_version={}".format(version)],
+            version = version,
         )
 
         rust_toolchain(

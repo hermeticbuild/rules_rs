@@ -112,11 +112,27 @@ toolchains.toolchain(
     edition = "2024",
     version = "1.92.0",
 )
-use_repo(toolchains, "default_rust_toolchains")
+toolchains.toolchain(
+    name = "nightly_rust_toolchains",
+    edition = "2024",
+    include_rustc_dev = True,
+    # The Dylint integration test needs nightly rustc + rustc-dev, not separate
+    # nightly rustfmt / rust-analyzer toolchains.
+    rust_analyzer_version = "1.92.0",
+    rustfmt_version = "1.92.0",
+    version = "nightly/2026-03-05",
+)
+use_repo(
+    toolchains,
+    "default_rust_toolchains",
+    "nightly_rust_toolchains",
+)
 
 register_toolchains("@default_rust_toolchains//:all")
 
 register_toolchains(
+    "@nightly_rust_toolchains//:all",
+    "//dylint:dylint_toolchain",
     "@rules_rust//extensions/prost:default_prost_toolchain",
     "@rules_rust//extensions/pyo3/toolchains:rust_toolchain",
     "@rules_rust//extensions/pyo3/toolchains:toolchain",
@@ -132,6 +148,7 @@ TESTS = [
     "build_script_runtime_env",
     "build_dep_features",
     "cfg_feature_target_dep",
+    "dylint",
     "empty_workspace",
     "feature_name_overrides_implicit_dep",
     "first_party_feature_propagation",
@@ -208,6 +225,25 @@ crate.annotation(
     crate = "member_foo",
     crate_features = ["json"],
     repositories = ["workspace_member_annotation_features"],
+)
+crate.annotation(
+    crate = "dylint_driver",
+    patch_args = ["-p1"],
+    patches = ["//:dylint-driver-bazel-env.patch"],
+    repositories = ["dylint"],
+    strip_prefix = "driver",
+)
+crate.annotation(
+    crate = "dylint_internal",
+    patch_args = ["-p1"],
+    patches = ["//:dylint-internal-rustc-env.patch"],
+    repositories = ["dylint"],
+    strip_prefix = "internal",
+)
+crate.annotation(
+    crate = "dylint_linting",
+    repositories = ["dylint"],
+    strip_prefix = "utils/linting",
 )
 
 # Test gen_binaries

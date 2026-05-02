@@ -75,6 +75,9 @@ _TOOLCHAIN_TAG = tag_class(
             doc = "Default edition to apply to toolchains.",
             default = _DEFAULT_EDITION,
         ),
+        "include_rustc_dev": attr.bool(
+            doc = "Whether to include nightly rustc-dev compiler internals, needed by rustc_private crates such as Dylint libraries.",
+        ),
         "extra_rustc_flags": attr.string_list_dict(
             doc = "Additional rustc flags by target triple.",
         ),
@@ -114,6 +117,7 @@ def _toolchains_impl(mctx):
             rustfmt_version = "",
             rust_analyzer_version = "",
             edition = _DEFAULT_EDITION,
+            include_rustc_dev = False,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
         ))
@@ -121,11 +125,16 @@ def _toolchains_impl(mctx):
     versions = set([])
     rustfmt_versions = set([])
     rust_analyzer_versions = set([])
+    rustc_dev_versions = set([])
 
     for tag in version_tags:
         versions.add(tag.version)
         rustfmt_versions.add(tag.rustfmt_version or tag.version)
         rust_analyzer_versions.add(tag.rust_analyzer_version or tag.version)
+        if tag.include_rustc_dev:
+            if not tag.version.startswith("nightly"):
+                fail("`include_rustc_dev = True` requires a nightly Rust toolchain version; got {}".format(tag.version))
+            rustc_dev_versions.add(tag.version)
 
     existing_facts = getattr(mctx, "facts", {}) or {}
     pending_downloads = {}
@@ -160,6 +169,8 @@ def _toolchains_impl(mctx):
             exec_triple = _parse_triple(triple)
             for tool_name in ["rustc", "clippy", "cargo"]:
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
+            if version in rustc_dev_versions:
+                _request_sha("rustc-dev", base_version, iso_date, exec_triple)
 
         for target_triple in SUPPORTED_TARGET_TRIPLES:
             _request_sha("rust-std", base_version, iso_date, _parse_triple(target_triple))
@@ -218,6 +229,7 @@ def _toolchains_impl(mctx):
                 version = base_version,
                 iso_date = iso_date,
                 sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                rustc_dev_sha256 = _sha_for("rustc-dev", base_version, iso_date, exec_triple) if version in rustc_dev_versions else "",
             )
 
             if version in versions:
@@ -314,6 +326,7 @@ def _toolchains_impl(mctx):
             (existing.rustfmt_version or existing.version) != rustfmt_version or
             (existing.rust_analyzer_version or existing.version) != rust_analyzer_version or
             existing.edition != tag.edition or
+            existing.include_rustc_dev != tag.include_rustc_dev or
             existing.extra_rustc_flags != tag.extra_rustc_flags or
             existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags
         ):
@@ -327,6 +340,7 @@ def _toolchains_impl(mctx):
                 rustfmt_version = rustfmt_version,
                 rust_analyzer_version = rust_analyzer_version,
                 edition = tag.edition,
+                include_rustc_dev = tag.include_rustc_dev,
                 extra_rustc_flags = tag.extra_rustc_flags,
                 extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
             )

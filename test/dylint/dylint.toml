@@ -1,0 +1,2 @@
+# Intentionally empty: this keeps the example hermetic while exercising the
+# target-local `DYLINT_TOML` path instead of Dylint's Cargo workspace discovery.
