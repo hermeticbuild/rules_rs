@@ -1,6 +1,9 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@self_dev_dependency//:data.bzl", self_dev_dependency_dep_data = "DEP_DATA")
 load("@self_dev_dependency//:defs.bzl", self_dev_dependency_aliases = "aliases")
@@ -8,6 +11,7 @@ load("@target_workspace_dep_feature//:data.bzl", target_workspace_dep_feature_de
 load("@workspace_default_features//:data.bzl", workspace_default_features_dep_data = "DEP_DATA")
 load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
 load("@workspace_renamed_path_dep_aliases//:defs.bzl", workspace_renamed_path_dep_aliases_aliases = "aliases")
+load("//:rustdoc_musl_unwind_test.bzl", "rustdoc_musl_unwind_link_flags_test")
 load("//:verify_aliases.bzl", "verify_alias", "verify_alias_absent", "verify_crate_feature_absent", "verify_crate_feature_present", "verify_dep_absent", "verify_dep_present", "verify_dev_dep_absent")
 
 sh_test(
@@ -17,6 +21,30 @@ sh_test(
         "@platforms//os:windows": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
+)
+
+cc_library(
+    name = "rustdoc_musl_unwind_cc",
+    srcs = ["rustdoc_musl_unwind.cc"],
+)
+
+rust_library(
+    name = "rustdoc_musl_unwind",
+    srcs = ["rustdoc_musl_unwind.rs"],
+    crate_name = "rustdoc_musl_unwind",
+    edition = "2021",
+    deps = [":rustdoc_musl_unwind_cc"],
+)
+
+rust_doc_test(
+    name = "rustdoc_musl_unwind_doctest",
+    crate = ":rustdoc_musl_unwind",
+    tags = ["manual"],
+)
+
+rustdoc_musl_unwind_link_flags_test(
+    name = "rustdoc_musl_unwind_link_flags_test",
+    target_under_test = ":rustdoc_musl_unwind_doctest",
 )
 
 DISABLED = [
