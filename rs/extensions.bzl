@@ -5,10 +5,10 @@ load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL")
 load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
-load("//rs/private:crate_git_repository.bzl", "crate_git_repository")
 load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
-load("//rs/private:git_repository.bzl", "git_repository")
+load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_repository")
+load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name")
@@ -24,8 +24,11 @@ def _spoke_repo(hub_name, name, version):
         s = s.replace("+", "-")
     return s
 
-def _external_repo_for_git_source(remote, commit):
-    return remote.replace("/", "_").replace(":", "_").replace("@", "_") + "_" + commit
+def _external_repo_for_git_source(hub_name, remote, commit):
+    return hub_name + "__" + remote.replace("/", "_").replace(":", "_").replace("@", "_") + "_" + commit
+
+def _git_crate_purl(name, version, remote, commit):
+    return "pkg:cargo/%s@%s?vcs_url=git+%s@%s" % (name, version, remote, commit)
 
 def _platform(triple, use_legacy_rules_rust_platforms):
     if use_legacy_rules_rust_platforms:
@@ -148,6 +151,28 @@ def _manifest_package_dir(manifest_path, repo_root):
         return ""
 
     return package_dir.removesuffix("/Cargo.toml")
+
+def _git_crate_package_path(annotation, strip_prefix):
+    workspace_dir = annotation.workspace_cargo_toml.removesuffix("Cargo.toml").removesuffix("/")
+    crate_dir = (strip_prefix or "").removeprefix("./").removesuffix("/")
+
+    if workspace_dir and crate_dir:
+        return _normalize_path(paths.normalize(paths.join(workspace_dir, crate_dir)))
+    if workspace_dir:
+        return _normalize_path(workspace_dir)
+    return _normalize_path(crate_dir)
+
+def _target_label(repo_name, package_path, target):
+    if package_path:
+        return "@%s//%s:%s" % (repo_name, package_path, target)
+    return "@%s//:%s" % (repo_name, target)
+
+def _additive_build_file_content(mctx, annotation):
+    content = ""
+    if annotation.additive_build_file:
+        content += mctx.read(annotation.additive_build_file)
+    content += annotation.additive_build_file_content
+    return content
 
 def _spec_to_dep_dict_inner(dep, spec, is_build = False):
     if type(spec) == "string":
@@ -746,8 +771,6 @@ crate.annotation(
 
         kwargs = dict(
             hub_name = hub_name,
-            additive_build_file = annotation.additive_build_file,
-            additive_build_file_content = annotation.additive_build_file_content,
             gen_build_script = annotation.gen_build_script,
             build_script_deps = [],
             build_script_deps_select = _select(feature_resolutions.build_deps),
@@ -766,16 +789,14 @@ crate.annotation(
             crate_tags = annotation.tags,
             deps_select = _select(feature_resolutions.deps),
             aliases = feature_resolutions.aliases,
-            gen_binaries = annotation.gen_binaries,
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
-            patch_args = annotation.patch_args,
-            patch_tool = annotation.patch_tool,
-            patches = annotation.patches,
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
 
         repo_name = _spoke_repo(hub_name, crate_name, version)
+        package["target_repo_name"] = repo_name
+        package["target_package_path"] = ""
 
         if source.startswith("sparse+"):
             checksum = package["checksum"]
@@ -789,11 +810,17 @@ crate.annotation(
 
             crate_repository(
                 name = repo_name,
+                additive_build_file = annotation.additive_build_file,
+                additive_build_file_content = annotation.additive_build_file_content,
                 crate_name = crate_name,
                 version = version,
                 registry_config = "@%s//:dl" % registry_config_repo_name(hub_name, source),
                 sbom_extra_qualifiers = qualifiers,
                 checksum = checksum,
+                gen_binaries = annotation.gen_binaries,
+                patch_args = annotation.patch_args,
+                patch_tool = annotation.patch_tool,
+                patches = annotation.patches,
                 # The repository will need to recompute these, but this lets us avoid serializing them.
                 use_home_cargo_credentials = use_home_cargo_credentials,
                 cargo_config = cargo_config,
@@ -807,26 +834,30 @@ crate.annotation(
             # TODO What PURL should that be ?
             local_crate_repository(
                 name = repo_name,
+                additive_build_file = annotation.additive_build_file,
+                additive_build_file_content = annotation.additive_build_file_content,
+                gen_binaries = annotation.gen_binaries,
+                patch_args = annotation.patch_args,
+                patch_tool = annotation.patch_tool,
+                patches = annotation.patches,
                 path = package["local_path"],
                 **kwargs
             )
         elif source.startswith("git+"):
             remote, commit = parse_git_url(source)
 
-            strip_prefix = package.get("strip_prefix")
-            workspace_cargo_toml = annotation.workspace_cargo_toml
-            if workspace_cargo_toml != "Cargo.toml":
-                strip_prefix = workspace_cargo_toml.removesuffix("Cargo.toml") + (strip_prefix or "")
+            package_path = _git_crate_package_path(annotation, package.get("strip_prefix"))
+            package["target_repo_name"] = _external_repo_for_git_source(hub_name, remote, commit)
+            package["target_package_path"] = package_path
 
             if dry_run:
                 continue
 
-            crate_git_repository(
+            git_crate_metadata_repository(
                 name = repo_name,
-                strip_prefix = strip_prefix,
-                git_repo_label = "@" + _external_repo_for_git_source(remote, commit),
-                remote = source,
-                workspace_cargo_toml = annotation.workspace_cargo_toml,
+                package_name = crate_name,
+                package_version = version,
+                purl = _git_crate_purl(crate_name, version, remote, commit),
                 **kwargs
             )
         else:
@@ -836,35 +867,41 @@ crate.annotation(
 
     mctx.report_progress("Initializing hub")
 
+    package_by_fq = {
+        _fq_crate(package["name"], package["version"]): package
+        for package in packages
+    }
+
     hub_contents = []
     for name, versions in versions_by_name.items():
         for version in versions:
             annotation = annotation_for(annotations, name, version)
-            spoke_repo = _spoke_repo(hub_name, name, version)
+            package = package_by_fq[_fq_crate(name, version)]
+            target_repo_name = package["target_repo_name"]
+            target_package_path = package["target_package_path"]
 
             hub_contents.append("""
 alias(
     name = "{name}-{version}",
-    actual = "@{spoke_repo}//:{name}",
-)""".format(name = name, version = version, spoke_repo = spoke_repo))
+    actual = "{actual}",
+)""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""
 alias(
     name = "{name}-{version}__{binary}",
-    actual = "@{spoke_repo}//:{binary}__bin",
-)""".format(name = name, version = version, binary = binary, spoke_repo = spoke_repo))
+    actual = "{actual}",
+)""".format(name = name, version = version, binary = binary, actual = _target_label(target_repo_name, target_package_path, binary + "__bin")))
 
             for alias_name, target in sorted(annotation.extra_aliased_targets.items()):
                 hub_contents.append("""
 alias(
     name = "{alias_name}-{version}",
-    actual = "@{spoke_repo}//:{target}",
+    actual = "{actual}",
 )""".format(
                     alias_name = alias_name,
                     version = version,
-                    target = target,
-                    spoke_repo = spoke_repo,
+                    actual = _target_label(target_repo_name, target_package_path, target),
                 ))
 
         workspace_versions = workspace_dep_versions_by_name.get(name)
@@ -1277,22 +1314,70 @@ def _crate_impl(mctx):
 
             facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
 
-    # Lay down the git repos we will need; per-crate git_repository can clone from these.
-    git_sources = set()
+    # Lay down the git repos with generated per-crate BUILD overlays.
+    git_repos = {}
     for mod in mctx.modules:
         for cfg in mod.tags.from_cargo:
+            annotations = build_annotation_map(mod, cfg.name)
             for package in packages_by_hub_name[cfg.name]:
                 source = package.get("source", "")
-                if source.startswith("git+"):
-                    git_sources.add(source)
+                if not source.startswith("git+"):
+                    continue
 
-    for git_source in git_sources:
-        remote, commit = parse_git_url(git_source)
+                remote, commit = parse_git_url(source)
+                annotation = annotation_for(annotations, package["name"], package["version"])
+                repo_name = _external_repo_for_git_source(cfg.name, remote, commit)
+                git_repo = git_repos.get(repo_name)
+                if not git_repo:
+                    git_repo = {
+                        "build_files": {},
+                        "gen_binaries": {},
+                        "commit": commit,
+                        "hub_name": cfg.name,
+                        "patch_args": [],
+                        "patch_tool": "",
+                        "patches": {},
+                        "remote": remote,
+                        "workspace_cargo_toml": annotation.workspace_cargo_toml,
+                    }
+                    git_repos[repo_name] = git_repo
 
-        git_repository(
-            name = _external_repo_for_git_source(remote, commit),
-            commit = commit,
-            remote = remote,
+                strip_prefix = package.get("strip_prefix")
+                if strip_prefix == None:
+                    strip_prefix = json.decode(facts[source + "_" + package["name"]])["strip_prefix"]
+                package_path = _git_crate_package_path(annotation, strip_prefix)
+                build_file_path = paths.join(package_path, "BUILD.bazel") if package_path else "BUILD.bazel"
+                git_repo["build_files"][build_file_path] = _additive_build_file_content(mctx, annotation)
+                if annotation.gen_binaries:
+                    git_repo["gen_binaries"][build_file_path] = annotation.gen_binaries
+
+                if annotation.patches:
+                    patch_args = annotation.patch_args
+                    patch_tool = annotation.patch_tool or ""
+                    if git_repo["patches"] and (git_repo["patch_args"] != patch_args or git_repo["patch_tool"] != patch_tool):
+                        fail("Git crates from %s use incompatible patch settings" % source)
+
+                    git_repo["patch_args"] = patch_args
+                    git_repo["patch_tool"] = patch_tool
+                    for patch_file in annotation.patches:
+                        git_repo["patches"][str(patch_file)] = patch_file
+
+    for repo_name, git_repo in git_repos.items():
+        kwargs = {}
+        if git_repo["gen_binaries"]:
+            kwargs["gen_binaries"] = git_repo["gen_binaries"]
+
+        git_cargo_workspace_repository(
+            name = repo_name,
+            build_files = git_repo["build_files"],
+            commit = git_repo["commit"],
+            hub_name = git_repo["hub_name"],
+            patch_args = git_repo["patch_args"],
+            patch_tool = git_repo["patch_tool"],
+            patches = git_repo["patches"].values(),
+            remote = git_repo["remote"],
+            workspace_cargo_toml = git_repo["workspace_cargo_toml"],
+            **kwargs
         )
 
     kwargs = dict(

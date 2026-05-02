@@ -40,25 +40,18 @@ def render_select_build_script_env(platform_items, use_legacy_rules_rust_platfor
 def _exclude_deps_from_features(features):
     return [f for f in features if not f.startswith("dep:")]
 
-def _cargo_purl(package_name, version, qualifiers = {}):
-    purl = "pkg:cargo/{}@{}".format(package_name, version)
-    if qualifiers:
-        purl += "?" + "&".join([
-            "{}={}".format(key, qualifiers[key])
-            for key in sorted(qualifiers)
-        ])
-    return purl
-
-def generate_build_file(rctx, cargo_toml, purl_qualifiers = {}):
-    attr = rctx.attr
+def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", gen_build_script = None):
+    package_dir = rctx.path(package_path or ".")
     package = cargo_toml["package"]
+    if gen_build_script == None:
+        gen_build_script = rctx.attr.gen_build_script
 
     name = package["name"]
     version = package["version"]
     parsed_version = parse_full_version(version)
 
     readme = package.get("readme", "")
-    if (not readme or readme == True) and rctx.path("README.md").exists:
+    if (not readme or readme == True) and package_dir.get_child("README.md").exists:
         readme = "README.md"
 
     cargo_toml_env_vars = {
@@ -79,20 +72,20 @@ def generate_build_file(rctx, cargo_toml, purl_qualifiers = {}):
     }
 
     rctx.file(
-        "cargo_toml_env_vars.env",
+        package_dir.get_child("cargo_toml_env_vars.env"),
         "\n".join(["%s=%s" % kv for kv in cargo_toml_env_vars.items()]),
     )
 
     bazel_metadata = package.get("metadata", {}).get("bazel", {})
 
-    if attr.gen_build_script == "off" or bazel_metadata.get("gen_build_script") == False:
+    if gen_build_script == "off" or bazel_metadata.get("gen_build_script") == False:
         build_script = None
     else:
         # What does `gen_build_script="on"` do? Fail the build if we don't detect one?
         build_script = package.get("build")
         if build_script:
             build_script = build_script.removeprefix("./")
-        elif rctx.path("build.rs").exists:
+        elif package_dir.get_child("build.rs").exists:
             build_script = "build.rs"
 
     lib = cargo_toml.get("lib", {})
@@ -103,64 +96,83 @@ def generate_build_file(rctx, cargo_toml, purl_qualifiers = {}):
     crate_name = lib.get("name")
     links = package.get("links")
 
-    package_name = package.get("name")
-    cargo_purl = _cargo_purl(package_name, version, purl_qualifiers)
+    toml_bins = cargo_toml.get("bin", []) + [{"name": package["name"]}]
 
-    build_content = """\
-load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
-load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
-load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
+    binaries = {}
+    for bin in toml_bins:
+        bin_name = bin["name"]
+        if bin_name not in gen_binaries or bin_name in binaries:
+            continue
 
-rust_crate(
-    name = {name},
-    crate_name = {crate_name},
-    purl = {purl},
-    version = {version},
-    aliases = {{
-        {aliases}
-    }},
-    deps = [
-        {deps}
-    ]{conditional_deps},
-    data = [
-        {data}
-    ],
-    crate_features = {crate_features},
-    triples = {triples},
-    conditional_crate_features = {conditional_crate_features},
-    crate_root = {crate_root},
-    edition = {edition},
-    rustc_flags = {rustc_flags}{conditional_rustc_flags},
-    tags = {tags},
-    target_compatible_with = RESOLVED_PLATFORMS,
-    links = {links},
-    build_script = {build_script},
-    build_script_data = {build_script_data},
-    build_deps = [
-        {build_deps}
-    ]{conditional_build_deps},
-    build_script_env = {build_script_env}{conditional_build_script_env},
-    build_script_toolchains = {build_script_toolchains},
-    build_script_tools = {build_script_tools}{conditional_build_script_tools},
-    build_script_tags = {build_script_tags},
-    is_proc_macro = {is_proc_macro},
-    binaries = {binaries},
-    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
-)
+        bin_path = bin.get("path")
+        if bin_path:
+            binaries[bin_name] = bin_path.removeprefix("./")
+            continue
+
+        for candidate in ["src/bin/%s.rs" % bin_name, "src/bin/%s/main.rs" % bin_name, "src/main.rs"]:
+            if package_dir.get_child(candidate).exists:
+                binaries[bin_name] = candidate
+                break
+
+    return struct(
+        bazel_metadata = bazel_metadata,
+        values = {
+            "binaries": repr(binaries),
+            "build_script": repr(build_script),
+            "crate_name": repr(crate_name),
+            "crate_root": repr(crate_root),
+            "edition": repr(edition),
+            "is_proc_macro": repr(is_proc_macro),
+            "links": repr(links),
+        },
+    )
+
+_RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
+{indent}    name = {name},
+{indent}    crate_name = {crate_name},
+{indent}    purl = {purl},
+{indent}    version = {version},
+{indent}    aliases = {{
+{indent}        {aliases}
+{indent}    }},
+{indent}    deps = [
+{indent}        {deps}
+{indent}    ]{extra_deps}{conditional_deps},
+{indent}    data = [
+{indent}        {data}
+{indent}    ],
+{indent}    crate_features = {crate_features},
+{indent}    triples = {triples},
+{indent}    conditional_crate_features = {conditional_crate_features},
+{indent}    crate_root = {crate_root},
+{indent}    edition = {edition},
+{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
+{indent}    tags = {tags},
+{indent}    target_compatible_with = RESOLVED_PLATFORMS,
+{indent}    links = {links},
+{indent}    build_script = {build_script},
+{indent}    build_script_data = {build_script_data},
+{indent}    build_deps = [
+{indent}        {build_deps}
+{indent}    ]{conditional_build_deps},
+{indent}    build_script_env = {build_script_env}{conditional_build_script_env},
+{indent}    build_script_toolchains = {build_script_toolchains},
+{indent}    build_script_tools = {build_script_tools}{conditional_build_script_tools},
+{indent}    build_script_tags = {build_script_tags},
+{indent}    is_proc_macro = {is_proc_macro},
+{indent}    binaries = {binaries},
+{indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
+{indent})
 """
 
-    if attr.additive_build_file:
-        build_content += rctx.read(attr.additive_build_file)
-    build_content += attr.additive_build_file_content
-    build_content += bazel_metadata.get("additive_build_file_content", "")
-
+def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = ""):
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
     # See `rust_crate.bzl` for details.
     crate_features, conditional_crate_features = compute_select(
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
     )
-    use_legacy_rules_rust_platforms = rctx.attr.use_legacy_rules_rust_platforms
+    use_legacy_rules_rust_platforms = attr.use_legacy_rules_rust_platforms
     build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select, use_legacy_rules_rust_platforms)
     build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select, use_legacy_rules_rust_platforms)
     build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_legacy_rules_rust_platforms)
@@ -169,36 +181,33 @@ rust_crate(
 
     conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_legacy_rules_rust_platforms)
 
-    binaries = {bin["name"]: bin["path"] for bin in cargo_toml.get("bin", []) if bin["name"] in rctx.attr.gen_binaries}
+    list_indent = ",\n%s        " % indent
+    extra_deps = " + " + extra_deps if extra_deps else ""
 
-    implicit_binary_name = package["name"]
-    implicit_binary_path = "src/main.rs"
-    if implicit_binary_name in rctx.attr.gen_binaries and implicit_binary_name not in binaries and rctx.path(implicit_binary_path).exists:
-        binaries[implicit_binary_name] = implicit_binary_path
-
-    return build_content.format(
-        name = repr(name),
-        hub_name = rctx.attr.hub_name,
-        crate_name = repr(crate_name),
-        purl = repr(cargo_purl),
-        version = repr(version),
-        aliases = ",\n        ".join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
-        deps = ",\n        ".join(['"%s"' % d for d in sorted(deps)]),
+    return _RUST_CRATE_MACRO_CALL.format(
+        indent = indent,
+        name = values["name"],
+        crate_name = values["crate_name"],
+        purl = values["purl"],
+        version = values["version"],
+        aliases = list_indent.join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
+        deps = list_indent.join(['"%s"' % d for d in sorted(deps)]),
+        extra_deps = extra_deps,
         conditional_deps = " + " + conditional_deps if conditional_deps else "",
-        data = ",\n        ".join(['"%s"' % d for d in attr.data]),
+        data = list_indent.join(['"%s"' % d for d in attr.data]),
         crate_features = repr(sorted(crate_features)),
         triples = repr(attr.crate_features_select.keys()),
         conditional_crate_features = repr(conditional_crate_features),
-        crate_root = repr(crate_root),
-        edition = repr(edition),
+        crate_root = values["crate_root"],
+        edition = values["edition"],
         rustc_flags = repr(rustc_flags),
         conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),
-        links = repr(links),
-        build_script = repr(build_script),
+        links = values["links"],
+        build_script = values["build_script"],
         build_script_data = repr([str(t) for t in build_script_data]),
         conditional_build_script_data = " + " + conditional_build_script_data if conditional_build_script_data else "",
-        build_deps = ",\n        ".join(['"%s"' % d for d in sorted(build_deps)]),
+        build_deps = list_indent.join(['"%s"' % d for d in sorted(build_deps)]),
         conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
         build_script_env = repr(attr.build_script_env),
         conditional_build_script_env = " | " + conditional_build_script_env if conditional_build_script_env else "",
@@ -206,15 +215,30 @@ rust_crate(
         build_script_tools = repr([str(t) for t in build_script_tools]),
         conditional_build_script_tools = " + " + conditional_build_script_tools if conditional_build_script_tools else "",
         build_script_tags = repr(attr.build_script_tags),
-        is_proc_macro = repr(is_proc_macro),
-        binaries = binaries,
+        is_proc_macro = values["is_proc_macro"],
+        binaries = values["binaries"],
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
     )
 
-common_attrs = {
+def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
+    additive_build_file_content = ""
+    if attr.additive_build_file:
+        additive_build_file_content += rctx.read(attr.additive_build_file)
+    additive_build_file_content += attr.additive_build_file_content
+    additive_build_file_content += bazel_metadata.get("additive_build_file_content", "")
+
+    return """\
+load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
+load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
+
+{rust_crate_call}""".format(
+        hub_name = attr.hub_name,
+        rust_crate_call = render_rust_crate_call(attr, values, bazel_metadata = bazel_metadata),
+    ) + additive_build_file_content
+
+rust_crate_attrs = {
     "hub_name": attr.string(),
-    "additive_build_file": attr.label(),
-    "additive_build_file_content": attr.string(),
     "gen_build_script": attr.string(),
     "build_script_deps": attr.label_list(default = []),
     "build_script_deps_select": attr.string_list_dict(),
@@ -235,6 +259,12 @@ common_attrs = {
     "aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
+    "use_legacy_rules_rust_platforms": attr.bool(),
+}
+
+common_attrs = rust_crate_attrs | {
+    "additive_build_file": attr.label(),
+    "additive_build_file_content": attr.string(),
     "gen_binaries": attr.string_list(),
 } | {
     "strip_prefix": attr.string(
@@ -280,6 +310,4 @@ common_attrs = {
               "applied. If this attribute is not set, patch_cmds will be executed on Windows, " +
               "which requires Bash binary to exist.",
     ),
-} | {
-    "use_legacy_rules_rust_platforms": attr.bool(),
 }
