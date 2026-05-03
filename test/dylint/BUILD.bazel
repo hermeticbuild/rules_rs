@@ -19,14 +19,9 @@ rust_binary(
 )
 
 dylint_toolchain(
-    name = "dylint_toolchain_impl",
-    driver = ":dylint_driver",
-)
-
-toolchain(
     name = "dylint_toolchain",
-    toolchain = ":dylint_toolchain_impl",
-    toolchain_type = "@rules_rs//rs/dylint:toolchain_type",
+    driver = ":dylint_driver",
+    toolchain_family = "nightly_rust_toolchains",
 )
 
 rust_shared_library(
@@ -84,11 +79,13 @@ rust_library(
 
 rust_dylint(
     name = "alpha_component_dylint",
+    toolchain_family = "nightly_rust_toolchains",
     deps = [":alpha_component"],
 )
 
 rust_dylint(
     name = "beta_component_dylint",
+    toolchain_family = "nightly_rust_toolchains",
     deps = [":beta_component"],
 )
 

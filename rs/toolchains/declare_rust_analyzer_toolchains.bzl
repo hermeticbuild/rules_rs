@@ -23,6 +23,7 @@ def declare_rust_analyzer_toolchains(
         *,
         version,
         rust_analyzer_version,
+        toolchain_family_setting = None,
         execs = SUPPORTED_EXEC_TRIPLES):
     version_key = sanitize_version(version)
     rust_analyzer_version_key = sanitize_version(rust_analyzer_version)
@@ -56,6 +57,12 @@ def declare_rust_analyzer_toolchains(
 
         rust_analyzer_toolchain(**rust_analyzer_toolchain_kwargs)
 
+        target_settings = [
+            "@rules_rust//rust/toolchain/channel:" + channel,
+        ]
+        if toolchain_family_setting != None:
+            target_settings.append("@rules_rs//rs/toolchains/family:unspecified")
+
         native.toolchain(
             name = "{}_{}_rust_analyzer_{}".format(exec_triple.system, exec_triple.arch, version_key),
             exec_compatible_with = [
@@ -63,10 +70,25 @@ def declare_rust_analyzer_toolchains(
                 "@platforms//cpu:" + exec_triple.arch,
             ],
             target_compatible_with = [],
-            target_settings = [
-                "@rules_rust//rust/toolchain/channel:" + channel,
-            ],
+            target_settings = target_settings,
             toolchain = rust_analyzer_toolchain_name,
             toolchain_type = "@rules_rust//rust/rust_analyzer:toolchain_type",
             visibility = ["//visibility:public"],
         )
+
+        if toolchain_family_setting != None:
+            native.toolchain(
+                name = "{}_{}_rust_analyzer_{}_selected_family".format(exec_triple.system, exec_triple.arch, version_key),
+                exec_compatible_with = [
+                    "@platforms//os:" + exec_triple.system,
+                    "@platforms//cpu:" + exec_triple.arch,
+                ],
+                target_compatible_with = [],
+                target_settings = [
+                    "@rules_rust//rust/toolchain/channel:" + channel,
+                    toolchain_family_setting,
+                ],
+                toolchain = rust_analyzer_toolchain_name,
+                toolchain_type = "@rules_rust//rust/rust_analyzer:toolchain_type",
+                visibility = ["//visibility:public"],
+            )

@@ -46,12 +46,18 @@ def _dylint_transition_impl(_settings, _attr):
     # its dependency metadata stays compatible with the compiler that runs the
     # lints. Transition only the explicit Dylint subtree; ordinary Rust builds
     # keep using the caller's regular toolchain selection.
-    return {"@rules_rust//rust/toolchain/channel:channel": "nightly"}
+    return {
+        "@rules_rust//rust/toolchain/channel:channel": "nightly",
+        "@rules_rs//rs/toolchains/family:family": _attr.toolchain_family,
+    }
 
 _dylint_transition = transition(
     implementation = _dylint_transition_impl,
     inputs = [],
-    outputs = ["@rules_rust//rust/toolchain/channel:channel"],
+    outputs = [
+        "@rules_rust//rust/toolchain/channel:channel",
+        "@rules_rs//rs/toolchains/family:family",
+    ],
 )
 
 def _empty_lints_info():
@@ -154,7 +160,7 @@ def _dylint_toolchain_impl(ctx):
         ),
     ]
 
-dylint_toolchain = rule(
+_dylint_toolchain = rule(
     implementation = _dylint_toolchain_impl,
     attrs = {
         "driver": attr.label(
@@ -166,6 +172,56 @@ dylint_toolchain = rule(
     },
     doc = "Defines the host-side dylint-driver executable used by `rust_dylint`.",
 )
+
+def dylint_toolchain(
+        name,
+        *,
+        driver,
+        toolchain_family,
+        exec_compatible_with = [],
+        target_compatible_with = [],
+        visibility = None,
+        tags = []):
+    """Declares one Dylint driver toolchain bound to a Rust toolchain family.
+
+    `toolchain_family` must match the `name` of the `toolchains.toolchain(...)`
+    tag that provisions the nightly Rust toolchains this driver was built with.
+    """
+
+    if not toolchain_family:
+        fail("`toolchain_family` must name the nightly rules_rs toolchain family used by this Dylint driver")
+
+    impl_name = name + "_impl"
+    family_setting_name = name + "_family"
+
+    _dylint_toolchain(
+        name = impl_name,
+        driver = driver,
+        tags = tags,
+        visibility = ["//visibility:private"],
+    )
+
+    native.config_setting(
+        name = family_setting_name,
+        flag_values = {
+            "@rules_rs//rs/toolchains/family:family": toolchain_family,
+        },
+        visibility = ["//visibility:private"],
+    )
+
+    toolchain_kwargs = dict(
+        name = name,
+        exec_compatible_with = exec_compatible_with,
+        target_compatible_with = target_compatible_with,
+        target_settings = [":" + family_setting_name],
+        toolchain = ":" + impl_name,
+        toolchain_type = "@rules_rs//rs/dylint:toolchain_type",
+        tags = tags,
+    )
+    if visibility != None:
+        toolchain_kwargs["visibility"] = visibility
+
+    native.toolchain(**toolchain_kwargs)
 
 def _crate_info(target):
     if rust_common.crate_info in target:
@@ -371,6 +427,10 @@ rust_dylint = rule(
                 [rust_common.test_crate_info],
             ],
             aspects = [rust_dylint_aspect],
+        ),
+        "toolchain_family": attr.string(
+            doc = "Name of the nightly rules_rs toolchain family used for this Dylint check.",
+            mandatory = True,
         ),
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",

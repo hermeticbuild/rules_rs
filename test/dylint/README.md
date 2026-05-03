@@ -15,7 +15,7 @@ crates to Bazel's non-`rustup` build-script environment; the lint behavior under
 is unchanged.
 
 Run the example directly; `rust_dylint` moves only the checked lint subtree onto
-the registered nightly toolchain:
+the named nightly toolchain family:
 
 ```bash
 bazel test //dylint:verify_target_local_dylint_configs

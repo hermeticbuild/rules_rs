@@ -116,26 +116,21 @@ toolchains.toolchain(
 )
 ```
 
-`rust_dylint` transitions only the checked lint subtree onto the nightly
-channel automatically. Callers do not need to pass a nightly flag when invoking
-the check target, and ordinary Rust targets can keep using the repository's
-default toolchain selection.
+`rust_dylint` transitions only the checked lint subtree onto one exact nightly
+toolchain family automatically. Callers do not need to pass a nightly flag when
+invoking the check target, and ordinary Rust targets can keep using the
+repository's default toolchain selection.
 
-Projects must also register a Dylint driver toolchain. The driver should be built with
-the same nightly Rust toolchain family as the custom lint libraries it loads:
+Projects must also register a Dylint driver toolchain. Bind it to the same named
+nightly Rust toolchain family as the custom lint libraries it loads:
 
 ```bzl
 load("@rules_rs//rs:dylint.bzl", "dylint_toolchain")
 
 dylint_toolchain(
-    name = "dylint_toolchain_impl",
-    driver = ":dylint_driver",
-)
-
-toolchain(
     name = "dylint_toolchain",
-    toolchain = ":dylint_toolchain_impl",
-    toolchain_type = "@rules_rs//rs/dylint:toolchain_type",
+    driver = ":dylint_driver",
+    toolchain_family = "nightly_rust_toolchains",
 )
 ```
 
@@ -186,6 +181,7 @@ rust_library(
 rust_dylint(
     name = "api_dylint",
     deps = [":api"],
+    toolchain_family = "nightly_rust_toolchains",
 )
 ```
 
@@ -202,9 +198,10 @@ runner supplies an empty config rather than discovering one from Cargo metadata.
 - Lint libraries are compiled in the exec configuration because the driver loads them
   on the host where the action runs, even when the checked crate itself targets another
   platform.
-- The driver is supplied by a dedicated Dylint toolchain. That keeps the Dylint
-  version an intentional project choice while keeping library selection local to each
-  Rust target.
+- The driver is supplied by a dedicated Dylint toolchain and bound to a named
+  Rust toolchain family. That keeps the Dylint version an intentional project
+  choice while also guaranteeing that the checked crate graph, custom lint
+  libraries, and driver resolve against the same nightly family.
 
 ## Verification strategy
 

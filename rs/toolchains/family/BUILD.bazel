@@ -1,0 +1,17 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+
+package(default_visibility = ["//visibility:public"])
+
+# The empty value intentionally preserves ordinary rules_rs toolchain resolution:
+# when no family is requested, every generated toolchain repo remains eligible.
+string_flag(
+    name = "family",
+    build_setting_default = "",
+)
+
+config_setting(
+    name = "unspecified",
+    flag_values = {
+        ":family": "",
+    },
+)

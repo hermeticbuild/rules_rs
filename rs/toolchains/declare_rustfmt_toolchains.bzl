@@ -15,6 +15,7 @@ def declare_rustfmt_toolchains(
         version,
         rustfmt_version,
         edition,
+        toolchain_family_setting = None,
         execs = SUPPORTED_EXEC_TRIPLES):
     version_key = sanitize_version(version)
     rustfmt_version_key = sanitize_version(rustfmt_version)
@@ -42,6 +43,12 @@ def declare_rustfmt_toolchains(
             tags = ["rust_version={}".format(version)],
         )
 
+        target_settings = [
+            "@rules_rust//rust/toolchain/channel:" + channel,
+        ]
+        if toolchain_family_setting != None:
+            target_settings.append("@rules_rs//rs/toolchains/family:unspecified")
+
         native.toolchain(
             name = "{}_{}_rustfmt_{}".format(exec_triple.system, exec_triple.arch, version_key),
             exec_compatible_with = [
@@ -49,10 +56,25 @@ def declare_rustfmt_toolchains(
                 "@platforms//cpu:" + exec_triple.arch,
             ],
             target_compatible_with = [],
-            target_settings = [
-                "@rules_rust//rust/toolchain/channel:" + channel,
-            ],
+            target_settings = target_settings,
             toolchain = rustfmt_toolchain_name,
             toolchain_type = "@rules_rust//rust/rustfmt:toolchain_type",
             visibility = ["//visibility:public"],
         )
+
+        if toolchain_family_setting != None:
+            native.toolchain(
+                name = "{}_{}_rustfmt_{}_selected_family".format(exec_triple.system, exec_triple.arch, version_key),
+                exec_compatible_with = [
+                    "@platforms//os:" + exec_triple.system,
+                    "@platforms//cpu:" + exec_triple.arch,
+                ],
+                target_compatible_with = [],
+                target_settings = [
+                    "@rules_rust//rust/toolchain/channel:" + channel,
+                    toolchain_family_setting,
+                ],
+                toolchain = rustfmt_toolchain_name,
+                toolchain_type = "@rules_rust//rust/rustfmt:toolchain_type",
+                visibility = ["//visibility:public"],
+            )

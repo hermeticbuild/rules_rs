@@ -23,6 +23,7 @@ def declare_rustc_toolchains(
         include_rustc_dev = False,
         extra_rustc_flags = {},
         extra_exec_rustc_flags = {},
+        toolchain_family_setting = None,
         execs = SUPPORTED_EXEC_TRIPLES,
         targets = SUPPORTED_TARGET_TRIPLES):
     """Declare toolchains for all supported target platforms."""
@@ -141,6 +142,17 @@ def declare_rustc_toolchains(
 
         for target_triple in targets:
             target_key = sanitize_triple(target_triple)
+            bootstrapped_target_settings = [
+                "@rules_rust//rust/private:bootstrapped",
+                "@rules_rust//rust/toolchain/channel:" + channel,
+            ]
+            bootstrapping_target_settings = [
+                "@rules_rust//rust/private:bootstrapping",
+                "@rules_rust//rust/toolchain/channel:" + channel,
+            ]
+            if toolchain_family_setting != None:
+                bootstrapped_target_settings.append("@rules_rs//rs/toolchains/family:unspecified")
+                bootstrapping_target_settings.append("@rules_rs//rs/toolchains/family:unspecified")
 
             native.toolchain(
                 name = "{}_{}_to_{}_{}".format(exec_triple.system, exec_triple.arch, target_key, version_key),
@@ -149,10 +161,7 @@ def declare_rustc_toolchains(
                     "@platforms//cpu:" + exec_triple.arch,
                 ],
                 target_compatible_with = triple_to_constraint_set(target_triple),
-                target_settings = [
-                    "@rules_rust//rust/private:bootstrapped",
-                    "@rules_rust//rust/toolchain/channel:" + channel,
-                ],
+                target_settings = bootstrapped_target_settings,
                 toolchain = rust_toolchain_name,
                 toolchain_type = "@rules_rust//rust:toolchain_type",
                 visibility = ["//visibility:public"],
@@ -165,11 +174,43 @@ def declare_rustc_toolchains(
                     "@platforms//cpu:" + exec_triple.arch,
                 ],
                 target_compatible_with = triple_to_constraint_set(target_triple),
-                target_settings = [
-                    "@rules_rust//rust/private:bootstrapping",
-                    "@rules_rust//rust/toolchain/channel:" + channel,
-                ],
+                target_settings = bootstrapping_target_settings,
                 toolchain = rust_toolchain_name + "_bootstrap",
                 toolchain_type = "@rules_rust//rust:toolchain_type",
                 visibility = ["//visibility:public"],
             )
+
+            if toolchain_family_setting != None:
+                native.toolchain(
+                    name = "{}_{}_to_{}_{}_selected_family".format(exec_triple.system, exec_triple.arch, target_key, version_key),
+                    exec_compatible_with = [
+                        "@platforms//os:" + exec_triple.system,
+                        "@platforms//cpu:" + exec_triple.arch,
+                    ],
+                    target_compatible_with = triple_to_constraint_set(target_triple),
+                    target_settings = [
+                        "@rules_rust//rust/private:bootstrapped",
+                        "@rules_rust//rust/toolchain/channel:" + channel,
+                        toolchain_family_setting,
+                    ],
+                    toolchain = rust_toolchain_name,
+                    toolchain_type = "@rules_rust//rust:toolchain_type",
+                    visibility = ["//visibility:public"],
+                )
+
+                native.toolchain(
+                    name = "{}_{}_to_{}_{}_bootstrap_selected_family".format(exec_triple.system, exec_triple.arch, target_key, version_key),
+                    exec_compatible_with = [
+                        "@platforms//os:" + exec_triple.system,
+                        "@platforms//cpu:" + exec_triple.arch,
+                    ],
+                    target_compatible_with = triple_to_constraint_set(target_triple),
+                    target_settings = [
+                        "@rules_rust//rust/private:bootstrapping",
+                        "@rules_rust//rust/toolchain/channel:" + channel,
+                        toolchain_family_setting,
+                    ],
+                    toolchain = rust_toolchain_name + "_bootstrap",
+                    toolchain_type = "@rules_rust//rust:toolchain_type",
+                    visibility = ["//visibility:public"],
+                )

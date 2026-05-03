@@ -343,6 +343,7 @@ def _toolchains_impl(mctx):
                 include_rustc_dev = tag.include_rustc_dev,
                 extra_rustc_flags = tag.extra_rustc_flags,
                 extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
+                toolchain_family = repo_name,
             )
         is_dev_dependency = had_tags and mctx.is_dev_dependency(tag)
         if is_dev_dependency:
