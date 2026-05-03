@@ -55,8 +55,8 @@ SUPPORTED_TARGET_TRIPLES = [
     "arm-unknown-linux-gnueabihf",  # Armv6 Linux, hardfloat (kernel 3.2+, glibc 2.17)
     "armv7-unknown-linux-gnueabihf",  # Armv7-A Linux, hardfloat (kernel 3.2+, glibc 2.17)
     # "armv7-unknown-linux-ohos",        # Armv7-A OpenHarmony
-    #"loongarch64-unknown-linux-gnu",   # LoongArch64 Linux, LP64D ABI (kernel 5.19+, glibc 2.36), LSX required
-    #"loongarch64-unknown-linux-musl",  # LoongArch64 Linux, LP64D ABI (kernel 5.19+, musl 1.2.5), LSX required
+    "loongarch64-unknown-linux-gnu",  # LoongArch64 Linux, LP64D ABI (kernel 5.19+, glibc 2.36), LSX required
+    "loongarch64-unknown-linux-musl",  # LoongArch64 Linux, LP64D ABI (kernel 5.19+, musl 1.2.5), LSX required
     "i686-pc-windows-gnu",  # 32-bit MinGW (Windows 10+, Windows Server 2016+, Pentium 4) 1 2
     "powerpc-unknown-linux-gnu",  # PowerPC Linux (kernel 3.2+, glibc 2.17)
     "powerpc64-unknown-linux-gnu",  # PPC64 Linux (kernel 3.2+, glibc 2.17)
@@ -105,7 +105,7 @@ SUPPORTED_TARGET_TRIPLES = [
     "i686-unknown-freebsd",  # ✓ 32-bit x86 FreeBSD (Pentium 4) 1
     "i686-unknown-linux-musl",  # ✓ 32-bit Linux with musl 1.2.5 (Pentium 4) 1
     "i686-unknown-uefi",  # ? 32-bit UEFI (Pentium 4, softfloat) 2
-    #"loongarch64-unknown-none",        # * LoongArch64 Bare-metal (LP64D ABI)
+    "loongarch64-unknown-none",  # * LoongArch64 Bare-metal (LP64D ABI)
     #"loongarch64-unknown-none-softfloat", # * LoongArch64 Bare-metal (LP64S ABI)
     #"nvptx64-nvidia-cuda",             # * –emit=asm generates PTX code that runs on NVIDIA GPUs
     # "riscv32i-unknown-none-elf",       # * Bare RISC-V (RV32I ISA)
@@ -117,7 +117,7 @@ SUPPORTED_TARGET_TRIPLES = [
     "riscv64gc-unknown-none-elf",  # * Bare RISC-V (RV64IMAFDC ISA)
     # "riscv64im-unknown-none-elf",      # * Bare RISC-V (RV64IM ISA)
     # "riscv64imac-unknown-none-elf",    # * Bare RISC-V (RV64IMAC ISA)
-    # "sparc64-unknown-linux-gnu",       # ✓ SPARC Linux (kernel 4.4+, glibc 2.23)
+    "sparc64-unknown-linux-gnu",  # ✓ SPARC Linux (kernel 4.4+, glibc 2.23)
     "thumbv6m-none-eabi",  # * Bare Armv6-M
     "thumbv7em-none-eabi",  # * Bare Armv7E-M
     "thumbv7em-none-eabihf",  # * Bare Armv7E-M, hardfloat

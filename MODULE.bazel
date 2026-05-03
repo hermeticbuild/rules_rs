@@ -20,7 +20,7 @@ http_archive(
     url = "https://static.crates.io/crates/tinyjson/tinyjson-2.5.1.crate",
 )
 
-bazel_dep(name = "apple_support", version = "1.24.1", repo_name = "build_bazel_apple_support")
+bazel_dep(name = "apple_support", version = "1.24.1")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 #########################################################
@@ -53,7 +53,7 @@ bazel_dep(name = "bazel_lib", version = "3.0.0")
 bazel_dep(name = "bazel_features", version = "1.45.0")
 bazel_dep(name = "bazel_skylib", version = "1.4.1")
 bazel_dep(name = "package_metadata", version = "0.0.7")
-bazel_dep(name = "platforms", version = "0.0.5")
+bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "protobuf", version = "34.0.bcr.1", repo_name = "com_google_protobuf")
 bazel_dep(name = "rules_cc", version = "0.2.8")
 bazel_dep(name = "rules_proto", version = "7.1.0")
