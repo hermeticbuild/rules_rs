@@ -1,0 +1,174 @@
+diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
+index 2878b24..d9bc6a1 100644
+--- a/rust/private/rust.bzl
++++ b/rust/private/rust.bzl
+@@ -993,9 +993,46 @@ _rust_static_library_transition = transition(
+     ],
+ )
+ 
++_RUST_STATIC_LIBRARY_SYMBOL_ATTRS = {
++    "exported_symbols": attr.string_list(
++        doc = dedent("""\
++            Symbols that should remain global in the produced static archive.
++
++            When set, the archive is partially linked into one object and all
++            defined symbols except this allowlist are localized. This is useful
++            for C ABI static libraries that should only expose their intended
++            ABI symbols to a downstream C/C++/cgo link.
++            """),
++    ),
++    "_llvm_ar": attr.label(
++        default = Label("@llvm//tools:llvm-ar"),
++        executable = True,
++        cfg = "exec",
++        allow_files = True,
++    ),
++    "_llvm_ld_lld": attr.label(
++        default = Label("@llvm//tools:ld.lld"),
++        executable = True,
++        cfg = "exec",
++        allow_files = True,
++    ),
++    "_llvm_ld64_lld": attr.label(
++        default = Label("@llvm//tools:ld64.lld"),
++        executable = True,
++        cfg = "exec",
++        allow_files = True,
++    ),
++    "_llvm_objcopy": attr.label(
++        default = Label("@llvm//tools:llvm-objcopy"),
++        executable = True,
++        cfg = "exec",
++        allow_files = True,
++    ),
++}
++
+ rust_static_library = rule(
+     implementation = _rust_static_library_impl,
+-    attrs = _COMMON_ATTRS | _PLATFORM_ATTRS,
++    attrs = _COMMON_ATTRS | _PLATFORM_ATTRS | _RUST_STATIC_LIBRARY_SYMBOL_ATTRS,
+     fragments = ["cpp"],
+     cfg = _rust_static_library_transition,
+     toolchains = [
+diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
+index de99243..0f91b3b 100644
+--- a/rust/private/rustc.bzl
++++ b/rust/private/rustc.bzl
+@@ -1733,6 +1733,106 @@ def rustc_compile_action(
+ 
+         outputs = [crate_info.output]
+ 
++    localized_staticlib = None
++    exported_symbols = getattr(attr, "exported_symbols", [])
++    if crate_info.type == "staticlib" and exported_symbols:
++        if crate_info.output.extension != "a":
++            fail("exported_symbols on rust_static_library currently requires a .a output, got {}".format(crate_info.output.basename))
++
++        localized_staticlib_obj = ctx.actions.declare_file(
++            crate_info.output.basename[:-2] + ".localized.o",
++            sibling = crate_info.output,
++        )
++        localized_staticlib = ctx.actions.declare_file(
++            crate_info.output.basename[:-2] + ".localized.a",
++            sibling = crate_info.output,
++        )
++
++        if toolchain.target_os in ["darwin", "macos"]:
++            mac_exports = ctx.actions.declare_file(
++                crate_info.output.basename[:-2] + ".exports",
++                sibling = crate_info.output,
++            )
++            ctx.actions.write(
++                output = mac_exports,
++                content = "\n".join([
++                    symbol if symbol.startswith("_") else "_" + symbol
++                    for symbol in exported_symbols
++                ]) + "\n",
++            )
++            ctx.actions.run(
++                executable = ctx.executable._llvm_ld64_lld,
++                inputs = [crate_info.output, mac_exports],
++                outputs = [localized_staticlib_obj],
++                arguments = [
++                    "-r",
++                    "-arch",
++                    "arm64",
++                    "-platform_version",
++                    "macos",
++                    "11.0",
++                    "11.0",
++                    "-all_load",
++                    crate_info.output.path,
++                    "-exported_symbols_list",
++                    mac_exports.path,
++                    "-o",
++                    localized_staticlib_obj.path,
++                ],
++                mnemonic = "RustStaticlibPartialLink",
++                progress_message = "Partially linking Rust staticlib %{label}",
++            )
++        elif toolchain.target_os == "linux":
++            partially_linked_staticlib = ctx.actions.declare_file(
++                crate_info.output.basename[:-2] + ".linked.o",
++                sibling = crate_info.output,
++            )
++            partial_link_args = ctx.actions.args()
++            partial_link_args.add("-r")
++            partial_link_args.add("--whole-archive")
++            partial_link_args.add(crate_info.output)
++            partial_link_args.add("--no-whole-archive")
++            partial_link_args.add("-o")
++            partial_link_args.add(partially_linked_staticlib)
++            ctx.actions.run(
++                executable = ctx.executable._llvm_ld_lld,
++                inputs = [crate_info.output],
++                outputs = [partially_linked_staticlib],
++                arguments = [partial_link_args],
++                mnemonic = "RustStaticlibPartialLink",
++                progress_message = "Partially linking Rust staticlib %{label}",
++            )
++
++            objcopy_args = ctx.actions.args()
++            for symbol in exported_symbols:
++                objcopy_args.add("--keep-global-symbol={}".format(symbol))
++            objcopy_args.add(partially_linked_staticlib)
++            objcopy_args.add(localized_staticlib_obj)
++            ctx.actions.run(
++                executable = ctx.executable._llvm_objcopy,
++                inputs = [partially_linked_staticlib],
++                outputs = [localized_staticlib_obj],
++                arguments = [objcopy_args],
++                mnemonic = "RustStaticlibLocalizeSymbols",
++                progress_message = "Localizing Rust staticlib symbols for %{label}",
++            )
++        else:
++            fail("exported_symbols on rust_static_library is only supported on Linux and macOS")
++
++        ar_args = ctx.actions.args()
++        ar_args.add("rcs")
++        ar_args.add(localized_staticlib)
++        ar_args.add(localized_staticlib_obj)
++        ctx.actions.run(
++            executable = ctx.executable._llvm_ar,
++            inputs = [localized_staticlib_obj],
++            outputs = [localized_staticlib],
++            arguments = [ar_args],
++            mnemonic = "RustStaticlibArchive",
++            progress_message = "Archiving localized Rust staticlib %{label}",
++        )
++        outputs = [localized_staticlib]
++
+     coverage_runfiles = []
+     if toolchain.llvm_cov and ctx.configuration.coverage_enabled and crate_info.is_test:
+         coverage_runfiles = [toolchain.llvm_cov, toolchain.llvm_profdata] + toolchain.llvm_lib
+@@ -1805,6 +1905,10 @@ def rustc_compile_action(
+         crate_info_dict.update({
+             "rustc_env": env,
+         })
++        if localized_staticlib:
++            crate_info_dict.update({
++                "output": localized_staticlib,
++            })
+         crate_info = rust_common.create_crate_info(
+             deps = depset(deps),
+             proc_macro_deps = depset(proc_macro_deps),

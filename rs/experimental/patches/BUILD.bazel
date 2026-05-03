@@ -1,0 +1,1 @@
+exports_files(["staticlib_exported_symbols.patch"])
