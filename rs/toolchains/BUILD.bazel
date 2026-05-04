@@ -46,7 +46,6 @@ bzl_library(
         "//rs/private:clippy_repository",
         "//rs/private:host_tools_repository",
         "//rs/private:rust_analyzer_repository",
-        "//rs/private:rust_repository_utils",
         "//rs/private:rust_src_repository",
         "//rs/private:rustc_repository",
         "//rs/private:rustfmt_repository",

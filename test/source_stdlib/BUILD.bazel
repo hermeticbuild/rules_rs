@@ -1,0 +1,15 @@
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+
+rust_library(
+    name = "core_only",
+    srcs = ["core_only.rs"],
+    crate_name = "core_only",
+    edition = "2021",
+)
+
+rust_library(
+    name = "wasm64_alloc",
+    srcs = ["wasm64_alloc.rs"],
+    crate_name = "wasm64_alloc",
+    edition = "2021",
+)

@@ -1,33 +1,7 @@
 load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
-load(":repository_utils.bzl", "cargo_build_file_values")
+load(":repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields")
 load(":toml2json.bzl", "run_toml2json")
-
-_INHERITABLE_FIELDS = [
-    "version",
-    "edition",
-    "description",
-    "homepage",
-    "repository",
-    "license",
-    # TODO(zbarsky): Do we need to fixup the path for readme and license_file?
-    "license_file",
-    "rust_version",
-    "readme",
-]
-
-def _inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml):
-    workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")
-    if not workspace_package:
-        return cargo_toml
-
-    crate_package = cargo_toml["package"]
-    for field in _INHERITABLE_FIELDS:
-        value = crate_package.get(field)
-        if type(value) == "dict" and value.get("workspace") == True:
-            crate_package[field] = workspace_package.get(field)
-
-    return cargo_toml
 
 def _render_label_list(labels):
     return ",\n        ".join(['"%s"' % label for label in sorted(labels)])
@@ -42,7 +16,7 @@ def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, wo
     package_path = rctx.path(dest).dirname
     cargo_toml_path = package_path.get_child("Cargo.toml")
     cargo_toml = run_toml2json(rctx, cargo_toml_path)
-    cargo_toml = _inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml)
+    cargo_toml = inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml)
     package = cargo_toml["package"]
 
     cargo = cargo_build_file_values(

@@ -9,6 +9,10 @@ def triple_to_constraint_set(target_triple):
     t = triple(target_triple)
 
     if t.system in ("linux", "nixos"):
+        # TODO: Add LLVM constraint support for libc-less Linux builds.
+        # if t.abi == "none":
+        #     constraints.append("@llvm//constraints/libc:unconstrained")
+        # elif t.abi == "musl" or "musl" in target_triple:
         if t.abi == "musl" or "musl" in target_triple:
             # Rustc passes `-no-pie` on musl so make sure we align.
             constraints.append("@llvm//constraints/libc:musl")
@@ -143,5 +147,43 @@ SUPPORTED_TARGET_TRIPLES = [
     #"x86_64-unknown-redox",             # ✓ Redox OS
     "x86_64-unknown-uefi",  # ? 64-bit UEFI
 
-    # No Tier3 support.
+    # Additional Tier 3 targets must opt into source stdlib builds.
 ]
+
+SOURCE_STDLIB_TARGET_TRIPLES = [
+    "aarch64-unknown-freebsd",
+    "aarch64-unknown-netbsd",
+    "aarch64-unknown-nto-qnx710",
+    "aarch64-unknown-openbsd",
+    "arm64e-apple-darwin",
+    "arm64e-apple-ios",
+    "armv7-unknown-freebsd",
+    "armv7-unknown-netbsd-eabihf",
+    "bpfeb-unknown-none",
+    "bpfel-unknown-none",
+    "i386-apple-ios",
+    "i686-apple-darwin",
+    "i686-unknown-netbsd",
+    "i686-unknown-openbsd",
+    "powerpc-unknown-freebsd",
+    "powerpc-unknown-linux-musl",
+    "powerpc-unknown-netbsd",
+    "powerpc-unknown-openbsd",
+    "powerpc64-unknown-freebsd",
+    "powerpc64-unknown-openbsd",
+    "powerpc64le-unknown-freebsd",
+    "riscv64-linux-android",
+    "riscv64gc-unknown-freebsd",
+    "riscv64gc-unknown-fuchsia",
+    "riscv64gc-unknown-netbsd",
+    "riscv64gc-unknown-openbsd",
+    "s390x-unknown-linux-musl",
+    "sparc64-unknown-netbsd",
+    "sparc64-unknown-openbsd",
+    "wasm64-unknown-unknown",
+    # TODO: Enable once @llvm has constraint support for libc-less Linux builds.
+    # "x86_64-unknown-linux-none",
+    "x86_64-unknown-openbsd",
+]
+
+ALL_TARGET_TRIPLES = SUPPORTED_TARGET_TRIPLES + SOURCE_STDLIB_TARGET_TRIPLES

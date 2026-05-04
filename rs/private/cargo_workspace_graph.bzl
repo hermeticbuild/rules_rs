@@ -239,6 +239,7 @@ def resolve_cargo_workspace_members(
         debug,
         dep_label_prefix = None,
         allow_missing_resolved_deps = False,
+        skip_internal_rustc_placeholder_crates = True,
         watch_manifests = False,
         use_legacy_rules_rust_platforms = False):
     platform_cfg_attrs = [triple_to_cfg_attrs(triple) for triple in platform_triples]
@@ -248,9 +249,10 @@ def resolve_cargo_workspace_members(
 
     cfg_match_cache = {None: struct(matches = platform_triples, uses_feature_cfg = False)}
 
-    workspace_member_keys = {}
-    for package in cargo_metadata["packages"]:
-        workspace_member_keys[(package["name"], package["version"])] = True
+    workspace_member_keys = set([
+        (package["name"], package["version"])
+        for package in cargo_metadata["packages"]
+    ])
 
     resolver_versions_by_name = {name: versions[:] for name, versions in versions_by_name.items()}
     workspace_members_by_key = {(package["name"], package["version"]): package for package in workspace_members}
@@ -270,6 +272,7 @@ def resolve_cargo_workspace_members(
         possible_deps = prepare_possible_deps(
             package.get("dependencies", []),
             converter = cargo_metadata_dep_to_dep_dict,
+            skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
         )
 
         package_index = len(resolver_packages)

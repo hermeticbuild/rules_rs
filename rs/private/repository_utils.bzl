@@ -40,6 +40,32 @@ def render_select_build_script_env(platform_items, use_legacy_rules_rust_platfor
 def _exclude_deps_from_features(features):
     return [f for f in features if not f.startswith("dep:")]
 
+_INHERITABLE_PACKAGE_FIELDS = [
+    "version",
+    "edition",
+    "description",
+    "homepage",
+    "repository",
+    "license",
+    # TODO(zbarsky): Do we need to fixup the path for readme and license_file?
+    "license_file",
+    "rust_version",
+    "readme",
+]
+
+def inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml):
+    workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")
+    if not workspace_package:
+        return cargo_toml
+
+    crate_package = cargo_toml["package"]
+    for field in _INHERITABLE_PACKAGE_FIELDS:
+        value = crate_package.get(field)
+        if type(value) == "dict" and value.get("workspace") == True:
+            crate_package[field] = workspace_package.get(field)
+
+    return cargo_toml
+
 def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", gen_build_script = None):
     package_dir = rctx.path(package_path or ".")
     package = cargo_toml["package"]
@@ -141,11 +167,15 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    data = [
 {indent}        {data}
 {indent}    ],
+{indent}    extra_compile_data = [
+{indent}        {extra_compile_data}
+{indent}    ],
 {indent}    crate_features = {crate_features},
 {indent}    triples = {triples},
 {indent}    conditional_crate_features = {conditional_crate_features},
 {indent}    crate_root = {crate_root},
 {indent}    edition = {edition},
+{indent}    rustc_env = {rustc_env},
 {indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
 {indent}    tags = {tags},
 {indent}    target_compatible_with = RESOLVED_PLATFORMS,
@@ -162,10 +192,12 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    is_proc_macro = {is_proc_macro},
 {indent}    binaries = {binaries},
 {indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
+{indent}    cargo_toml_env = {cargo_toml_env},
+{indent}    skip_deps_verification = {skip_deps_verification},
 {indent})
 """
 
-def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = ""):
+def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
     # See `rust_crate.bzl` for details.
     crate_features, conditional_crate_features = compute_select(
@@ -195,11 +227,13 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         extra_deps = extra_deps,
         conditional_deps = " + " + conditional_deps if conditional_deps else "",
         data = list_indent.join(['"%s"' % d for d in attr.data]),
+        extra_compile_data = list_indent.join(['"%s"' % d for d in attr.extra_compile_data]),
         crate_features = repr(sorted(crate_features)),
         triples = repr(attr.crate_features_select.keys()),
         conditional_crate_features = repr(conditional_crate_features),
         crate_root = values["crate_root"],
         edition = values["edition"],
+        rustc_env = repr(attr.rustc_env),
         rustc_flags = repr(rustc_flags),
         conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),
@@ -218,6 +252,8 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         is_proc_macro = values["is_proc_macro"],
         binaries = values["binaries"],
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        cargo_toml_env = attr.cargo_toml_env,
+        skip_deps_verification = repr(skip_deps_verification),
     )
 
 def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
@@ -250,16 +286,19 @@ rust_crate_attrs = {
     "build_script_tools": attr.label_list(default = []),
     "build_script_tools_select": attr.string_list_dict(),
     "build_script_tags": attr.string_list(),
+    "rustc_env": attr.string_dict(),
     "rustc_flags": attr.string_list(),
     "rustc_flags_select": attr.string_list_dict(),
     "crate_tags": attr.string_list(),
     "data": attr.label_list(default = []),
+    "extra_compile_data": attr.label_list(default = []),
     "deps": attr.string_list(default = []),
     "deps_select": attr.string_list_dict(),
     "aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
     "use_legacy_rules_rust_platforms": attr.bool(),
+    "cargo_toml_env": attr.bool(default = True),
 }
 
 common_attrs = rust_crate_attrs | {
