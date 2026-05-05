@@ -1,7 +1,5 @@
 """Module extension that provisions the rules_rust_prost repository."""
 
-load("@bazel_tools//tools/build_defs/repo:local.bzl", "local_repository")
-
 def _rules_rust_prost_repo_impl(rctx):
     rctx.file("BUILD.bazel", """\
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
@@ -30,14 +28,14 @@ bzl_library(
         "providers.bzl",
     ],
     deps = [
-        "@rules_rust_prost_upstream//:bzl_lib",
+        "@rules_rust//extensions/prost:bzl_lib",
     ],
 )
 """)
 
     rctx.file("defs.bzl", """\
 load(
-    "@rules_rust_prost_upstream//:defs.bzl",
+    "@rules_rust//extensions/prost:defs.bzl",
     _rust_prost_library = "rust_prost_library",
     _rust_prost_toolchain = "rust_prost_toolchain",
     _rust_prost_transform = "rust_prost_transform",
@@ -57,13 +55,19 @@ alias(
 
 alias(
     name = "protoc_wrapper_source",
-    actual = "@rules_rust_prost_upstream//private:protoc_wrapper.rs",
+    actual = "@rules_rust//extensions/prost/private:protoc_wrapper.rs",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "legacy_proto_toolchain",
+    actual = "@rules_rust//extensions/prost/private:legacy_proto_toolchain",
     visibility = ["//visibility:public"],
 )
 """)
 
     rctx.file("providers.bzl", """\
-load("@rules_rust_prost_upstream//:providers.bzl", _ProstProtoInfo = "ProstProtoInfo")
+load("@rules_rust//extensions/prost:providers.bzl", _ProstProtoInfo = "ProstProtoInfo")
 
 ProstProtoInfo = _ProstProtoInfo
 """)
@@ -75,14 +79,6 @@ _rules_rust_prost_repo = repository_rule(
 )
 
 def _rules_rust_prost_impl(mctx):
-    prost_module = mctx.path(Label("@rules_rust//:extensions/prost/MODULE.bazel"))
-    mctx.read(prost_module)
-
-    local_repository(
-        name = "rules_rust_prost_upstream",
-        path = str(prost_module.dirname),
-    )
-
     _rules_rust_prost_repo(
         name = "rules_rust_prost",
     )

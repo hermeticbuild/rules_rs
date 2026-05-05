@@ -251,9 +251,9 @@ Overriding with a version that does not include required patches from [hermeticb
 </details>
 
 <details>
-<summary>Protobuf with rules_rust_prost</summary>
+<summary>Protobuf with prost</summary>
 
-`rules_rs` exports a `rules_rust_prost` module extension for prost integration:
+Prefer loading prost rules from the extension package exposed through the patched `@rules_rust` repository. The current pinned `rules_rust` implementation still names its toolchain type under `@rules_rust_prost`, so instantiate the compatibility repository for toolchain registration:
 
 ```bzl
 bazel_dep(name = "rules_proto", version = "7.1.0")
@@ -266,7 +266,44 @@ register_toolchains("@rules_rust_prost//:default_prost_toolchain")
 register_toolchains("@//path/to/proto_toolchain")
 ```
 
-The default prost toolchain and its Cargo dependencies are provided by `rules_rs`. If you need different prost, tonic, or plugin versions, define your own `rust_prost_toolchain` from `@rules_rust_prost//:defs.bzl`.
+Load prost rules from the direct `rules_rust` package:
+
+```bzl
+load("@rules_rust//extensions/prost:defs.bzl", "rust_prost_library")
+```
+
+The default prost toolchain and its Cargo dependencies are provided by `rules_rs`. If you need different prost, tonic, or plugin versions, define your own `rust_prost_toolchain` from `@rules_rust//extensions/prost:defs.bzl`.
+
+The `@rules_rust_prost` repository exists for compatibility with the toolchain labels still referenced by the upstream extension internals. New rule loads should prefer `@rules_rust//extensions/prost/...`.
+
+</details>
+
+<details>
+<summary>Python extensions with PyO3</summary>
+
+Prefer loading PyO3 rules from the extension package exposed through the patched `@rules_rust` repository. The current pinned `rules_rust` implementation still names its toolchain types and settings under `@rules_rust_pyo3`, so instantiate the compatibility repository for toolchain registration:
+
+```bzl
+bazel_dep(name = "rules_python", version = "1.6.3")
+
+rules_rust_pyo3 = use_extension("@rules_rs//rs:rules_rust_pyo3.bzl", "rules_rust_pyo3")
+use_repo(rules_rust_pyo3, "rules_rust_pyo3")
+
+register_toolchains(
+    "@rules_rust_pyo3//toolchains:toolchain",
+    "@rules_rust_pyo3//toolchains:rust_toolchain",
+)
+```
+
+Load PyO3 rules from the direct `rules_rust` package:
+
+```bzl
+load("@rules_rust//extensions/pyo3:defs.bzl", "pyo3_extension")
+```
+
+The default PyO3 toolchain and its Cargo dependencies are provided by `rules_rs`. If you need different PyO3 versions or Python discovery behavior, define your own `pyo3_toolchain` or `rust_pyo3_toolchain` from `@rules_rust//extensions/pyo3:defs.bzl`.
+
+The `@rules_rust_pyo3` repository exists for compatibility with the toolchain labels still referenced by the upstream extension internals. New rule loads should prefer `@rules_rust//extensions/pyo3/...`.
 
 </details>
 

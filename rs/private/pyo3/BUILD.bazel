@@ -1,0 +1,43 @@
+load("@rules_rust//extensions/pyo3:defs.bzl", "rust_pyo3_toolchain")
+load(
+    "@rules_rust//extensions/pyo3/private:pyo3_toolchain.bzl",
+    "current_rust_pyo3_introspection_toolchain",
+    "current_rust_pyo3_toolchain",
+)
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+])
+
+current_rust_pyo3_toolchain(
+    name = "current_rust_pyo3_toolchain",
+    tags = [
+        "no-clippy",
+        "no-rustfmt",
+    ],
+)
+
+current_rust_pyo3_introspection_toolchain(
+    name = "current_rust_pyo3_introspection_toolchain",
+    tags = [
+        "no-clippy",
+        "no-rustfmt",
+    ],
+)
+
+rust_pyo3_toolchain(
+    name = "rust_pyo3_toolchain",
+    pyo3 = "@rpyo3c//:pyo3",
+    pyo3_introspection = "@rpyo3c//:pyo3-introspection",
+)
+
+rust_binary(
+    name = "stubgen",
+    srcs = ["@rules_rust//extensions/pyo3/private:stubgen.rs"],
+    edition = "2021",
+    deps = [":current_rust_pyo3_introspection_toolchain"],
+)

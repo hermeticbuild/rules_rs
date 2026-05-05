@@ -15,9 +15,12 @@ bzl_library(
     name = "rules_rust_prost",
     srcs = ["rules_rust_prost.bzl"],
     visibility = ["//visibility:public"],
-    deps = [
-        "@bazel_tools//tools/build_defs/repo:local.bzl",
-    ],
+)
+
+bzl_library(
+    name = "rules_rust_pyo3",
+    srcs = ["rules_rust_pyo3.bzl"],
+    visibility = ["//visibility:public"],
 )
 
 bzl_library(
