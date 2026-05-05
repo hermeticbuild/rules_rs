@@ -34,8 +34,15 @@ def _spoke_repo(hub_name, name, version):
         s = s.replace("+", "-")
     return s
 
+def _git_repo_remote_name(remote):
+    scheme_separator = remote.find("://")
+    if scheme_separator != -1:
+        remote = remote[scheme_separator + len("://"):]
+
+    return remote.replace("/", "_").replace(":", "_").replace("@", "_")
+
 def _external_repo_for_git_source(hub_name, remote, commit):
-    return hub_name + "__" + remote.replace("/", "_").replace(":", "_").replace("@", "_") + "_" + commit
+    return hub_name + "__" + _git_repo_remote_name(remote) + "_" + commit[:8]
 
 def _git_crate_purl(name, version, remote, commit):
     return "pkg:cargo/%s@%s?vcs_url=git+%s@%s" % (name, version, remote, commit)
@@ -883,6 +890,14 @@ def _crate_impl(mctx):
                         "workspace_cargo_toml": annotation.workspace_cargo_toml,
                     }
                     git_repos[repo_name] = git_repo
+                elif git_repo["remote"] != remote or git_repo["commit"] != commit:
+                    fail("Git crates from %s at %s and %s at %s produce the same repository name %s" % (
+                        git_repo["remote"],
+                        git_repo["commit"],
+                        remote,
+                        commit,
+                        repo_name,
+                    ))
 
                 strip_prefix = package.get("strip_prefix")
                 if strip_prefix == None:
