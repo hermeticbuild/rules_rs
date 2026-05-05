@@ -67,6 +67,19 @@ bzl_library(
 )
 
 bzl_library(
+    name = "cargo_workspace_graph",
+    srcs = ["cargo_workspace_graph.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":cfg_parser",
+        ":resolver",
+        ":select_utils",
+        ":semver",
+        "@bazel_skylib//lib:paths",
+    ],
+)
+
+bzl_library(
     name = "registry_config_repository",
     srcs = ["registry_config_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
