@@ -1,0 +1,18 @@
+[package]
+name = "rules-rs-pyo3-deps"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[lib]
+path = "empty.rs"
+
+[dependencies]
+pyo3 = { version = "0.28.3", features = [
+    "abi3",
+    "abi3-py311",
+    "extension-module",
+    "experimental-inspect",
+] }
+pyo3-ffi = "0.28.3"
+pyo3-introspection = "0.28.3"

@@ -251,22 +251,59 @@ Overriding with a version that does not include required patches from [hermeticb
 </details>
 
 <details>
-<summary>Protobuf with rules_rust_prost</summary>
+<summary>Protobuf with prost</summary>
 
-`rules_rs` exports a `rules_rust_prost` module extension for prost integration:
+Load prost rules and default toolchains from the reexported `@rules_rust` repository:
+
+```bzl
+load("@rules_rust//extensions/prost:defs.bzl", "rust_prost_library")
+```
 
 ```bzl
 bazel_dep(name = "rules_proto", version = "7.1.0")
-bazel_dep(name = "protobuf", version = "34.0.bcr.1", repo_name = "com_google_protobuf")
+bazel_dep(name = "protobuf", version = "34.0.bcr.1")
 
-rules_rust_prost = use_extension("@rules_rs//rs:rules_rust_prost.bzl", "rules_rust_prost")
-use_repo(rules_rust_prost, "rules_rust_prost")
-
-register_toolchains("@rules_rust_prost//:default_prost_toolchain")
-register_toolchains("@//path/to/proto_toolchain")
+register_toolchains(
+    "@rules_rust//extensions/prost:default_prost_toolchain",
+    "@//path/to/proto_toolchain",
+)
 ```
 
-The default prost toolchain and its Cargo dependencies are provided by `rules_rs`. If you need different prost, tonic, or plugin versions, define your own `rust_prost_toolchain` from `@rules_rust_prost//:defs.bzl`.
+If you need different prost, tonic, or plugin versions, define your own `rust_prost_toolchain` from `@rules_rust//extensions/prost:defs.bzl`.
+
+`rules_rs` also exposes a `@rules_rust_prost` compatibility repository to ease migration of existing code:
+
+```bzl
+rules_rust_prost = use_extension("//rs:rules_rust_prost.bzl", "rules_rust_prost")
+use_repo(rules_rust_prost, "rules_rust_prost")
+```
+
+</details>
+
+<details>
+<summary>Python extensions with PyO3</summary>
+
+Load PyO3 rules and default toolchains from the reexported `@rules_rust` repository:
+
+```bzl
+load("@rules_rust//extensions/pyo3:defs.bzl", "pyo3_extension")
+```
+
+```bzl
+register_toolchains(
+    "@rules_rust//extensions/pyo3/toolchains:toolchain",
+    "@rules_rust//extensions/pyo3/toolchains:rust_toolchain",
+)
+```
+
+If you need different PyO3 versions or Python discovery behavior, define your own `pyo3_toolchain` or `rust_pyo3_toolchain` from `@rules_rust//extensions/pyo3:defs.bzl`. 
+
+`rules_rs` also exposes a `@rules_rust_pyo3` compatibility repository to ease migration of existing cod:
+
+```bzl
+rules_rust_pyo3 = use_extension("//rs:rules_rust_pyo3.bzl", "rules_rust_pyo3")
+use_repo(rules_rust_pyo3, "rules_rust_pyo3")
+```
 
 </details>
 
