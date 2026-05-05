@@ -1,4 +1,5 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
@@ -231,6 +232,22 @@ bzl_library(
     srcs = ["cargo_lints.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = ["@rules_rust//rust/private:bzl_lib"],
+)
+
+bzl_library(
+    name = "dylint",
+    srcs = ["dylint.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+rust_binary(
+    name = "dylint_runner",
+    srcs = ["dylint_runner.rs"],
+    edition = "2024",
+    tags = ["manual"],
 )
 
 bzl_library(

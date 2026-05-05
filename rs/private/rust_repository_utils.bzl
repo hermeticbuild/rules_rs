@@ -2,11 +2,11 @@ load("@bazel_tools//tools/build_defs/repo:utils.bzl", "get_auth")
 load(
     "@rules_rust//rust/private:repository_utils.bzl",
     "DEFAULT_STATIC_RUST_URL_TEMPLATES",
-    "produce_tool_suburl",
     "produce_tool_path",
+    "produce_tool_suburl",
 )
 
-def download_and_extract(rctx, tool, dir, triple):
+def download_and_extract(rctx, tool, dir, triple, sha256 = None):
     tool_suburl = produce_tool_suburl(tool, triple, rctx.attr.version, rctx.attr.iso_date)
     urls = [url.format(tool_suburl) for url in rctx.attr.urls]
 
@@ -14,7 +14,7 @@ def download_and_extract(rctx, tool, dir, triple):
 
     rctx.download_and_extract(
         urls,
-        sha256 = rctx.attr.sha256,
+        sha256 = sha256 or rctx.attr.sha256,
         auth = get_auth(rctx, urls),
         strip_prefix = "{}/{}".format(tool_path, dir),
     )

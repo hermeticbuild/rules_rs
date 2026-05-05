@@ -130,6 +130,13 @@ bazel run @rules_rs//tools/rust_analyzer:gen_rust_project -- --help
 See the upstream `rules_rust` rust-analyzer docs for editor setup details:
 https://bazelbuild.github.io/rules_rust/rust_analyzer.html#vscode
 
+## Dylint
+
+`rules_rs` supports Bazel-native Dylint checks with target-local custom lint bundles,
+so different Rust targets can opt into different project policies without sharing one
+workspace-global Dylint config. See [`docs/dylint.md`](docs/dylint.md) for the design,
+toolchain requirements, and a worked example.
+
 ## Advanced Options
 
 <details>

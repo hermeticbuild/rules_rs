@@ -24,6 +24,13 @@ bzl_library(
 )
 
 bzl_library(
+    name = "dylint",
+    srcs = ["dylint.bzl"],
+    visibility = ["//visibility:public"],
+    deps = ["//rs/private:dylint"],
+)
+
+bzl_library(
     name = "rules_rust_reexported_extensions",
     srcs = ["rules_rust_reexported_extensions.bzl"],
     visibility = ["//visibility:public"],
