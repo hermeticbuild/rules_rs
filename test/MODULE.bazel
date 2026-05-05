@@ -155,6 +155,7 @@ TESTS = [
     "workspace_renamed_path_dep_aliases",
     "binaries",
     "uv",
+    "garage",
 ]
 
 [
