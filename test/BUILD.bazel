@@ -50,6 +50,7 @@ rustdoc_musl_unwind_link_flags_test(
 DISABLED = [
     "annotation_crate_features",
     "3rd_party",
+    "pyo3",
     "prost",
     #"binaries",
     #"build_script_aliases",

@@ -107,9 +107,6 @@ use_repo(rules_rust, "rules_rust")
 
 crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 
-rules_rust_prost = use_extension("@rules_rs//rs:rules_rust_prost.bzl", "rules_rust_prost")
-use_repo(rules_rust_prost, "rules_rust_prost")
-
 toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
 toolchains.toolchain(
     edition = "2024",
@@ -120,7 +117,9 @@ use_repo(toolchains, "default_rust_toolchains")
 register_toolchains("@default_rust_toolchains//:all")
 
 register_toolchains(
-    "@rules_rust_prost//:default_prost_toolchain",
+    "@rules_rust//extensions/prost:default_prost_toolchain",
+    "@rules_rust//extensions/pyo3/toolchains:rust_toolchain",
+    "@rules_rust//extensions/pyo3/toolchains:toolchain",
     "@//prost/proto_toolchain",
 )
 

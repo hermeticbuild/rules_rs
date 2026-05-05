@@ -1,0 +1,16 @@
+load("@rules_python//python:defs.bzl", "py_test")
+load("@rules_rust//extensions/pyo3:defs.bzl", "pyo3_extension")
+
+pyo3_extension(
+    name = "pyo3_smoke",
+    srcs = ["pyo3_smoke.rs"],
+    edition = "2021",
+    imports = ["."],
+    stubs = False,
+)
+
+py_test(
+    name = "pyo3_smoke_test",
+    srcs = ["pyo3_smoke_test.py"],
+    deps = [":pyo3_smoke"],
+)

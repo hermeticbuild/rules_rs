@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+load("@rules_rust//extensions/prost:defs.bzl", "rust_prost_toolchain")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library_group")
-load("@rules_rust_prost//:defs.bzl", "rust_prost_toolchain")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -10,6 +10,24 @@ exports_files([
     "Cargo.lock",
     "Cargo.toml",
 ])
+
+[
+    alias(
+        name = name,
+        actual = "@rrprd//:" + name,
+    )
+    for name in [
+        "h2",
+        "prost",
+        "prost-types",
+        "protoc-gen-prost__protoc-gen-prost",
+        "protoc-gen-tonic__protoc-gen-tonic",
+        "tokio",
+        "tokio-stream",
+        "tonic",
+        "tonic-prost",
+    ]
+]
 
 bool_flag(
     name = "compile_well_known_types",
@@ -25,7 +43,7 @@ config_setting(
 
 rust_binary(
     name = "protoc_wrapper",
-    srcs = ["@rules_rust_prost//private:protoc_wrapper_source"],
+    srcs = ["@rules_rust//extensions/prost/private:protoc_wrapper.rs"],
     edition = PROST_RUST_EDITION,
     tags = ["manual"],
     deps = [
