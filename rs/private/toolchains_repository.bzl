@@ -11,6 +11,7 @@ declare_rustc_toolchains(
     edition = {edition},
     extra_rustc_flags = {extra_rustc_flags},
     extra_exec_rustc_flags = {extra_exec_rustc_flags},
+    targets = {target_triples},
 )
 
 declare_rustfmt_toolchains(
@@ -30,6 +31,7 @@ declare_rust_analyzer_toolchains(
             edition = repr(rctx.attr.edition),
             extra_rustc_flags = repr(rctx.attr.extra_rustc_flags),
             extra_exec_rustc_flags = repr(rctx.attr.extra_exec_rustc_flags),
+            target_triples = repr(rctx.attr.target_triples),
         ),
     )
 
@@ -44,5 +46,6 @@ toolchains_repository = repository_rule(
         "edition": attr.string(mandatory = True),
         "extra_rustc_flags": attr.string_list_dict(),
         "extra_exec_rustc_flags": attr.string_list_dict(),
+        "target_triples": attr.string_list(mandatory = True),
     },
 )

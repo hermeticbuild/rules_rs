@@ -7,7 +7,7 @@ load(
     "check_version_valid",
     "produce_tool_suburl",
 )
-load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TARGET_TRIPLES")
+load("//rs/platforms:triples.bzl", "SOURCE_STDLIB_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TARGET_TRIPLES")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
 load("//rs/private:host_tools_repository.bzl", "host_tools_repository")
@@ -22,6 +22,13 @@ load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version
 _DEFAULT_RUSTC_VERSION = "1.92.0"
 _DEFAULT_EDITION = "2021"
 _DEFAULT_TOOLCHAIN_REPO_NAME = "default_rust_toolchains"
+_DEFAULT_SOURCE_STDLIB_CRATES = [
+    "alloc",
+    "compiler_builtins",
+    "core",
+    "panic_abort",
+]
+_SOURCE_STDLIB_TARGETS = set(SOURCE_STDLIB_TARGET_TRIPLES)
 
 def _normalize_os_name(os_name):
     os_name = os_name.lower()
@@ -81,8 +88,19 @@ _TOOLCHAIN_TAG = tag_class(
         "extra_exec_rustc_flags": attr.string_list_dict(
             doc = "Additional rustc flags by exec triple.",
         ),
+        "source_stdlib_crates": attr.string_list(
+            default = _DEFAULT_SOURCE_STDLIB_CRATES,
+            doc = "Rust source stdlib crates to include when building stdlib from rust-src.",
+        ),
+        "target_triples": attr.string_list(
+            default = SUPPORTED_TARGET_TRIPLES,
+            doc = "Rust target triples to declare toolchains for.",
+        ),
     },
 )
+
+def _effective_target_triples(tag):
+    return sorted(set(tag.target_triples + SOURCE_STDLIB_TARGET_TRIPLES))
 
 def _parse_version(version):
     base_version = version
@@ -116,16 +134,27 @@ def _toolchains_impl(mctx):
             edition = _DEFAULT_EDITION,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
+            source_stdlib_crates = _DEFAULT_SOURCE_STDLIB_CRATES,
+            target_triples = SUPPORTED_TARGET_TRIPLES,
         ))
 
     versions = set([])
     rustfmt_versions = set([])
     rust_analyzer_versions = set([])
+    source_stdlib_crates_by_version = {}
+    target_triples_by_version = {}
 
     for tag in version_tags:
         versions.add(tag.version)
         rustfmt_versions.add(tag.rustfmt_version or tag.version)
         rust_analyzer_versions.add(tag.rust_analyzer_version or tag.version)
+        target_triples = target_triples_by_version.get(tag.version, set())
+        target_triples.update(_effective_target_triples(tag))
+        target_triples_by_version[tag.version] = target_triples
+
+        source_stdlib_crates = source_stdlib_crates_by_version.get(tag.version, set())
+        source_stdlib_crates.update(tag.source_stdlib_crates)
+        source_stdlib_crates_by_version[tag.version] = source_stdlib_crates
 
     existing_facts = getattr(mctx, "facts", {}) or {}
     pending_downloads = {}
@@ -161,8 +190,12 @@ def _toolchains_impl(mctx):
             for tool_name in ["rustc", "clippy", "cargo"]:
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
 
-        for target_triple in SUPPORTED_TARGET_TRIPLES:
+        for target_triple in target_triples_by_version[version]:
+            if target_triple in _SOURCE_STDLIB_TARGETS:
+                continue
             _request_sha("rust-std", base_version, iso_date, _parse_triple(target_triple))
+
+        _request_sha("rust-src", base_version, iso_date, None)
 
     for version in rustfmt_versions:
         base_version, iso_date = _parse_version(version)
@@ -243,7 +276,9 @@ def _toolchains_impl(mctx):
                 )
 
         if version in versions:
-            for target_triple in SUPPORTED_TARGET_TRIPLES:
+            for target_triple in sorted(target_triples_by_version[version]):
+                if target_triple in _SOURCE_STDLIB_TARGETS:
+                    continue
                 stdlib_repository(
                     name = "rust_stdlib_{}_{}".format(sanitize_triple(target_triple), version_key),
                     triple = target_triple,
@@ -273,13 +308,6 @@ def _toolchains_impl(mctx):
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
 
-        rust_src_repository(
-            name = "rust_src_{}".format(version_key),
-            version = base_version,
-            iso_date = iso_date,
-            sha256 = _sha_for("rust-src", base_version, iso_date, None),
-        )
-
         for triple in SUPPORTED_EXEC_TRIPLES:
             exec_triple = _parse_triple(triple)
             triple_suffix = exec_triple.system + "_" + exec_triple.arch
@@ -292,10 +320,36 @@ def _toolchains_impl(mctx):
                 sha256 = _sha_for("rust-analyzer", base_version, iso_date, exec_triple),
             )
 
+    if host_cargo_repo == None:
+        fail("Could not find host Cargo repository for {}-{}".format(host_os, host_arch))
+    host_cargo = "@{}//:bin/cargo{}".format(
+        host_cargo_repo,
+        ".exe" if host_os == "windows" else "",
+    )
+
+    for version in sorted(versions | rust_analyzer_versions):
+        version_key = sanitize_version(version)
+        base_version, iso_date = _parse_version(version)
+        if version in versions:
+            rust_src_repository(
+                name = "rust_src_{}".format(version_key),
+                version = base_version,
+                iso_date = iso_date,
+                sha256 = _sha_for("rust-src", base_version, iso_date, None),
+                cargo = host_cargo,
+                crates = sorted(source_stdlib_crates_by_version[version]),
+            )
+        else:
+            rust_src_repository(
+                name = "rust_src_{}".format(version_key),
+                version = base_version,
+                iso_date = iso_date,
+                sha256 = _sha_for("rust-src", base_version, iso_date, None),
+            )
+
     host_tools_repository(
         name = "rs_rust_host_tools",
-        host_cargo_repo = host_cargo_repo,
-        binary_suffix = ".exe" if host_os == "windows" else "",
+        host_cargo = host_cargo,
     )
 
     # `rs_rust_host_tools` is an implementation detail of rules_rs itself.
@@ -315,7 +369,9 @@ def _toolchains_impl(mctx):
             (existing.rust_analyzer_version or existing.version) != rust_analyzer_version or
             existing.edition != tag.edition or
             existing.extra_rustc_flags != tag.extra_rustc_flags or
-            existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags
+            existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags or
+            sorted(existing.source_stdlib_crates) != sorted(tag.source_stdlib_crates) or
+            _effective_target_triples(existing) != _effective_target_triples(tag)
         ):
             fail("Toolchain repo {} has conflicting tag configurations".format(repo_name))
 
@@ -329,6 +385,7 @@ def _toolchains_impl(mctx):
                 edition = tag.edition,
                 extra_rustc_flags = tag.extra_rustc_flags,
                 extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
+                target_triples = _effective_target_triples(tag),
             )
         is_dev_dependency = had_tags and mctx.is_dev_dependency(tag)
         if is_dev_dependency:
