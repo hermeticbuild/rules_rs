@@ -185,6 +185,27 @@ bzl_library(
 )
 
 bzl_library(
+    name = "rustc_dev_repository",
+    srcs = ["rustc_dev_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "//rs/private:rust_repository_utils",
+        "@rules_rust//rust/platform:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "rustc_with_dev_repository",
+    srcs = ["rustc_with_dev_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        "@bazel_features//:features",
+        "@rules_rust//rust/platform:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
     name = "stdlib_repository",
     srcs = ["stdlib_repository.bzl"],
     visibility = ["//rs:__subpackages__"],

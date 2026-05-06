@@ -112,9 +112,24 @@ toolchains.toolchain(
     edition = "2024",
     version = "1.92.0",
 )
-use_repo(toolchains, "default_rust_toolchains")
+toolchains.toolchain(
+    name = "nightly_rust_toolchains",
+    edition = "2024",
+    include_rustc_dev = True,
+    rust_analyzer_version = "1.92.0",
+    rustfmt_version = "1.92.0",
+    version = "nightly/2026-03-05",
+)
+use_repo(
+    toolchains,
+    "default_rust_toolchains",
+    "nightly_rust_toolchains",
+)
 
-register_toolchains("@default_rust_toolchains//:all")
+register_toolchains(
+    "@default_rust_toolchains//:all",
+    "@nightly_rust_toolchains//:all",
+)
 
 register_toolchains(
     "@rules_rust//extensions/prost:default_prost_toolchain",
