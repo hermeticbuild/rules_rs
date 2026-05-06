@@ -1,0 +1,11 @@
+[package]
+name = "dylint_demo"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = "1.0"
+env_logger = "0.11"
+dylint_driver = { git = "https://github.com/trailofbits/dylint", rev = "1d7211228764dc18f73e41de5fc6d30c9e0de7b6" }
+dylint_linting = { git = "https://github.com/trailofbits/dylint", rev = "1d7211228764dc18f73e41de5fc6d30c9e0de7b6" }
