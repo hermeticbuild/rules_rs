@@ -133,6 +133,36 @@ https://bazelbuild.github.io/rules_rust/rust_analyzer.html#vscode
 ## Advanced Options
 
 <details>
+<summary>Enable nightly rustc-dev components</summary>
+
+Nightly crates that depend on `rustc_private` need the `rustc-dev` component in the
+compiler sysroot. Opt into that only for the nightly toolchain that needs it:
+
+```bzl
+toolchains.toolchain(
+    name = "nightly_rust_toolchains",
+    edition = "2024",
+    include_rustc_dev = True,
+    version = "nightly/2026-03-05",
+)
+use_repo(toolchains, "nightly_rust_toolchains")
+register_toolchains("@nightly_rust_toolchains//:all")
+```
+
+`include_rustc_dev` is accepted only for nightly Rust versions. It keeps the default
+toolchain path unchanged and exposes separate `*_with_dev` toolchains when a build sets
+both:
+
+```bash
+bazel build \
+  --@rules_rust//rust/toolchain/channel=nightly \
+  --@rules_rs//rs/toolchains/rustc_dev:enabled \
+  //...
+```
+
+</details>
+
+<details>
 <summary>Use legacy rules_rust toolchains or platforms</summary>
 
 You can keep an existing `rules_rust` toolchain setup during migration. In that mode, configure toolchains from `@rules_rust` and tell `crate.from_cargo(...)` to render selects against legacy `rules_rust` platform labels.
