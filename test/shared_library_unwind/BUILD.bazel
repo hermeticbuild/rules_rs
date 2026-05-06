@@ -1,0 +1,40 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+load("@rules_rs//rs:rust_shared_library.bzl", "rust_shared_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+_LINUX_ONLY = select({
+    "@platforms//os:linux": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
+rust_shared_library(
+    name = "filewatcher_jni",
+    srcs = ["filewatcher_jni.rs"],
+    crate_name = "filewatcher_jni",
+    edition = "2021",
+)
+
+sh_test(
+    name = "filewatcher_jni_unwind_link_test",
+    srcs = ["unwind_link_test.sh"],
+    args = [
+        "$(location :filewatcher_jni)",
+        "$(location @llvm//tools:llvm-nm)",
+        "$(location @llvm//tools:llvm-readelf)",
+    ],
+    data = [
+        ":filewatcher_jni",
+        "@llvm//tools:llvm-nm",
+        "@llvm//tools:llvm-readelf",
+    ],
+    target_compatible_with = _LINUX_ONLY,
+)
+
+cc_test(
+    name = "filewatcher_jni_dlopen_test",
+    srcs = ["dlopen_test.c"],
+    args = ["$(location :filewatcher_jni)"],
+    data = [":filewatcher_jni"],
+    linkopts = ["-ldl"],
+    target_compatible_with = _LINUX_ONLY,
+)
