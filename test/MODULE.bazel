@@ -1,6 +1,7 @@
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "llvm", version = "0.7.7")
 bazel_dep(name = "apple_support", version = "1.24.2")
+bazel_dep(name = "rules_java", version = "9.3.0")
 
 # SBOM
 bazel_dep(name = "package_metadata", version = "0.0.7")
@@ -365,3 +366,17 @@ crate.annotation(
     crate = "gtk-sys",
     gen_build_script = "off",
 )
+crate.from_cargo(
+    name = "libunwind",
+    cargo_lock = "//shared_library_unwind:Cargo.lock",
+    cargo_toml = "//shared_library_unwind:Cargo.toml",
+    platform_triples = [
+        "aarch64-unknown-linux-gnu",
+        "aarch64-apple-darwin",  # TODO: probably we only want linux here
+        "aarch64-pc-windows-gnullvm",  # TODO: probably we only want linux here
+        "x86_64-unknown-linux-gnu",
+        "x86_64-apple-darwin",  # TODO: probably we only want linux here
+        "x86_64-pc-windows-gnullvm",  # TODO: probably we only want linux here
+    ],
+)
+use_repo(crate, "libunwind")

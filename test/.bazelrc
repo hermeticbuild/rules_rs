@@ -3,6 +3,7 @@ common --repo_env=BAZEL_NO_APPLE_CPP_TOOLCHAIN=1
 common --repo_contents_cache=~/bazel_repo_contents_cache
 common --disk_cache=~/bazel_cache
 common --incompatible_disallow_empty_glob=False
+common --java_runtime_version=remotejdk_21
 
 common --@rules_cc//cc/toolchains/args/archiver_flags:use_libtool_on_macos=False
 common --@llvm//config:experimental_stub_libgcc_s
@@ -21,3 +22,6 @@ common:remote --jobs=800
 common:remote --extra_execution_platforms=//:rbe
 common:remote --platforms=//:rbe
 common:remote --remote_executor=grpcs://remote.buildbuddy.io
+
+common --enable_platform_specific_config
+common:linux --host_platform=//:local_linux

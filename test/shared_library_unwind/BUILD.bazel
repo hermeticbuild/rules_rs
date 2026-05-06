@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
+load("@rules_java//java:defs.bzl", "java_binary")
 load("@rules_rs//rs:rust_shared_library.bzl", "rust_shared_library")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
@@ -12,6 +13,18 @@ rust_shared_library(
     srcs = ["filewatcher_jni.rs"],
     crate_name = "filewatcher_jni",
     edition = "2021",
+    platform = "@rules_rs//rs/platforms:aarch64-unknown-linux-gnu",
+    deps = ["@libunwind//:jni-0.21.1"],
+)
+
+java_binary(
+    name = "filewatcher_jni_aarch64_linux_load_repro",
+    srcs = ["LoadFileWatcherJni.java"],
+    args = ["$(rlocationpath :filewatcher_jni)"],
+    data = [":filewatcher_jni"],
+    main_class = "com.jetbrains.analyzer.filewatcher.repro.LoadFileWatcherJni",
+    target_compatible_with = _LINUX_ONLY,
+    deps = ["@bazel_tools//tools/java/runfiles"],
 )
 
 sh_test(
