@@ -1,0 +1,62 @@
+bazel_dep(name = "rules_rs", version = "0.0.0")
+bazel_dep(name = "llvm", version = "0.7.7")
+bazel_dep(name = "rules_shell", version = "0.6.1")
+
+local_path_override(
+    module_name = "rules_rs",
+    path = "../..",
+)
+
+rules_rust = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
+use_repo(rules_rust, "rules_rust")
+
+toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
+toolchains.toolchain(
+    name = "nightly_rust_toolchains",
+    edition = "2024",
+    include_rustc_dev = True,
+    rust_analyzer_version = "1.92.0",
+    rustfmt_version = "1.92.0",
+    version = "nightly/2026-03-05",
+)
+use_repo(toolchains, "nightly_rust_toolchains")
+
+register_toolchains(
+    "@nightly_rust_toolchains//:all",
+    "//:dylint_toolchain",
+    "@llvm//toolchain:all",
+)
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "dylint",
+    cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
+    platform_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+use_repo(crate, "dylint")
+
+crate.annotation(
+    crate = "dylint_driver",
+    patch_args = ["-p1"],
+    patches = ["//:dylint-driver-bazel-env.patch"],
+    repositories = ["dylint"],
+    strip_prefix = "driver",
+)
+crate.annotation(
+    crate = "dylint_internal",
+    patch_args = ["-p1"],
+    patches = ["//:dylint-internal-rustc-env.patch"],
+    repositories = ["dylint"],
+    strip_prefix = "internal",
+)
+crate.annotation(
+    crate = "dylint_linting",
+    repositories = ["dylint"],
+    strip_prefix = "utils/linting",
+)

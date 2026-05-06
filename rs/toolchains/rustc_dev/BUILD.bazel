@@ -1,0 +1,22 @@
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+
+package(default_visibility = ["//visibility:public"])
+
+bool_flag(
+    name = "enabled",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "disabled",
+    flag_values = {
+        ":enabled": "false",
+    },
+)
+
+config_setting(
+    name = "enabled_setting",
+    flag_values = {
+        ":enabled": "true",
+    },
+)

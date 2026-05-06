@@ -1,0 +1,109 @@
+load(":dylint_rules.bzl", "dylint_config", "dylint_library", "dylint_toolchain", "rust_dylint")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+load("@rules_rs//rs:rust_shared_library.bzl", "rust_shared_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+toolchain_type(
+    name = "toolchain_type",
+)
+
+rust_binary(
+    name = "dylint_driver",
+    srcs = ["driver.rs"],
+    edition = "2024",
+    tags = ["manual"],
+    deps = [
+        "@dylint//:anyhow",
+        "@dylint//:dylint_driver",
+        "@dylint//:env_logger",
+    ],
+)
+
+rust_binary(
+    name = "dylint_runner",
+    srcs = ["dylint_runner.rs"],
+    edition = "2024",
+    tags = ["manual"],
+)
+
+dylint_toolchain(
+    name = "dylint_toolchain",
+    driver = ":dylint_driver",
+)
+
+rust_shared_library(
+    name = "alpha_policy_impl",
+    srcs = ["alpha_policy.rs"],
+    crate_name = "alpha_policy",
+    edition = "2024",
+    tags = ["manual"],
+    deps = ["@dylint//:dylint_linting"],
+)
+
+dylint_library(
+    name = "alpha_policy",
+    library = ":alpha_policy_impl",
+)
+
+rust_shared_library(
+    name = "beta_policy_impl",
+    srcs = ["beta_policy.rs"],
+    crate_name = "beta_policy",
+    edition = "2024",
+    tags = ["manual"],
+    deps = ["@dylint//:dylint_linting"],
+)
+
+dylint_library(
+    name = "beta_policy",
+    library = ":beta_policy_impl",
+)
+
+dylint_config(
+    name = "alpha_lints",
+    config = "dylint.toml",
+    libraries = [":alpha_policy"],
+)
+
+dylint_config(
+    name = "beta_lints",
+    libraries = [":beta_policy"],
+)
+
+rust_library(
+    name = "alpha_component",
+    srcs = ["component.rs"],
+    edition = "2024",
+    lint_config = ":alpha_lints",
+)
+
+rust_library(
+    name = "beta_component",
+    srcs = ["component.rs"],
+    edition = "2024",
+    lint_config = ":beta_lints",
+)
+
+rust_dylint(
+    name = "alpha_component_dylint",
+    deps = [":alpha_component"],
+)
+
+rust_dylint(
+    name = "beta_component_dylint",
+    deps = [":beta_component"],
+)
+
+sh_test(
+    name = "verify_target_local_dylint_configs",
+    srcs = ["verify_target_local_dylint_configs.sh"],
+    args = [
+        "$(location :alpha_component_dylint)",
+        "$(location :beta_component_dylint)",
+    ],
+    data = [
+        ":alpha_component_dylint",
+        ":beta_component_dylint",
+    ],
+)
