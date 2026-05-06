@@ -12,8 +12,10 @@ rust_shared_library(
     name = "filewatcher_jni",
     srcs = ["filewatcher_jni.rs"],
     crate_name = "filewatcher_jni",
+    crate_root = "//fleet/native/filewatcher_jni:src/lib.rs",
     edition = "2021",
     platform = "@rules_rs//rs/platforms:aarch64-unknown-linux-gnu",
+    rustc_flags = ["--codegen=strip=none"],
     deps = ["@libunwind//:jni-0.21.1"],
 )
 
