@@ -356,6 +356,7 @@ See https://registry.bazel.build/docs/rules_rs
 - [JetBrains](https://github.com/JetBrains/intellij-community), used in closed sources of [JetBrains Air](https://air.dev/)
 - [Perplexity](https://perplexity.ai)
 - [formatjs](https://github.com/formatjs/formatjs)
+- [Trace Machina Nativelink](https://github.com/TraceMachina/nativelink)
 
 ## Telemetry And Privacy Policy
 
