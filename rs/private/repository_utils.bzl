@@ -167,12 +167,12 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    data = [
 {indent}        {data}
 {indent}    ],
-{indent}    crate_features = {crate_features},
+{extra_compile_data_attr}{indent}    crate_features = {crate_features},
 {indent}    triples = {triples},
 {indent}    conditional_crate_features = {conditional_crate_features},
 {indent}    crate_root = {crate_root},
 {indent}    edition = {edition},
-{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
+{rustc_env_attr}{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
 {indent}    tags = {tags},
 {indent}    target_compatible_with = RESOLVED_PLATFORMS,
 {indent}    links = {links},
@@ -188,10 +188,10 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    is_proc_macro = {is_proc_macro},
 {indent}    binaries = {binaries},
 {indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
-{indent})
+{skip_deps_verification_attr}{indent})
 """
 
-def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = ""):
+def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
     # See `rust_crate.bzl` for details.
     crate_features, conditional_crate_features = compute_select(
@@ -209,6 +209,19 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
 
     list_indent = ",\n%s        " % indent
     extra_deps = " + " + extra_deps if extra_deps else ""
+    extra_compile_data = getattr(attr, "extra_compile_data", [])
+    extra_compile_data_attr = ""
+    if extra_compile_data:
+        extra_compile_data_attr = """{indent}    extra_compile_data = [
+{indent}        {extra_compile_data}
+{indent}    ],
+""".format(
+            indent = indent,
+            extra_compile_data = list_indent.join(['"%s"' % d for d in extra_compile_data]),
+        )
+    rustc_env = getattr(attr, "rustc_env", {})
+    rustc_env_attr = "%s    rustc_env = %s,\n" % (indent, repr(rustc_env)) if rustc_env else ""
+    skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""
 
     return _RUST_CRATE_MACRO_CALL.format(
         indent = indent,
@@ -221,11 +234,13 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         extra_deps = extra_deps,
         conditional_deps = " + " + conditional_deps if conditional_deps else "",
         data = list_indent.join(['"%s"' % d for d in attr.data]),
+        extra_compile_data_attr = extra_compile_data_attr,
         crate_features = repr(sorted(crate_features)),
         triples = repr(attr.crate_features_select.keys()),
         conditional_crate_features = repr(conditional_crate_features),
         crate_root = values["crate_root"],
         edition = values["edition"],
+        rustc_env_attr = rustc_env_attr,
         rustc_flags = repr(rustc_flags),
         conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),
@@ -244,6 +259,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         is_proc_macro = values["is_proc_macro"],
         binaries = values["binaries"],
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        skip_deps_verification_attr = skip_deps_verification_attr,
     )
 
 def render_build_file_content(rctx, attr, values, bazel_metadata = {}):

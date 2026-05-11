@@ -7,7 +7,7 @@ load(
     "check_version_valid",
     "produce_tool_suburl",
 )
-load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TARGET_TRIPLES")
+load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_AND_2_TRIPLES")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
 load("//rs/private:host_tools_repository.bzl", "host_tools_repository")
@@ -161,8 +161,10 @@ def _toolchains_impl(mctx):
             for tool_name in ["rustc", "clippy", "cargo"]:
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
 
-        for target_triple in SUPPORTED_TARGET_TRIPLES:
+        for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES:
             _request_sha("rust-std", base_version, iso_date, _parse_triple(target_triple))
+
+        _request_sha("rust-src", base_version, iso_date, None)
 
     for version in rustfmt_versions:
         base_version, iso_date = _parse_version(version)
@@ -243,7 +245,7 @@ def _toolchains_impl(mctx):
                 )
 
         if version in versions:
-            for target_triple in SUPPORTED_TARGET_TRIPLES:
+            for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES:
                 stdlib_repository(
                     name = "rust_stdlib_{}_{}".format(sanitize_triple(target_triple), version_key),
                     triple = target_triple,
@@ -273,13 +275,6 @@ def _toolchains_impl(mctx):
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
 
-        rust_src_repository(
-            name = "rust_src_{}".format(version_key),
-            version = base_version,
-            iso_date = iso_date,
-            sha256 = _sha_for("rust-src", base_version, iso_date, None),
-        )
-
         for triple in SUPPORTED_EXEC_TRIPLES:
             exec_triple = _parse_triple(triple)
             triple_suffix = exec_triple.system + "_" + exec_triple.arch
@@ -298,6 +293,17 @@ def _toolchains_impl(mctx):
         host_cargo_repo,
         ".exe" if host_os == "windows" else "",
     )
+
+    for version in sorted(versions | rust_analyzer_versions):
+        version_key = sanitize_version(version)
+        base_version, iso_date = _parse_version(version)
+        rust_src_repository(
+            name = "rust_src_{}".format(version_key),
+            version = base_version,
+            iso_date = iso_date,
+            sha256 = _sha_for("rust-src", base_version, iso_date, None),
+            cargo = host_cargo,
+        )
 
     host_tools_repository(
         name = "rs_rust_host_tools",

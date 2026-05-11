@@ -1,7 +1,9 @@
 load("@rules_rust//rust:toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
-load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TARGET_TRIPLES", "triple_to_constraint_set")
+load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES", "triple_to_constraint_set")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
+
+_SOURCE_STDLIB_TARGETS = set(SUPPORTED_TIER_3_TRIPLES)
 
 def _channel(version):
     if version.startswith("nightly"):
@@ -23,11 +25,27 @@ def declare_rustc_toolchains(
         extra_rustc_flags = {},
         extra_exec_rustc_flags = {},
         execs = SUPPORTED_EXEC_TRIPLES,
-        targets = SUPPORTED_TARGET_TRIPLES):
+        targets = ALL_TARGET_TRIPLES):
     """Declare toolchains for all supported target platforms."""
 
     version_key = sanitize_version(version)
     channel = _channel(version)
+
+    source_stdlib_building_select = {}
+    for target_triple in targets:
+        if target_triple not in _SOURCE_STDLIB_TARGETS:
+            continue
+
+        target_key = sanitize_triple(target_triple)
+        config_setting = "source_stdlib_building_" + target_key
+        native.config_setting(
+            name = config_setting,
+            constraint_values = triple_to_constraint_set(target_triple),
+            flag_values = {
+                "@rules_rs//rs/private:source_stdlib_building": "true",
+            },
+        )
+        source_stdlib_building_select[config_setting] = "@rules_rs//rs/private:empty_stdlib"
 
     for triple in execs:
         exec_triple = _parse_triple(triple)
@@ -42,18 +60,32 @@ def declare_rustc_toolchains(
             exec_triple.arch,
             version_key,
         )
+        rust_std = rust_toolchain_name + "_rust_std"
 
         rust_std_select = {}
         target_triple_select = {}
         for target_triple in targets:
             target_key = sanitize_triple(target_triple)
-            config_label = "@rules_rs//rs/platforms/config:{}".format(target_triple)
-            rust_std_select[config_label] = "@rust_stdlib_{}_{}//:rust_std-{}".format(target_key, version_key, target_triple)
+            config_label = "@rules_rs//rs/platforms/config:" + target_triple
+            stdlib_repo = "rust_stdlib_%s_%s" % (target_key, version_key)
+            if target_triple in _SOURCE_STDLIB_TARGETS:
+                rust_std_select[config_label] = "@rust_src_" + version_key + "//lib/rustlib/src:rust_std"
+            else:
+                rust_std_select[config_label] = "@%s//:rust_std-%s" % (stdlib_repo, target_triple)
             target_triple_select[config_label] = target_triple
+
+        native.alias(
+            name = rust_std,
+            actual = select(rust_std_select),
+        )
+        toolchain_rust_std = rust_std
+        if source_stdlib_building_select:
+            toolchain_rust_std = select(source_stdlib_building_select | {
+                "//conditions:default": rust_std,
+            })
 
         rust_toolchain_kwargs = dict(
             rust_doc = "{}rustdoc".format(rustc_repo_label),
-            rust_std = select(rust_std_select),
             rustc = "{}rustc".format(rustc_repo_label),
             cargo = "{}cargo".format(cargo_repo_label),
             clippy_driver = "{}clippy_driver_bin".format(clippy_repo_label),
@@ -124,6 +156,7 @@ def declare_rustc_toolchains(
         rust_toolchain(
             name = rust_toolchain_name,
             process_wrapper = "@rules_rust//util/process_wrapper",
+            rust_std = toolchain_rust_std,
             **rust_toolchain_kwargs
         )
 
@@ -131,6 +164,7 @@ def declare_rustc_toolchains(
             name = rust_toolchain_name + "_bootstrap",
             bootstrapping = True,
             process_wrapper = "@rules_rust//util/process_wrapper:bootstrap_process_wrapper",
+            rust_std = rust_std,
             **rust_toolchain_kwargs
         )
 

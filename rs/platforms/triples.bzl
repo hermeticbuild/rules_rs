@@ -36,7 +36,7 @@ SUPPORTED_EXEC_TRIPLES = [
 ]
 
 # See https://doc.rust-lang.org/beta/rustc/platform-support.html
-SUPPORTED_TARGET_TRIPLES = [
+SUPPORTED_TIER_1_AND_2_TRIPLES = [
     # Tier 1
     "aarch64-apple-darwin",  # ARM64 macOS (11.0+, Big Sur+)
     "aarch64-pc-windows-msvc",  # ARM64 Windows MSVC
@@ -142,6 +142,40 @@ SUPPORTED_TARGET_TRIPLES = [
     "x86_64-unknown-none",  # * Freestanding/bare-metal x86_64, softfloat
     #"x86_64-unknown-redox",             # ✓ Redox OS
     "x86_64-unknown-uefi",  # ? 64-bit UEFI
-
-    # No Tier3 support.
 ]
+
+SUPPORTED_TIER_3_TRIPLES = [
+    "aarch64-unknown-freebsd",
+    "aarch64-unknown-netbsd",
+    "aarch64-unknown-nto-qnx710",
+    "aarch64-unknown-openbsd",
+    "arm64e-apple-darwin",
+    "arm64e-apple-ios",
+    "armv7-unknown-freebsd",
+    "armv7-unknown-netbsd-eabihf",
+    "bpfeb-unknown-none",
+    "bpfel-unknown-none",
+    "i386-apple-ios",
+    "i686-apple-darwin",
+    "i686-unknown-netbsd",
+    "i686-unknown-openbsd",
+    "powerpc-unknown-freebsd",
+    "powerpc-unknown-linux-musl",
+    "powerpc-unknown-netbsd",
+    "powerpc-unknown-openbsd",
+    "powerpc64-unknown-freebsd",
+    "powerpc64-unknown-openbsd",
+    "powerpc64le-unknown-freebsd",
+    "riscv64-linux-android",
+    "riscv64gc-unknown-freebsd",
+    "riscv64gc-unknown-fuchsia",
+    "riscv64gc-unknown-netbsd",
+    "riscv64gc-unknown-openbsd",
+    "s390x-unknown-linux-musl",
+    "sparc64-unknown-netbsd",
+    "sparc64-unknown-openbsd",
+    "wasm64-unknown-unknown",
+    "x86_64-unknown-openbsd",
+]
+
+ALL_TARGET_TRIPLES = SUPPORTED_TIER_1_AND_2_TRIPLES + SUPPORTED_TIER_3_TRIPLES

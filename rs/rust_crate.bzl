@@ -1,4 +1,9 @@
 load("@package_metadata//rules:package_metadata.bzl", "package_metadata")
+load(
+    "@rules_rust//rust/private:rust.bzl",
+    _rust_library = "rust_library",
+    _rust_proc_macro = "rust_proc_macro",
+)
 load("//rs:cargo_build_script.bzl", "cargo_build_script")
 load("//rs:rust_binary.bzl", "rust_binary")
 load("//rs:rust_library.bzl", "rust_library")
@@ -35,7 +40,10 @@ def rust_crate(
         build_script_tags,
         is_proc_macro,
         binaries,
-        use_legacy_rules_rust_platforms):
+        use_legacy_rules_rust_platforms,
+        extra_compile_data = [],
+        rustc_env = {},
+        skip_deps_verification = False):
     package_metadata(
         name = name + "_package_metadata",
         purl = purl,
@@ -56,7 +64,7 @@ def rust_crate(
             "WORKSPACE.bazel",
         ],
         allow_empty = True,
-    )
+    ) + extra_compile_data
 
     srcs = native.glob(
         include = ["**/*.rs"],
@@ -88,6 +96,7 @@ def rust_crate(
             tools = build_script_tools,
             edition = edition,
             pkg_name = crate_name,
+            rustc_env = rustc_env,
             rustc_env_files = ["cargo_toml_env_vars.env"],
             rustc_flags = ["--cap-lints=allow"],
             srcs = srcs,
@@ -145,19 +154,21 @@ def rust_crate(
         ),
         crate_root = crate_root,
         edition = edition,
+        rustc_env = rustc_env,
         rustc_env_files = ["cargo_toml_env_vars.env"],
         rustc_flags = rustc_flags + ["--cap-lints=allow"],
         tags = crate_tags,
         target_compatible_with = target_compatible_with,
         package_metadata = [name + "_package_metadata"],
+        skip_deps_verification = skip_deps_verification,
         visibility = ["//visibility:public"],
         skip_per_crate_rustc_flags = True,
     )
 
     if is_proc_macro:
-        rust_proc_macro(**kwargs)
+        (_rust_proc_macro if skip_deps_verification else rust_proc_macro)(**kwargs)
     else:
-        rust_library(**kwargs)
+        (_rust_library if skip_deps_verification else rust_library)(**kwargs)
 
     for binary, crate_root in binaries.items():
         rust_binary(
@@ -169,6 +180,7 @@ def rust_crate(
             crate_features = crate_features,
             crate_root = crate_root,
             edition = edition,
+            rustc_env = rustc_env,
             rustc_env_files = ["cargo_toml_env_vars.env"],
             rustc_flags = rustc_flags + ["--cap-lints=allow"],
             srcs = srcs,
