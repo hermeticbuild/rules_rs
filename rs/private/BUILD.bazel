@@ -47,7 +47,6 @@ bzl_library(
         ":registry_utils",
         ":repository_utils",
         ":toml2json",
-        "@bazel_features//:features",
         "@bazel_tools//tools/build_defs/repo:cache.bzl",
         "@bazel_tools//tools/build_defs/repo:utils.bzl",
     ],
