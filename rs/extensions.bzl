@@ -6,16 +6,16 @@ load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
+    "cargo_toml_fact",
     "platform_label",
     "render_dep_data",
     "render_string_list",
     "resolve_cargo_workspace_members",
+    "resolve_package_facts",
+    "split_lockfile_packages",
     "workspace_dep_data",
-    _add_to_dict = "add_to_dict",
     _fq_crate = "fq_crate",
-    _new_feature_resolutions = "new_feature_resolutions",
     _normalize_path = "normalize_path",
-    _prepare_possible_deps = "prepare_possible_deps",
     _select = "select_items",
 )
 load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
@@ -56,26 +56,6 @@ def _date(ctx, label):
     result = ctx.execute(["gdate", '+"%Y-%m-%d %H:%M:%S.%3N"'])
     print(label, result.stdout)
 
-def _relative_to_workspace(path, workspace_root):
-    normalized_root = _normalize_path(workspace_root)
-    normalized_path = _normalize_path(path)
-
-    if not paths.is_absolute(normalized_path):
-        normalized_path = _normalize_path(paths.normalize(paths.join(normalized_root, normalized_path)))
-
-    root_parts = [p for p in normalized_root.split("/") if p]
-    path_parts = [p for p in normalized_path.split("/") if p]
-
-    common = 0
-    max_common = min(len(root_parts), len(path_parts))
-    for idx in range(max_common):
-        if root_parts[idx] != path_parts[idx]:
-            break
-        common = idx + 1
-
-    rel_parts = [".."] * (len(root_parts) - common) + path_parts[common:]
-    return "/".join(rel_parts) if rel_parts else "."
-
 def _label_directory(label):
     idx = label.name.rfind("/")
     if idx == -1:
@@ -104,54 +84,6 @@ def _additive_build_file_content(mctx, annotation):
         content += mctx.read(annotation.additive_build_file)
     content += annotation.additive_build_file_content
     return content
-
-def _spec_to_dep_dict_inner(dep, spec, is_build = False):
-    if type(spec) == "string":
-        dep = {"name": dep}
-    else:
-        dep = {
-            "name": dep,
-            "optional": spec.get("optional", False),
-            "default_features": spec.get("default_features", spec.get("default-features", True)),
-            "features": spec.get("features", []),
-        }
-        if "package" in spec:
-            dep["package"] = spec["package"]
-
-    if is_build:
-        dep["kind"] = "build"
-
-    return dep
-
-def _spec_to_dep_dict(dep, spec, annotation, workspace_cargo_toml_json, is_build = False):
-    if type(spec) == "dict" and spec.get("workspace") == True:
-        workspace = workspace_cargo_toml_json.get("workspace")
-        if not workspace and annotation.workspace_cargo_toml != "Cargo.toml":
-            fail("""
-
-ERROR: `crate.annotation` for `{name}` has a `workspace_cargo_toml` pointing to a Cargo.toml without a `workspace` section. Please correct it in your MODULE.bazel!
-Make sure you point to the `Cargo.toml` of the workspace, not of `{name}`!”
-
-""".format(name = annotation.crate))
-
-        inherited = _spec_to_dep_dict_inner(
-            dep,
-            workspace["dependencies"][dep],
-            is_build,
-        )
-
-        extra_features = spec.get("features")
-        if extra_features:
-            inherited["features"] = sorted(set(extra_features + inherited.get("features", [])))
-
-        if spec.get("optional"):
-            inherited["optional"] = True
-
-        if spec.get("package"):
-            inherited["package"] = spec["package"]
-
-        return inherited
-    return _spec_to_dep_dict_inner(dep, spec, is_build)
 
 def _generate_hub_and_spokes(
         mctx,
@@ -203,78 +135,22 @@ def _generate_hub_and_spokes(
     existing_facts = getattr(mctx, "facts", {}) or {}
     facts = {}
 
-    workspace_root = _normalize_path(cargo_metadata["workspace_root"])
-    workspace_root_prefix = workspace_root + "/"
-    workspace_member_keys = {}
-    for package in cargo_metadata["packages"]:
-        workspace_member_keys[(package["name"], package["version"])] = True
-
-    dep_paths_by_name = {}
-    for package in cargo_metadata["packages"]:
-        for dep in package.get("dependencies", []):
-            dep_path = dep.get("path")
-            if dep_path:
-                dep_paths_by_name[dep["name"]] = _relative_to_workspace(dep_path, workspace_root)
-
-    patch_paths_by_name = {}
-    for registry_patches in workspace_cargo_toml_json.get("patch", {}).values():
-        for name, spec in registry_patches.items():
-            if type(spec) != "dict":
-                continue
-
-            patch_path = spec.get("path")
-            if not patch_path:
-                continue
-
-            if patch_path.startswith("/"):
-                normalized = _normalize_path(patch_path)
-                if not normalized.startswith(workspace_root_prefix):
-                    fail("Patch path for %s points outside the workspace: %s" % (name, patch_path))
-                rel_patch_path = normalized.removeprefix(workspace_root_prefix)
-            else:
-                rel_patch_path = _normalize_path(paths.normalize(patch_path))
-
-            patch_paths_by_name[name] = rel_patch_path
-
-    workspace_members = []
-    packages = []
-
-    for package in all_packages:
-        pkg = dict(package)
-
-        if pkg.get("source"):
-            packages.append(pkg)
-            continue
-
-        key = (pkg["name"], pkg["version"])
-        if key in workspace_member_keys:
-            workspace_members.append(pkg)
-            continue
-
-        rel_path = patch_paths_by_name.get(pkg["name"]) or dep_paths_by_name.get(pkg["name"])
-        local_path = rel_path
-        if rel_path and not rel_path.startswith("/"):
-            local_path = paths.join(workspace_root, rel_path)
-
-        if not local_path:
-            fail("Found a path dependency on %s %s but could not determine its path from Cargo.toml. Please declare it in [patch] or as a path dependency." % (pkg["name"], pkg["version"]))
-
-        pkg["source"] = "path+" + hub_name + "/" + rel_path
-        pkg["local_path"] = local_path
-        packages.append(pkg)
+    split_packages = split_lockfile_packages(
+        hub_name,
+        cargo_metadata,
+        workspace_cargo_toml_json,
+        all_packages,
+    )
+    packages = split_packages.packages
+    workspace_members = split_packages.workspace_members
 
     mctx.report_progress("Computing dependencies and features")
 
-    feature_resolutions_by_fq_crate = dict()
-
-    versions_by_name = dict()
-    for package_index in range(len(packages)):
-        package = packages[package_index]
+    facts_by_fq_crate = {}
+    for package in packages:
         name = package["name"]
         version = package["version"]
         source = package["source"]
-
-        _add_to_dict(versions_by_name, name, version)
 
         if source.startswith("sparse+"):
             key = name + "_" + version
@@ -332,26 +208,7 @@ def _generate_hub_and_spokes(
             mctx.watch(mctx.path(cargo_toml_path))
             annotation = annotation_for(annotations, name, package["version"])
             cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
-
-            dependencies = [
-                _spec_to_dep_dict(dep, spec, annotation, {})
-                for dep, spec in cargo_toml_json.get("dependencies", {}).items()
-            ] + [
-                _spec_to_dep_dict(dep, spec, annotation, {}, is_build = True)
-                for dep, spec in cargo_toml_json.get("build-dependencies", {}).items()
-            ]
-
-            for target, value in cargo_toml_json.get("target", {}).items():
-                for dep, spec in value.get("dependencies", {}).items():
-                    converted = _spec_to_dep_dict(dep, spec, annotation, {})
-                    converted["target"] = target
-                    dependencies.append(converted)
-
-            fact = dict(
-                features = cargo_toml_json.get("features", {}),
-                dependencies = dependencies,
-                strip_prefix = "",
-            )
+            fact = cargo_toml_fact(cargo_toml_json, {})
 
             facts[key] = json.encode(fact)
             package["strip_prefix"] = fact.get("strip_prefix", "")
@@ -375,28 +232,10 @@ def _generate_hub_and_spokes(
                     package_workspace_cargo_toml_json = package.get("workspace_cargo_toml_json")
                 strip_prefix = package.get("strip_prefix", "")
 
-                dependencies = [
-                    _spec_to_dep_dict(dep, spec, annotation, package_workspace_cargo_toml_json)
-                    for dep, spec in cargo_toml_json.get("dependencies", {}).items()
-                ] + [
-                    _spec_to_dep_dict(dep, spec, annotation, package_workspace_cargo_toml_json, is_build = True)
-                    for dep, spec in cargo_toml_json.get("build-dependencies", {}).items()
-                ]
+                fact = cargo_toml_fact(cargo_toml_json, package_workspace_cargo_toml_json, strip_prefix = strip_prefix)
 
-                for target, value in cargo_toml_json.get("target", {}).items():
-                    for dep, spec in value.get("dependencies", {}).items():
-                        converted = _spec_to_dep_dict(dep, spec, annotation, package_workspace_cargo_toml_json)
-                        converted["target"] = target
-                        dependencies.append(converted)
-
-                if not dependencies and debug:
+                if not fact["dependencies"] and debug:
                     print(name, version, package["source"])
-
-                fact = dict(
-                    features = cargo_toml_json.get("features", {}),
-                    dependencies = dependencies,
-                    strip_prefix = strip_prefix,
-                )
 
                 # Nest a serialized JSON since max path depth is 5.
                 facts[key] = json.encode(fact)
@@ -405,11 +244,11 @@ def _generate_hub_and_spokes(
         else:
             fail("Unknown source %s for crate %s" % (source, name))
 
-        possible_features = fact["features"]
-        possible_deps = _prepare_possible_deps(fact["dependencies"])
-        feature_resolutions = _new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
-        package["feature_resolutions"] = feature_resolutions
-        feature_resolutions_by_fq_crate[_fq_crate(name, version)] = feature_resolutions
+        facts_by_fq_crate[_fq_crate(name, version)] = fact
+
+    resolved_facts = resolve_package_facts(packages, facts_by_fq_crate, platform_triples)
+    feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate
+    versions_by_name = resolved_facts.versions_by_name
 
     # Only files in the current Bazel workspace can/should be watched, so check where our manifests are located.
     watch_manifests = cargo_lock_path.repo_name == ""

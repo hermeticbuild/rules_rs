@@ -40,6 +40,32 @@ def render_select_build_script_env(platform_items, use_legacy_rules_rust_platfor
 def _exclude_deps_from_features(features):
     return [f for f in features if not f.startswith("dep:")]
 
+_INHERITABLE_PACKAGE_FIELDS = [
+    "version",
+    "edition",
+    "description",
+    "homepage",
+    "repository",
+    "license",
+    # TODO(zbarsky): Do we need to fixup the path for readme and license_file?
+    "license_file",
+    "rust_version",
+    "readme",
+]
+
+def inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml):
+    workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")
+    if not workspace_package:
+        return cargo_toml
+
+    crate_package = cargo_toml["package"]
+    for field in _INHERITABLE_PACKAGE_FIELDS:
+        value = crate_package.get(field)
+        if type(value) == "dict" and value.get("workspace") == True:
+            crate_package[field] = workspace_package.get(field)
+
+    return cargo_toml
+
 def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", gen_build_script = None):
     package_dir = rctx.path(package_path or ".")
     package = cargo_toml["package"]

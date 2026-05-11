@@ -108,6 +108,80 @@ def cargo_metadata_dep_to_dep_dict(dep):
 
     return converted
 
+def _cargo_toml_dep_to_dep_dict_inner(dep, spec, is_build = False, target = None):
+    if type(spec) == "string":
+        converted = {"name": dep}
+    else:
+        converted = {
+            "name": dep,
+            "optional": spec.get("optional", False),
+            "default_features": spec.get("default_features", spec.get("default-features", True)),
+            "features": spec.get("features", []),
+        }
+        if "package" in spec:
+            converted["package"] = spec["package"]
+
+    if is_build:
+        converted["kind"] = "build"
+
+    if target:
+        converted["target"] = target
+
+    return converted
+
+def cargo_toml_dep_to_dep_dict(dep, spec, package_name, workspace_cargo_toml_json = None, is_build = False, target = None):
+    if type(spec) == "dict" and spec.get("workspace") == True:
+        workspace = (workspace_cargo_toml_json or {}).get("workspace")
+        if not workspace:
+            fail("Package %s depends on %s with workspace inheritance, but no workspace section was found" % (package_name, dep))
+        if dep not in workspace.get("dependencies", {}):
+            fail("Package %s depends on %s with workspace inheritance, but it was not found in workspace.dependencies" % (package_name, dep))
+
+        inherited = _cargo_toml_dep_to_dep_dict_inner(dep, workspace["dependencies"][dep], is_build = is_build, target = target)
+
+        extra_features = spec.get("features")
+        if extra_features:
+            inherited["features"] = sorted(set(extra_features + inherited.get("features", [])))
+
+        if spec.get("optional"):
+            inherited["optional"] = True
+
+        if spec.get("package"):
+            inherited["package"] = spec["package"]
+
+        return inherited
+
+    return _cargo_toml_dep_to_dep_dict_inner(dep, spec, is_build = is_build, target = target)
+
+def cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json = None):
+    package_name = cargo_toml_json["package"]["name"]
+    dependencies = [
+        cargo_toml_dep_to_dep_dict(dep, spec, package_name, workspace_cargo_toml_json)
+        for dep, spec in cargo_toml_json.get("dependencies", {}).items()
+    ] + [
+        cargo_toml_dep_to_dep_dict(dep, spec, package_name, workspace_cargo_toml_json, is_build = True)
+        for dep, spec in cargo_toml_json.get("build-dependencies", {}).items()
+    ]
+
+    for target, value in cargo_toml_json.get("target", {}).items():
+        for dep, spec in value.get("dependencies", {}).items():
+            dependencies.append(cargo_toml_dep_to_dep_dict(
+                dep,
+                spec,
+                package_name,
+                workspace_cargo_toml_json,
+                target = target,
+            ))
+
+    return dependencies
+
+def cargo_toml_fact(cargo_toml_json, workspace_cargo_toml_json = None, strip_prefix = ""):
+    return dict(
+        features = cargo_toml_json.get("features", {}),
+        dependencies = cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json),
+        strip_prefix = strip_prefix,
+    )
+
 def prepare_possible_deps(dependencies, converter = None, skip_internal_rustc_placeholder_crates = True):
     possible_deps = []
 
@@ -160,6 +234,116 @@ def compute_workspace_fq_deps(workspace_members, versions_by_name):
         workspace_fq_deps[workspace_member["name"]] = fq_deps
 
     return workspace_fq_deps
+
+def _relative_to_workspace(path, workspace_root):
+    normalized_root = normalize_path(workspace_root)
+    normalized_path = normalize_path(path)
+
+    if not paths.is_absolute(normalized_path):
+        normalized_path = normalize_path(paths.normalize(paths.join(normalized_root, normalized_path)))
+
+    root_parts = [p for p in normalized_root.split("/") if p]
+    path_parts = [p for p in normalized_path.split("/") if p]
+
+    common = 0
+    max_common = min(len(root_parts), len(path_parts))
+    for idx in range(max_common):
+        if root_parts[idx] != path_parts[idx]:
+            break
+        common = idx + 1
+
+    rel_parts = [".."] * (len(root_parts) - common) + path_parts[common:]
+    return "/".join(rel_parts) if rel_parts else "."
+
+def split_lockfile_packages(hub_name, cargo_metadata, workspace_cargo_toml_json, all_packages):
+    workspace_root = normalize_path(cargo_metadata["workspace_root"])
+    workspace_root_prefix = workspace_root + "/"
+
+    workspace_member_keys = {}
+    for package in cargo_metadata["packages"]:
+        workspace_member_keys[(package["name"], package["version"])] = True
+
+    dep_paths_by_name = {}
+    for package in cargo_metadata["packages"]:
+        for dep in package.get("dependencies", []):
+            dep_path = dep.get("path")
+            if dep_path:
+                dep_paths_by_name[dep["name"]] = _relative_to_workspace(dep_path, workspace_root)
+
+    patch_paths_by_name = {}
+    for registry_patches in workspace_cargo_toml_json.get("patch", {}).values():
+        for name, spec in registry_patches.items():
+            if type(spec) != "dict":
+                continue
+
+            patch_path = spec.get("path")
+            if not patch_path:
+                continue
+
+            if patch_path.startswith("/"):
+                normalized = normalize_path(patch_path)
+                if not normalized.startswith(workspace_root_prefix):
+                    fail("Patch path for %s points outside the workspace: %s" % (name, patch_path))
+                rel_patch_path = normalized.removeprefix(workspace_root_prefix)
+            else:
+                rel_patch_path = normalize_path(paths.normalize(patch_path))
+
+            patch_paths_by_name[name] = rel_patch_path
+
+    workspace_members = []
+    packages = []
+
+    for package in all_packages:
+        pkg = dict(package)
+
+        if pkg.get("source"):
+            packages.append(pkg)
+            continue
+
+        key = (pkg["name"], pkg["version"])
+        if key in workspace_member_keys:
+            workspace_members.append(pkg)
+            continue
+
+        rel_path = patch_paths_by_name.get(pkg["name"]) or dep_paths_by_name.get(pkg["name"])
+        local_path = rel_path
+        if rel_path and not rel_path.startswith("/"):
+            local_path = paths.join(workspace_root, rel_path)
+
+        if not local_path:
+            fail("Found a path dependency on %s %s but could not determine its path from Cargo.toml. Please declare it in [patch] or as a path dependency." % (pkg["name"], pkg["version"]))
+
+        pkg["source"] = "path+" + hub_name + "/" + rel_path
+        pkg["local_path"] = local_path
+        packages.append(pkg)
+
+    return struct(
+        packages = packages,
+        workspace_members = workspace_members,
+    )
+
+def resolve_package_facts(packages, facts_by_fq_crate, platform_triples):
+    feature_resolutions_by_fq_crate = {}
+    versions_by_name = {}
+
+    for package_index in range(len(packages)):
+        package = packages[package_index]
+        name = package["name"]
+        version = package["version"]
+
+        add_to_dict(versions_by_name, name, version)
+
+        fact = facts_by_fq_crate[fq_crate(name, version)]
+        possible_features = fact["features"]
+        possible_deps = prepare_possible_deps(fact["dependencies"])
+        feature_resolutions = new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
+        package["feature_resolutions"] = feature_resolutions
+        feature_resolutions_by_fq_crate[fq_crate(name, version)] = feature_resolutions
+
+    return struct(
+        feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,
+        versions_by_name = versions_by_name,
+    )
 
 def _resolve_possible_deps(
         hub_name,
