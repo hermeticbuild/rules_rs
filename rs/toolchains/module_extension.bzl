@@ -292,10 +292,16 @@ def _toolchains_impl(mctx):
                 sha256 = _sha_for("rust-analyzer", base_version, iso_date, exec_triple),
             )
 
+    if host_cargo_repo == None:
+        fail("Could not find host Cargo repository for {}-{}".format(host_os, host_arch))
+    host_cargo = "@{}//:bin/cargo{}".format(
+        host_cargo_repo,
+        ".exe" if host_os == "windows" else "",
+    )
+
     host_tools_repository(
         name = "rs_rust_host_tools",
-        host_cargo_repo = host_cargo_repo,
-        binary_suffix = ".exe" if host_os == "windows" else "",
+        host_cargo = host_cargo,
     )
 
     # `rs_rust_host_tools` is an implementation detail of rules_rs itself.
