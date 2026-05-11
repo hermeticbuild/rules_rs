@@ -933,6 +933,7 @@
       "rustc-1.92.0-aarch64-apple-darwin.tar.xz": "15dee753c9217dff4cf45d734b29dc13ce6017d8a55fe34eed75022b39a63ff0",
       "rustc-1.92.0-aarch64-pc-windows-msvc.tar.xz": "07ba5606143de3bc916455714f67732fca05805591396a8190d5e88b8863eea3",
       "rustc-1.92.0-aarch64-unknown-linux-gnu.tar.xz": "7c8706fad4c038b5eacab0092e15db54d2b365d5f3323ca046fe987f814e7826",
+      "rustc-1.92.0-src.tar.xz": "ebee170bfe4c4dfc59521a101de651e5534f4dae889756a5c97ca9ea40d0c307",
       "rustc-1.92.0-x86_64-apple-darwin.tar.xz": "0facbd5d2742c8e97c53d59c9b5b81db6088cfc285d9ecb99523a50d6765fc5c",
       "rustc-1.92.0-x86_64-pc-windows-msvc.tar.xz": "6aec5aba5384ce1041538e71ebebf671d82e29f4fe697bc7844626d94b0dbfe6",
       "rustc-1.92.0-x86_64-unknown-linux-gnu.tar.xz": "78b2dd9c6b1fcd2621fa81c611cf5e2d6950690775038b585c64f364422886e0",

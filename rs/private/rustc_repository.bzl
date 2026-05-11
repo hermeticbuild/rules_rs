@@ -8,12 +8,6 @@ load(
 load(":rust_repository_utils.bzl", "RUST_REPOSITORY_COMMON_ATTR", "download_and_extract")
 
 def _symlink_rust_objcopy_shared_libraries(rctx, exec_triple):
-    rust_objcopy = rctx.path("lib/rustlib/{}/bin/rust-objcopy".format(exec_triple.str))
-    if not rust_objcopy.exists:
-        rust_objcopy = rctx.path("lib/rustlib/{}/bin/rust-objcopy.exe".format(exec_triple.str))
-    if not rust_objcopy.exists:
-        return
-
     top_level_lib = rctx.path("lib")
     rustlib_lib = "lib/rustlib/{}/lib".format(exec_triple.str)
     rctx.file("{}/.generated".format(rustlib_lib), "")

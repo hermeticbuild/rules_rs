@@ -193,6 +193,16 @@ bzl_library(
     srcs = ["rust_src_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
+        "@bazel_tools//tools/build_defs/repo:utils.bzl",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "rustc_src_repository",
+    srcs = ["rustc_src_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
         ":cargo_workspace_graph",
         ":repository_utils",
         ":toml2json",

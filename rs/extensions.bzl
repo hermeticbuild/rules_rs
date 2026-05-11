@@ -123,7 +123,7 @@ def _generate_hub_and_spokes(
 
     mctx.report_progress("Reading workspace metadata")
     result = mctx.execute(
-        [cargo_path, "metadata", "--no-deps", "--format-version=1", "--quiet"],
+        [cargo_path, "metadata", "--no-deps", "--locked", "--format-version=1", "--quiet"],
         working_directory = str(mctx.path(cargo_lock_path).dirname),
     )
     if result.return_code != 0:
@@ -255,7 +255,6 @@ def _generate_hub_and_spokes(
 
     workspace_resolution = resolve_cargo_workspace_members(
         mctx,
-        hub_name = hub_name,
         cargo_metadata = cargo_metadata,
         packages = packages,
         workspace_members = workspace_members,
@@ -266,6 +265,7 @@ def _generate_hub_and_spokes(
         materialize_workspace_members = False,
         validate_lockfile = validate_lockfile,
         debug = debug,
+        dep_label_prefix = "@%s//:" % hub_name,
         watch_manifests = watch_manifests,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
     )

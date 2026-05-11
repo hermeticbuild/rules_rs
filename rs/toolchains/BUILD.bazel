@@ -49,6 +49,7 @@ bzl_library(
         "//rs/private:rust_repository_utils",
         "//rs/private:rust_src_repository",
         "//rs/private:rustc_repository",
+        "//rs/private:rustc_src_repository",
         "//rs/private:rustfmt_repository",
         "//rs/private:stdlib_repository",
         "//rs/private:toolchains_repository",

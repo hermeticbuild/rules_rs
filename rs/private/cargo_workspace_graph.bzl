@@ -210,7 +210,7 @@ def prepare_possible_deps(dependencies, converter = None, skip_internal_rustc_pl
 
     return possible_deps
 
-def dep_package_name(dep):
+def _dep_package_name(dep):
     return dep.get("package") or dep["name"]
 
 def compute_package_fq_deps(package, versions_by_name, strict = True):
@@ -235,7 +235,7 @@ def compute_package_fq_deps(package, versions_by_name, strict = True):
     return possible_dep_fq_crates_by_name
 
 def select_package_fq_dep(dep, fq_deps):
-    dep_package = dep_package_name(dep)
+    dep_package = _dep_package_name(dep)
     candidates = fq_deps.get(dep_package)
     if not candidates:
         return None
@@ -286,10 +286,10 @@ def _relative_to_workspace(path, workspace_root):
     rel_parts = [".."] * (len(root_parts) - common) + path_parts[common:]
     return "/".join(rel_parts) if rel_parts else "."
 
-def cargo_metadata_dep_paths_by_name(cargo_metadata, workspace_root):
+def _cargo_metadata_dep_paths_by_name(packages, workspace_root):
     package_dirs = {}
 
-    for package in cargo_metadata["packages"]:
+    for package in packages:
         for dep in package.get("dependencies", []):
             dep_path = dep.get("path")
             if not dep_path:
@@ -299,7 +299,7 @@ def cargo_metadata_dep_paths_by_name(cargo_metadata, workspace_root):
 
     return package_dirs
 
-def cargo_toml_patch_paths_by_name(workspace_cargo_toml, workspace_root, workspace_package_dir = ""):
+def _cargo_toml_patch_paths_by_name(workspace_cargo_toml, workspace_root, workspace_package_dir = ""):
     workspace_root = normalize_path(workspace_root)
     workspace_root_prefix = workspace_root + "/"
     package_dirs = {}
@@ -333,8 +333,8 @@ def split_lockfile_packages(hub_name, cargo_metadata, workspace_cargo_toml, all_
     for package in cargo_metadata["packages"]:
         workspace_member_keys[(package["name"], package["version"])] = True
 
-    dep_paths_by_name = cargo_metadata_dep_paths_by_name(cargo_metadata, repo_root)
-    patch_paths_by_name = cargo_toml_patch_paths_by_name(workspace_cargo_toml, repo_root, workspace_package_dir)
+    dep_paths_by_name = _cargo_metadata_dep_paths_by_name(cargo_metadata["packages"], repo_root)
+    patch_paths_by_name = _cargo_toml_patch_paths_by_name(workspace_cargo_toml, repo_root, workspace_package_dir)
     workspace_members = []
     packages = []
 
@@ -367,7 +367,7 @@ def split_lockfile_packages(hub_name, cargo_metadata, workspace_cargo_toml, all_
         workspace_members = workspace_members,
     )
 
-def resolve_package_facts(packages, facts_by_fq_crate, platform_triples, skip_internal_rustc_placeholder_crates = True):
+def _resolve_packages(packages, package_info_by_fq_crate, platform_triples, dep_converter = None, skip_internal_rustc_placeholder_crates = True):
     feature_resolutions_by_fq_crate = {}
     versions_by_name = {}
 
@@ -375,34 +375,55 @@ def resolve_package_facts(packages, facts_by_fq_crate, platform_triples, skip_in
         package = packages[package_index]
         name = package["name"]
         version = package["version"]
+        fq = fq_crate(name, version)
 
         add_to_dict(versions_by_name, name, version)
 
-        fact = facts_by_fq_crate[fq_crate(name, version)]
-        possible_features = fact["features"]
+        package_info = package_info_by_fq_crate[fq]
         possible_deps = prepare_possible_deps(
-            fact["dependencies"],
+            package_info.get("dependencies", []),
+            converter = dep_converter,
             skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
         )
-        feature_resolutions = new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
+        feature_resolutions = new_feature_resolutions(package_index, possible_deps, package_info.get("features", {}), platform_triples)
         package["feature_resolutions"] = feature_resolutions
-        feature_resolutions_by_fq_crate[fq_crate(name, version)] = feature_resolutions
+        feature_resolutions_by_fq_crate[fq] = feature_resolutions
 
     return struct(
         feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,
         versions_by_name = versions_by_name,
     )
 
+def resolve_package_facts(packages, facts_by_fq_crate, platform_triples, skip_internal_rustc_placeholder_crates = True):
+    return _resolve_packages(
+        packages,
+        facts_by_fq_crate,
+        platform_triples,
+        skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
+    )
+
+def resolve_cargo_metadata_packages(packages, cargo_metadata, platform_triples, skip_internal_rustc_placeholder_crates = True):
+    metadata_by_fq_crate = {
+        fq_crate(package["name"], package["version"]): package
+        for package in cargo_metadata["packages"]
+    }
+
+    return _resolve_packages(
+        packages,
+        metadata_by_fq_crate,
+        platform_triples,
+        dep_converter = cargo_metadata_dep_to_dep_dict,
+        skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
+    )
+
 def _resolve_possible_deps(
-        hub_name,
         packages,
         resolver_versions_by_name,
         feature_resolutions_by_fq_crate,
         platform_triples,
         platform_cfg_attrs,
         cfg_match_cache,
-        dep_label_prefix,
-        allow_missing_resolved_deps):
+        dep_label_prefix):
     for package in packages:
         name = package["name"]
         deps_by_name = {}
@@ -414,9 +435,7 @@ def _resolve_possible_deps(
                 add_to_dict(deps_by_name, dep, resolved_version)
 
         for dep in package["feature_resolutions"].possible_deps:
-            dep_package = dep.get("package")
-            if not dep_package:
-                dep_package = dep["name"]
+            dep_package = _dep_package_name(dep)
 
             versions = resolver_versions_by_name.get(dep_package)
             if not versions:
@@ -440,10 +459,8 @@ def _resolve_possible_deps(
 
             dep_fq = fq_crate(dep_package, resolved_version)
             if dep_fq not in feature_resolutions_by_fq_crate:
-                if allow_missing_resolved_deps:
-                    continue
                 fail("Resolved %s dependency %s but no crate metadata was available" % (name, dep_fq))
-            dep["bazel_target"] = "%s%s" % (dep_label_prefix or ("@%s//:" % hub_name), dep_fq)
+            dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
             dep["feature_resolutions"] = feature_resolutions_by_fq_crate[dep_fq]
 
             target = dep.get("target")
@@ -458,7 +475,6 @@ def _resolve_possible_deps(
 def resolve_cargo_workspace_members(
         ctx,
         *,
-        hub_name,
         cargo_metadata,
         packages,
         workspace_members,
@@ -469,8 +485,7 @@ def resolve_cargo_workspace_members(
         materialize_workspace_members,
         validate_lockfile = True,
         debug = False,
-        dep_label_prefix = None,
-        allow_missing_resolved_deps = False,
+        dep_label_prefix = "//:",
         skip_internal_rustc_placeholder_crates = True,
         watch_manifests = False,
         use_legacy_rules_rust_platforms = False):
@@ -521,7 +536,6 @@ def resolve_cargo_workspace_members(
         resolver_packages.append(resolver_package)
 
     _resolve_possible_deps(
-        hub_name,
         resolver_packages,
         resolver_versions_by_name,
         feature_resolutions_by_fq_crate,
@@ -529,7 +543,6 @@ def resolve_cargo_workspace_members(
         platform_cfg_attrs,
         cfg_match_cache,
         dep_label_prefix,
-        allow_missing_resolved_deps,
     )
 
     workspace_fq_deps = compute_workspace_fq_deps(workspace_members, resolver_versions_by_name)
@@ -550,15 +563,12 @@ def resolve_cargo_workspace_members(
         for dep in package["dependencies"]:
             source = dep.get("source")
             dep_name = dep["name"]
-            dep_package = dep_package_name(dep)
+            dep_package = _dep_package_name(dep)
             dep_fq = select_package_fq_dep(dep, fq_deps)
             dep_version = None
             if dep_fq:
                 dep_version = dep_fq[len(dep_package) + 1:]
             is_first_party_dep = not source and dep_version and (dep_package, dep_version) in workspace_member_keys
-
-            if dep_fq and dep_fq not in feature_resolutions_by_fq_crate and allow_missing_resolved_deps:
-                continue
 
             if validate_lockfile and source and source.startswith("registry+"):
                 req = dep["req"]
@@ -586,7 +596,7 @@ def resolve_cargo_workspace_members(
                 fail("Resolved %s dependency %s but no crate metadata was available" % (package["name"], dep_fq))
 
             if not is_first_party_dep or materialize_workspace_members:
-                dep["bazel_target"] = "%s%s" % (dep_label_prefix or ("@%s//:" % hub_name), dep_fq)
+                dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
 
             feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
