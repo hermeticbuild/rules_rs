@@ -15,6 +15,7 @@ load(
     "split_lockfile_packages",
     "workspace_dep_data",
     _fq_crate = "fq_crate",
+    _manifest_package_dir = "manifest_package_dir",
     _normalize_path = "normalize_path",
     _select = "select_items",
 )
@@ -416,6 +417,8 @@ crate.annotation(
         _fq_crate(package["name"], package["version"]): package
         for package in packages
     }
+    repo_root = _normalize_path(cargo_metadata["workspace_root"])
+    workspace_package = _label_directory(cargo_lock_path)
 
     hub_contents = []
     for name, versions in versions_by_name.items():
@@ -477,6 +480,19 @@ alias(
                     alias_name = alias_name,
                     default_version = default_version,
                 ))
+
+    for package in cargo_metadata["packages"]:
+        package_dir = _manifest_package_dir(package["manifest_path"], repo_root)
+        bazel_package = paths.join(workspace_package, package_dir).removesuffix("/")
+        hub_contents.append("""
+alias(
+    name = "{name}-{version}",
+    actual = "@@//{bazel_package}",
+)""".format(
+            name = package["name"],
+            version = package["version"],
+            bazel_package = bazel_package,
+        ))
 
     workspace_deps, conditional_workspace_deps = render_select(
         [],
@@ -577,8 +593,6 @@ RESOLVED_PLATFORMS = select({{
 
     _date(mctx, "done")
 
-    repo_root = _normalize_path(cargo_metadata["workspace_root"])
-    workspace_package = _label_directory(cargo_lock_path)
     data_bzl_contents = render_dep_data(workspace_dep_data(
         cargo_metadata = cargo_metadata,
         feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,

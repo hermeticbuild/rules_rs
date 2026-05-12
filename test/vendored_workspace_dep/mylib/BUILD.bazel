@@ -1,0 +1,9 @@
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "mylib",
+    srcs = ["src/lib.rs"],
+    edition = "2024",
+)

@@ -1,0 +1,8 @@
+[workspace]
+members = ["mylib", "app"]
+exclude = ["vendor/itoa"]
+resolver = "3"
+
+[workspace.dependencies]
+mylib = { path = "./mylib" }
+itoa = { path = "./vendor/itoa" }
