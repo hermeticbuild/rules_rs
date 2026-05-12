@@ -12,6 +12,7 @@ load("@workspace_default_features//:data.bzl", workspace_default_features_dep_da
 load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
 load("@workspace_renamed_path_dep_aliases//:defs.bzl", workspace_renamed_path_dep_aliases_aliases = "aliases")
 load("//:rustdoc_musl_unwind_test.bzl", "rustdoc_musl_unwind_link_flags_test")
+load("//:rustc_dev_test.bzl", "rustc_dev_enabled_inputs_test", "rustc_dev_disabled_inputs_test")
 load("//:verify_aliases.bzl", "verify_alias", "verify_alias_absent", "verify_crate_feature_absent", "verify_crate_feature_present", "verify_dep_absent", "verify_dep_present", "verify_dev_dep_absent")
 
 sh_test(
@@ -45,6 +46,24 @@ rust_doc_test(
 rustdoc_musl_unwind_link_flags_test(
     name = "rustdoc_musl_unwind_link_flags_test",
     target_under_test = ":rustdoc_musl_unwind_doctest",
+)
+
+rust_library(
+    name = "rustc_dev_smoke",
+    srcs = ["rustc_dev_smoke.rs"],
+    crate_name = "rustc_dev_smoke",
+    edition = "2024",
+    tags = ["manual"],
+)
+
+rustc_dev_enabled_inputs_test(
+    name = "rustc_dev_enabled_inputs_test",
+    target_under_test = ":rustc_dev_smoke",
+)
+
+rustc_dev_disabled_inputs_test(
+    name = "rustc_dev_disabled_inputs_test",
+    target_under_test = ":rustc_dev_smoke",
 )
 
 DISABLED = [

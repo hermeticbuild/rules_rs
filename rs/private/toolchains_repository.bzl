@@ -9,6 +9,7 @@ load("@rules_rs//rs/toolchains:declare_rustfmt_toolchains.bzl", "declare_rustfmt
 declare_rustc_toolchains(
     version = {version},
     edition = {edition},
+    include_rustc_dev = {include_rustc_dev},
     extra_rustc_flags = {extra_rustc_flags},
     extra_exec_rustc_flags = {extra_exec_rustc_flags},
 )
@@ -28,6 +29,7 @@ declare_rust_analyzer_toolchains(
             rustfmt_version = repr(rctx.attr.rustfmt_version),
             rust_analyzer_version = repr(rctx.attr.rust_analyzer_version),
             edition = repr(rctx.attr.edition),
+            include_rustc_dev = repr(rctx.attr.include_rustc_dev),
             extra_rustc_flags = repr(rctx.attr.extra_rustc_flags),
             extra_exec_rustc_flags = repr(rctx.attr.extra_exec_rustc_flags),
         ),
@@ -42,6 +44,7 @@ toolchains_repository = repository_rule(
         "rustfmt_version": attr.string(mandatory = True),
         "rust_analyzer_version": attr.string(mandatory = True),
         "edition": attr.string(mandatory = True),
+        "include_rustc_dev": attr.bool(),
         "extra_rustc_flags": attr.string_list_dict(),
         "extra_exec_rustc_flags": attr.string_list_dict(),
     },
