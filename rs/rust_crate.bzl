@@ -39,6 +39,7 @@ def rust_crate(
         build_script_tools,
         build_script_tags,
         is_proc_macro,
+        has_lib,
         binaries,
         use_legacy_rules_rust_platforms,
         extra_compile_data = [],
@@ -139,43 +140,57 @@ def rust_crate(
 
     deps = deps + maybe_build_script
 
-    kwargs = dict(
-        name = name,
-        crate_name = crate_name,
-        version = version,
-        srcs = srcs,
-        compile_data = compile_data,
-        aliases = aliases,
-        deps = deps,
-        data = data,
-        crate_features = crate_features + select(
-            {_platform(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
-            {"//conditions:default": []},
-        ),
-        crate_root = crate_root,
-        edition = edition,
-        rustc_env = rustc_env,
-        rustc_env_files = ["cargo_toml_env_vars.env"],
-        rustc_flags = rustc_flags + ["--cap-lints=allow"],
-        tags = crate_tags,
-        target_compatible_with = target_compatible_with,
-        package_metadata = [name + "_package_metadata"],
-        skip_deps_verification = skip_deps_verification,
-        visibility = ["//visibility:public"],
-        skip_per_crate_rustc_flags = True,
-    )
+    if not has_lib:
+        # HACK: create a stub filegroup target so the hub's `<crate>-<version>`
+        # alias (emitted unconditionally in rs/extensions.bzl) still resolves
+        # for binary-only crates. A cleaner fix would be to make the hub skip
+        # the library alias when the crate has no library, but that is non-trivial.
+        native.filegroup(
+            name = name,
+            tags = crate_tags,
+            target_compatible_with = target_compatible_with,
+            visibility = ["//visibility:public"],
+        )
 
-    if is_proc_macro:
-        (_rust_proc_macro if skip_deps_verification else rust_proc_macro)(**kwargs)
-    else:
-        (_rust_library if skip_deps_verification else rust_library)(**kwargs)
+    if has_lib:
+        kwargs = dict(
+            name = name,
+            crate_name = crate_name,
+            version = version,
+            srcs = srcs,
+            compile_data = compile_data,
+            aliases = aliases,
+            deps = deps,
+            data = data,
+            crate_features = crate_features + select(
+                {_platform(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
+                {"//conditions:default": []},
+            ),
+            crate_root = crate_root,
+            edition = edition,
+            rustc_env = rustc_env,
+            rustc_env_files = ["cargo_toml_env_vars.env"],
+            rustc_flags = rustc_flags + ["--cap-lints=allow"],
+            tags = crate_tags,
+            target_compatible_with = target_compatible_with,
+            package_metadata = [name + "_package_metadata"],
+            skip_deps_verification = skip_deps_verification,
+            visibility = ["//visibility:public"],
+            skip_per_crate_rustc_flags = True,
+        )
 
+        if is_proc_macro:
+            (_rust_proc_macro if skip_deps_verification else rust_proc_macro)(**kwargs)
+        else:
+            (_rust_library if skip_deps_verification else rust_library)(**kwargs)
+
+    binary_lib_dep = [name] if has_lib else []
     for binary, crate_root in binaries.items():
         rust_binary(
             name = binary + "__bin",
             compile_data = compile_data,
             aliases = aliases,
-            deps = [name] + deps,
+            deps = binary_lib_dep + deps,
             data = data,
             crate_features = crate_features,
             crate_root = crate_root,

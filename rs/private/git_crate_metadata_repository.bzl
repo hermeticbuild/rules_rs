@@ -12,6 +12,7 @@ def crate(
         links,
         build_script,
         is_proc_macro,
+        has_lib,
         binaries,
         package_metadata_bazel_deps):
 {rust_crate_call}""".format(
@@ -27,6 +28,7 @@ def crate(
                 crate_name = "crate_name",
                 crate_root = "crate_root",
                 edition = "edition",
+                has_lib = "has_lib",
                 is_proc_macro = "is_proc_macro",
                 links = "links",
                 name = repr(rctx.attr.package_name),

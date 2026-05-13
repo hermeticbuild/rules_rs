@@ -117,6 +117,7 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
     lib = cargo_toml.get("lib", {})
     is_proc_macro = lib.get("proc-macro") or lib.get("proc_macro") or False
     crate_root = (lib.get("path") or "src/lib.rs").removeprefix("./")
+    has_lib = "lib" in cargo_toml or package_dir.get_child(crate_root).exists
 
     edition = package.get("edition", "2015")
     crate_name = lib.get("name")
@@ -148,6 +149,7 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
             "crate_name": repr(crate_name),
             "crate_root": repr(crate_root),
             "edition": repr(edition),
+            "has_lib": repr(has_lib),
             "is_proc_macro": repr(is_proc_macro),
             "links": repr(links),
         },
@@ -186,6 +188,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    build_script_tools = {build_script_tools}{conditional_build_script_tools},
 {indent}    build_script_tags = {build_script_tags},
 {indent}    is_proc_macro = {is_proc_macro},
+{indent}    has_lib = {has_lib},
 {indent}    binaries = {binaries},
 {indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
 {skip_deps_verification_attr}{indent})
@@ -257,6 +260,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         conditional_build_script_tools = " + " + conditional_build_script_tools if conditional_build_script_tools else "",
         build_script_tags = repr(attr.build_script_tags),
         is_proc_macro = values["is_proc_macro"],
+        has_lib = values["has_lib"],
         binaries = values["binaries"],
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         skip_deps_verification_attr = skip_deps_verification_attr,

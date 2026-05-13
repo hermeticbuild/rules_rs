@@ -39,6 +39,7 @@ crate(
     links = {links},
     build_script = {build_script},
     is_proc_macro = {is_proc_macro},
+    has_lib = {has_lib},
     binaries = {binaries},
     package_metadata_bazel_deps = [
         {package_metadata_bazel_deps}
@@ -52,6 +53,7 @@ crate(
         links = cargo.values["links"],
         build_script = cargo.values["build_script"],
         is_proc_macro = cargo.values["is_proc_macro"],
+        has_lib = cargo.values["has_lib"],
         binaries = cargo.values["binaries"],
         package_metadata_bazel_deps = _render_label_list(cargo.bazel_metadata.get("deps", [])),
         additive_build_file_content = additive_build_file_content,

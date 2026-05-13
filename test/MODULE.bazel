@@ -158,6 +158,7 @@ TESTS = [
     "workspace_hyphen_dep_aliases",
     "workspace_renamed_path_dep_aliases",
     "binaries",
+    "binary_only",
     "uv",
 ]
 
@@ -221,6 +222,13 @@ crate.annotation(
         "protoc-gen-prost-extra": "protoc-gen-prost",
     },
     gen_binaries = ["protoc-gen-prost"],
+)
+
+# Test gen_binaries for a binary-only crate (no [lib], no src/lib.rs).
+crate.annotation(
+    crate = "b3sum",
+    gen_binaries = ["b3sum"],
+    repositories = ["binary_only"],
 )
 
 # Fix readme inclusions

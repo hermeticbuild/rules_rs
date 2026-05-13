@@ -324,6 +324,7 @@ filegroup(
         "//self_dev_dependency/mycrate",
         "@binaries//:protoc-gen-prost-extra",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
+        "@binary_only//:b3sum__b3sum",
     ] + select({
         "@platforms//os:windows": [],
         "//conditions:default": [
