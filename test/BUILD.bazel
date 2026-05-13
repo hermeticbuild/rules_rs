@@ -68,10 +68,14 @@ DISABLED = [
     #"uv",
 ]
 
+# Tests whose `_workspace_deps` aggregation intentionally fails analysis.
+# Their binaries are referenced explicitly in :all_builds below.
+BINARY_ONLY_TESTS = ["binary_only"]
+
 TESTS = [f for f in glob(
     ["*"],
     exclude_directories = 0,
-) if "." not in f and "bazel-" not in f and f not in DISABLED]
+) if "." not in f and "bazel-" not in f and f not in DISABLED and f not in BINARY_ONLY_TESTS]
 
 rust_binary(
     name = "rust_binary",

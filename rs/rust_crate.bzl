@@ -141,14 +141,25 @@ def rust_crate(
     deps = deps + maybe_build_script
 
     if not has_lib:
-        # HACK: create a stub filegroup target so the hub's `<crate>-<version>`
-        # alias (emitted unconditionally in rs/extensions.bzl) still resolves
-        # for binary-only crates. A cleaner fix would be to make the hub skip
-        # the library alias when the crate has no library, but that is non-trivial.
+        # HACK: create a stub target so the hub's `<crate>-<version>` alias
+        # (emitted unconditionally in rs/extensions.bzl) still resolves for
+        # binary-only crates. Marked as incompatible so that library use
+        # fails at analysis time. The descriptive stub name & alias make the
+        # error self-explanatory.
+        #
+        # A cleaner fix would be to make the hub skip the library alias when
+        # the crate has no library, but that is non-trivial.
+        stub_name = name + "_no_library_only_binary"
         native.filegroup(
-            name = name,
+            name = stub_name,
             tags = crate_tags,
-            target_compatible_with = target_compatible_with,
+            target_compatible_with = ["@platforms//:incompatible"],
+            visibility = ["//visibility:public"],
+        )
+        native.alias(
+            name = name,
+            actual = ":" + stub_name,
+            tags = crate_tags,
             visibility = ["//visibility:public"],
         )
 
