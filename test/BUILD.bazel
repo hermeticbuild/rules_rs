@@ -333,6 +333,7 @@ filegroup(
         "@binaries//:protoc-gen-prost-extra",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
         "@binary_only//:b3sum__b3sum",
+        "@root_package//:_workspace_deps",
     ] + select({
         "@platforms//os:windows": [],
         "//conditions:default": [

@@ -184,6 +184,24 @@ TESTS = [
 
 [use_repo(crate, test) for test in TESTS]
 
+# Workspace member whose Cargo.toml lives at the bazel workspace root.
+crate.from_cargo(
+    name = "root_package",
+    cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
+    debug = True,
+    platform_triples = [
+        "aarch64-unknown-linux-gnu",
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-gnullvm",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-gnullvm",
+    ],
+)
+
+use_repo(crate, "root_package")
+
 crate.annotation(
     crate = "rustls",
     # Test for https://github.com/bazelbuild/rules_rust/issues/3626

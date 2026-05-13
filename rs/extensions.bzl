@@ -484,6 +484,12 @@ alias(
     for package in cargo_metadata["packages"]:
         package_dir = _manifest_package_dir(package["manifest_path"], repo_root)
         bazel_package = paths.join(workspace_package, package_dir).removesuffix("/")
+        if not bazel_package:
+            # The alias relies on Bazel's `//foo/bar` -> `//foo/bar:bar`
+            # shorthand to pick a target name. When the workspace member is
+            # at the bazel workspace root, there's no path component to
+            # derive a name from.
+            continue
         hub_contents.append("""
 alias(
     name = "{name}-{version}",
