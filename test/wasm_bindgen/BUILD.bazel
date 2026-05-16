@@ -1,0 +1,28 @@
+load("@rules_rs//rs:rust_shared_library.bzl", "rust_shared_library")
+load("@rules_rust_wasm_bindgen//:defs.bzl", "rust_wasm_bindgen")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+rust_shared_library(
+    name = "wasm_bindgen_smoke_lib",
+    srcs = ["wasm_bindgen_smoke.rs"],
+    crate_name = "wasm_bindgen_smoke",
+    edition = "2021",
+    target_compatible_with = ["@platforms//cpu:wasm32"],
+    deps = [
+        "@rules_rs//rs/private/wasm_bindgen",
+    ],
+)
+
+rust_wasm_bindgen(
+    name = "wasm_bindgen_smoke",
+    target = "nodejs",
+    wasm_file = ":wasm_bindgen_smoke_lib",
+)
+
+sh_test(
+    name = "wasm_bindgen_smoke_test",
+    srcs = ["wasm_bindgen_smoke_test.sh"],
+    args = ["$(rlocationpaths :wasm_bindgen_smoke)"],
+    data = [":wasm_bindgen_smoke"],
+    deps = ["@bazel_tools//tools/bash/runfiles"],
+)

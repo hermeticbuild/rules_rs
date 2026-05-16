@@ -1,0 +1,47 @@
+load("@rules_rust//extensions/wasm_bindgen:defs.bzl", "rust_wasm_bindgen_toolchain")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+])
+
+[
+    alias(
+        name = name,
+        actual = "@rrwbd//:" + actual,
+    )
+    for name, actual in {
+        "serde_json": "serde_json",
+        "wasm_bindgen": "wasm-bindgen",
+        "wasm_bindgen_cli": "wasm-bindgen-cli__wasm-bindgen",
+        "wasm_bindgen_test": "wasm-bindgen-test",
+        "wasm_bindgen_test_runner": "wasm-bindgen-cli__wasm-bindgen-test-runner",
+    }.items()
+]
+
+rust_wasm_bindgen_toolchain(
+    name = "default_wasm_bindgen_toolchain_impl",
+    tags = ["manual"],
+    wasm_bindgen_cli = ":wasm_bindgen_cli",
+)
+
+rust_binary(
+    name = "wasm_bindgen_wrapper",
+    srcs = ["@rules_rust//extensions/wasm_bindgen/private:wasm_bindgen_wrapper.rs"],
+    edition = "2021",
+    tags = ["manual"],
+)
+
+rust_binary(
+    name = "wasm_bindgen_test_runner_wrapper",
+    srcs = ["@rules_rust//extensions/wasm_bindgen/private:wasm_bindgen_test_runner.rs"],
+    edition = "2021",
+    tags = ["manual"],
+    deps = [
+        ":serde_json",
+        "@rules_rust//rust/runfiles",
+    ],
+)

@@ -100,6 +100,24 @@ crate.from_cargo(
     ],
 )
 crate.from_cargo(
+    name = "rrwbd",
+    cargo_lock = "//rs/private/wasm_bindgen:Cargo.lock",
+    cargo_toml = "//rs/private/wasm_bindgen:Cargo.toml",
+    platform_triples = [
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl",
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-gnullvm",
+        "aarch64-pc-windows-msvc",
+        "wasm32-unknown-unknown",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-gnullvm",
+        "x86_64-pc-windows-msvc",
+    ],
+)
+crate.from_cargo(
     name = "rpyo3c",
     cargo_lock = "//rs/private/pyo3:Cargo.lock",
     cargo_toml = "//rs/private/pyo3:Cargo.toml",
@@ -119,6 +137,14 @@ crate.annotation(
 crate.annotation(
     crate = "protoc-gen-tonic",
     gen_binaries = ["protoc-gen-tonic"],
+)
+crate.annotation(
+    crate = "wasm-bindgen-cli",
+    gen_binaries = [
+        "wasm-bindgen",
+        "wasm-bindgen-test-runner",
+    ],
+    repositories = ["rrwbd"],
 )
 crate.annotation(
     build_script_data = [
@@ -158,6 +184,7 @@ crate.annotation(
 )
 use_repo(crate, "rrra")
 use_repo(crate, "rrprd")
+use_repo(crate, "rrwbd")
 use_repo(crate, "rpyo3c")
 
 bazel_dep(name = "rules_go", version = "0.59.0", dev_dependency = True)
@@ -174,6 +201,7 @@ register_toolchains(
     "@rules_rust//extensions/prost:default_prost_toolchain",
     "@rules_rust//extensions/pyo3/toolchains:rust_toolchain",
     "@rules_rust//extensions/pyo3/toolchains:toolchain",
+    "@rules_rust//extensions/wasm_bindgen:default_wasm_bindgen_toolchain",
     dev_dependency = True,
 )
 
