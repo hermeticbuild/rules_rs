@@ -52,6 +52,7 @@ DISABLED = [
     "3rd_party",
     "pyo3",
     "prost",
+    "wasm_bindgen",
     #"binaries",
     #"build_script_aliases",
     #"build_script_env_select",

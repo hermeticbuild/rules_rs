@@ -31,9 +31,9 @@ def _rules_rust_impl(mctx):
 
     http_archive(
         name = "rules_rust",
-        integrity = "sha256-/YW9MDoN9z9QS4GYQV7tX776ld0cCmDxZn+3xKPpRnk=",
-        strip_prefix = "rules_rust-626945d9b9105febd3368c8a5298948439cfe7a9",
-        url = "https://github.com/hermeticbuild/rules_rust/archive/626945d9b9105febd3368c8a5298948439cfe7a9.tar.gz",
+        integrity = "sha256-/a9KfF83cNiK/bvRenQT664cn2tHTZuVMrE9kmPf89s=",
+        strip_prefix = "rules_rust-50f00f8c00ccafaccb983432dade3526f926aafc",
+        url = "https://github.com/hermeticbuild/rules_rust/archive/50f00f8c00ccafaccb983432dade3526f926aafc.tar.gz",
         patches = patches,
         patch_strip = strip,
     )

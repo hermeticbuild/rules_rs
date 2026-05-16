@@ -24,6 +24,12 @@ bzl_library(
 )
 
 bzl_library(
+    name = "rules_rust_wasm_bindgen",
+    srcs = ["rules_rust_wasm_bindgen.bzl"],
+    visibility = ["//visibility:public"],
+)
+
+bzl_library(
     name = "rules_rust_reexported_extensions",
     srcs = ["rules_rust_reexported_extensions.bzl"],
     visibility = ["//visibility:public"],
