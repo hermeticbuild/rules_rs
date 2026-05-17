@@ -11,6 +11,7 @@ load("//rs/experimental/miri/private:miri_repository.bzl", "miri_repository")
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_AND_2_TRIPLES")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
+load("//rs/private:default_lint_config_repository.bzl", "default_lint_config_repository")
 load("//rs/private:host_tools_repository.bzl", "host_tools_repository")
 load("//rs/private:rust_analyzer_repository.bzl", "rust_analyzer_repository")
 load("//rs/private:rust_src_repository.bzl", "rust_src_repository")
@@ -84,6 +85,11 @@ _TOOLCHAIN_TAG = tag_class(
             doc = "Default edition to apply to toolchains.",
             default = _DEFAULT_EDITION,
         ),
+        "default_lint_config": attr.label(
+            doc = "Default lint_config label applied to rules_rs Rust targets " +
+                  "when they don't set lint_config explicitly. Should refer to " +
+                  "a target providing LintsInfo (e.g. @crates//:cargo_lints).",
+        ),
         "extra_rustc_flags": attr.string_list_dict(
             doc = "Additional rustc flags by target triple.",
         ),
@@ -154,9 +160,17 @@ def _toolchains_impl(mctx):
 
     version_tags = []
     had_tags = True
+    root_default_lint_config = None
     for mod in mctx.modules:
         for tag in mod.tags.toolchain:
             version_tags.append(tag)
+            if mod.is_root and tag.default_lint_config:
+                if root_default_lint_config and root_default_lint_config != tag.default_lint_config:
+                    fail(
+                        "Conflicting default_lint_config values on root module toolchain tags: " +
+                        "{} vs {}".format(root_default_lint_config, tag.default_lint_config),
+                    )
+                root_default_lint_config = tag.default_lint_config
 
     if not version_tags:
         had_tags = False
@@ -166,6 +180,7 @@ def _toolchains_impl(mctx):
             rustfmt_version = "",
             rust_analyzer_version = "",
             edition = _DEFAULT_EDITION,
+            default_lint_config = None,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
         ))
@@ -417,10 +432,17 @@ def _toolchains_impl(mctx):
         host_cargo = host_cargo,
     )
 
-    # `rs_rust_host_tools` is an implementation detail of rules_rs itself.
-    # Report it as a direct dependency only for the rules_rs root module so
-    # user modules are not asked to import it.
-    direct_deps = ["rs_rust_host_tools"] if root_module_name == "rules_rs" else []
+    default_lint_config_repository(
+        name = "rules_rs_default_lint_config",
+        lint_config = str(root_default_lint_config) if root_default_lint_config else "",
+    )
+
+    # `rs_rust_host_tools` and `rules_rs_default_lint_config` are implementation
+    # details of rules_rs itself. Report them as direct dependencies only for the
+    # rules_rs root module so user modules are not asked to import them.
+    direct_deps = (
+        ["rs_rust_host_tools", "rules_rs_default_lint_config"] if root_module_name == "rules_rs" else []
+    )
     direct_dev_deps = []
     repo_configs = {}
     for tag in version_tags:
