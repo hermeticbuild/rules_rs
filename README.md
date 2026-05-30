@@ -358,6 +358,7 @@ See https://registry.bazel.build/docs/rules_rs
 - [formatjs](https://github.com/formatjs/formatjs)
 - [Trace Machina Nativelink](https://github.com/TraceMachina/nativelink)
 - [Selenium](https://github.com/SeleniumHQ/selenium)
+- [Etsy](https://www.etsy.com/)
 
 ## Telemetry And Privacy Policy
 
