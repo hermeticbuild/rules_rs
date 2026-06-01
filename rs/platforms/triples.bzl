@@ -4,17 +4,15 @@ load(
     _triple_to_constraint_set = "triple_to_constraint_set",
 )
 
-def triple_to_constraint_set(target_triple):
+def triple_to_rust_constraint_set(target_triple):
     constraints = _triple_to_constraint_set(target_triple)
     t = triple(target_triple)
 
     if t.system in ("linux", "nixos"):
         if t.abi == "musl" or "musl" in target_triple:
-            # Rustc passes `-no-pie` on musl so make sure we align.
-            constraints.append("@llvm//constraints/libc:musl")
-            constraints.append("@llvm//constraints/pie:off")
+            constraints.append("@rules_rs//rs/platforms/constraints:musl")
         else:
-            constraints.append("@llvm//constraints/libc:gnu.2.28")
+            constraints.append("@rules_rs//rs/platforms/constraints:glibc")
     elif t.system == "windows":
         constraints.append("@llvm//constraints/windows/abi:" + t.abi)
 
@@ -23,6 +21,23 @@ def triple_to_constraint_set(target_triple):
         # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnu.rs#L44
         if t.abi in ("gnu", "gnullvm"):
             constraints.append("@llvm//constraints/windows/crt:msvcrt")
+
+    return constraints
+
+def triple_to_constraint_set(target_triple):
+    constraints = triple_to_rust_constraint_set(target_triple)
+    t = triple(target_triple)
+
+    if t.system in ("linux", "nixos"):
+        if t.abi == "musl" or "musl" in target_triple:
+            # Rustc passes `-no-pie` on musl so make sure we align.
+            constraints.append("@llvm//constraints/libc:musl")
+            constraints.append("@llvm//constraints/pie:off")
+        else:
+            # Leave the concrete glibc version to the consuming workspace. The
+            # generated rules_rs platforms should still select LLVM's GNU
+            # toolchains when used directly.
+            constraints.append("@llvm//constraints/libc:unconstrained")
 
     return constraints
 

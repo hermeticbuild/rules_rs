@@ -8,11 +8,10 @@
  use std::ffi::{OsStr, OsString};
  use std::fmt::Debug;
  use std::path::{Path, PathBuf};
-@@ -242,9 +243,102 @@
-         } else {
-             name.to_string()
-         }
-+    }
+@@ -528,8 +529,133 @@
+ 
+ fn current_dir() -> PathBuf {
+     std::env::current_dir().unwrap()
 +}
 +
 +#[derive(Clone)]
@@ -31,13 +30,6 @@
 +impl PrebuiltLibraries {
 +    fn iter(&self) -> impl Iterator<Item = &PrebuiltLibrary> {
 +        std::iter::once(&self.crypto).chain(self.ssl.as_ref())
-+    }
-+
-+    fn link_names(&self) -> (String, Option<String>) {
-+        (
-+            self.crypto.link_name.clone(),
-+            self.ssl.as_ref().map(|lib| lib.link_name.clone()),
-+        )
 +    }
 +}
 +
@@ -66,47 +58,23 @@
 +            link_name,
 +            link_type,
 +        })
-     }
++    }
 +
 +    fn link_dir(&self) -> Option<PathBuf> {
 +        self.path.parent().map(Path::to_path_buf)
 +    }
- }
- 
++}
++
 +struct PrebuiltBuilder {
-+    manifest_dir: PathBuf,
-+    out_dir: PathBuf,
-+    build_prefix: Option<String>,
 +    libraries: PrebuiltLibraries,
 +}
 +
 +impl PrebuiltBuilder {
-+    fn new(
-+        manifest_dir: PathBuf,
-+        out_dir: PathBuf,
-+        build_prefix: Option<String>,
-+        libraries: PrebuiltLibraries,
-+    ) -> Self {
-+        Self {
-+            manifest_dir,
-+            out_dir,
-+            build_prefix,
-+            libraries,
-+        }
-+    }
-+
-+    fn build_rust_wrapper(&self) {
-+        // aws-lc-sys 0.37.0 does not include rust_wrapper.c.
++    fn new(libraries: PrebuiltLibraries) -> Self {
++        Self { libraries }
 +    }
 +}
 +
- const VERSION: &str = env!("CARGO_PKG_VERSION");
- 
- fn prefix_string() -> String {
-@@ -404,6 +498,70 @@
-     std::env::current_dir().unwrap()
- }
- 
 +fn select_prebuilt_path(var: &str, value: &str) -> Result<PathBuf, String> {
 +    let expected = if var.contains("CRYPTO") { "crypto" } else { "ssl" };
 +    let mut fallback: Option<PathBuf> = None;
@@ -135,8 +103,8 @@
 +        let path = select_prebuilt_path(var, &value).unwrap_or_else(|err| panic!("{err}"));
 +        PrebuiltLibrary::new(path).unwrap_or_else(|err| panic!("{err}"))
 +    })
-+}
-+
+ }
+ 
 +fn detect_prebuilt_libraries() -> Option<PrebuiltLibraries> {
 +    let crypto = prebuilt_library_from_env("PREBUILT_CRYPTO");
 +    let ssl = prebuilt_library_from_env("PREBUILT_SSL");
@@ -174,10 +142,12 @@
  fn get_builder(prefix: &Option<String>, manifest_dir: &Path, out_dir: &Path) -> Box<dyn Builder> {
      let cmake_builder_builder = || {
          Box::new(CmakeBuilder::new(
-@@ -452,6 +610,53 @@
+@@ -580,6 +706,42 @@
+     fn check_dependencies(&self) -> Result<(), String>;
+     fn build(&self) -> Result<(), String>;
      fn name(&self) -> &str;
- }
- 
++}
++
 +impl Builder for PrebuiltBuilder {
 +    fn check_dependencies(&self) -> Result<(), String> {
 +        for lib in self.libraries.iter() {
@@ -212,76 +182,24 @@
 +    fn name(&self) -> &str {
 +        "prebuilt"
 +    }
-+}
-+
- #[derive(Clone, Copy, Debug, PartialEq, Eq)]
- pub(crate) enum CStdRequested {
-     C99,
-@@ -690,14 +895,26 @@
+ }
  
-     let manifest_dir = current_dir();
-     let manifest_dir = dunce::canonicalize(Path::new(&manifest_dir)).unwrap();
-+    let out_dir = out_dir();
-     let prefix_str = prefix_string();
--    let prefix = if is_no_prefix() {
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+@@ -978,9 +1140,15 @@
+     prepare_cargo_cfg();
+ 
+     let manifest_dir = canonicalized_manifest_dir();
+-    let prefix = (!is_no_prefix()).then(prefix_string);
 +    let prebuilt_libraries = detect_prebuilt_libraries();
-+    let prefix = if is_no_prefix() || prebuilt_libraries.is_some() {
-         None
-     } else {
-         Some(prefix_str)
-     };
++    let prefix = (!is_no_prefix() && prebuilt_libraries.is_none()).then(prefix_string);
  
 -    let builder = get_builder(&prefix, &manifest_dir, &out_dir());
-+    let builder: Box<dyn Builder> = if let Some(ref libraries) = prebuilt_libraries {
++    let builder: Box<dyn Builder> = if let Some(libraries) = prebuilt_libraries {
 +        emit_warning("Using prebuilt AWS-LC libraries provided via AWS_LC_SYS_PREBUILT_*");
-+        Box::new(PrebuiltBuilder::new(
-+            manifest_dir.clone(),
-+            out_dir.clone(),
-+            prefix.clone(),
-+            libraries.clone(),
-+        ))
++        Box::new(PrebuiltBuilder::new(libraries))
 +    } else {
-+        get_builder(&prefix, &manifest_dir, &out_dir)
++        get_builder(&prefix, &manifest_dir, &out_dir())
 +    };
      emit_warning(format!("Building with: {}", builder.name()));
-     emit_warning(format!("Symbol Prefix: {:?}", &prefix));
+     emit_warning(format!("Symbol Prefix: {prefix:?}"));
  
-@@ -754,7 +971,7 @@
-                 "External bindgen required, but external bindgen unable to produce SSL bindings.",
-             );
-         } else {
--            let gen_bindings_path = out_dir().join("bindings.rs");
-+            let gen_bindings_path = out_dir.join("bindings.rs");
-             let result = invoke_external_bindgen(&manifest_dir, &prefix, &gen_bindings_path);
-             match result {
-                 Ok(()) => {
-@@ -775,13 +992,25 @@
- 
-     println!(
-         "cargo:include={}",
--        setup_include_paths(&out_dir(), &manifest_dir).display()
-+        setup_include_paths(&out_dir, &manifest_dir).display()
-     );
- 
-     // export the artifact names
--    println!("cargo:libcrypto={}_crypto", prefix_string());
--    if cfg!(feature = "ssl") {
--        println!("cargo:libssl={}_ssl", prefix_string());
-+    let (libcrypto_name, libssl_name) = if let Some(ref libraries) = prebuilt_libraries {
-+        libraries.link_names()
-+    } else {
-+        (
-+            OutputLib::Crypto.libname(&prefix),
-+            if cfg!(feature = "ssl") {
-+                Some(OutputLib::Ssl.libname(&prefix))
-+            } else {
-+                None
-+            },
-+        )
-+    };
-+    println!("cargo:libcrypto={}", libcrypto_name);
-+    if let Some(name) = libssl_name {
-+        println!("cargo:libssl={name}");
-     }
- 
-     println!("cargo:conf={}", OSSL_CONF_DEFINES.join(","));

@@ -11,7 +11,6 @@ common --disk_cache=~/bazel_cache
 
 common --@llvm//config:experimental_stub_libgcc_s
 common --enable_platform_specific_config
-common:linux --host_platform=//:local_gnu_platform
 
 common --remote_cache=grpcs://remote.buildbuddy.io
 common --experimental_remote_downloader=grpcs://remote.buildbuddy.io

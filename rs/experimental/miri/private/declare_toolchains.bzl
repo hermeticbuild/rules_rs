@@ -1,7 +1,7 @@
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/experimental/miri/private:sysroot.bzl", "miri_sysroot")
 load("//rs/experimental/miri/private:toolchain.bzl", "miri_sysroot_toolchain", "miri_toolchain")
-load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "triple_to_constraint_set")
+load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "triple_to_rust_constraint_set")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
 
 def declare_miri_toolchains(
@@ -61,7 +61,7 @@ def declare_miri_toolchains(
 
         for target_triple in ALL_TARGET_TRIPLES:
             target_key = sanitize_triple(target_triple)
-            target_compatible_with = triple_to_constraint_set(target_triple)
+            target_compatible_with = triple_to_rust_constraint_set(target_triple)
 
             native.toolchain(
                 name = "%s_to_%s_%s_miri_sysroot" % (triple_suffix, target_key, version_key),

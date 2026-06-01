@@ -50,3 +50,6 @@ yew = "0.21.0"
 
 [target.'cfg(not(windows))'.dependencies]
 tao = "0.34.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libudev-sys = "0.1.4"

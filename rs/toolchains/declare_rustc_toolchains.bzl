@@ -1,6 +1,6 @@
 load("@rules_rust//rust:toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
-load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES", "triple_to_constraint_set")
+load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES", "triple_to_rust_constraint_set")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
 
 def _channel(version):
@@ -38,7 +38,7 @@ def declare_rustc_toolchains(
         config_setting = "source_stdlib_building_" + target_key
         native.config_setting(
             name = config_setting,
-            constraint_values = triple_to_constraint_set(target_triple),
+            constraint_values = triple_to_rust_constraint_set(target_triple),
             flag_values = {
                 "@rules_rs//rs/private:source_stdlib_building": "true",
             },
@@ -179,7 +179,7 @@ def declare_rustc_toolchains(
                     "@platforms//os:" + exec_triple.system,
                     "@platforms//cpu:" + exec_triple.arch,
                 ],
-                target_compatible_with = triple_to_constraint_set(target_triple),
+                target_compatible_with = triple_to_rust_constraint_set(target_triple),
                 target_settings = [
                     "@rules_rust//rust/private:bootstrapped",
                     "@rules_rust//rust/toolchain/channel:" + channel,
@@ -195,7 +195,7 @@ def declare_rustc_toolchains(
                     "@platforms//os:" + exec_triple.system,
                     "@platforms//cpu:" + exec_triple.arch,
                 ],
-                target_compatible_with = triple_to_constraint_set(target_triple),
+                target_compatible_with = triple_to_rust_constraint_set(target_triple),
                 target_settings = [
                     "@rules_rust//rust/private:bootstrapping",
                     "@rules_rust//rust/toolchain/channel:" + channel,

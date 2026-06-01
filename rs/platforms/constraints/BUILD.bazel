@@ -1,5 +1,24 @@
 package(default_visibility = ["//visibility:public"])
 
+constraint_setting(
+    name = "linux_libc",
+    # Keep plain Linux platforms on the normal GNU path unless they explicitly
+    # opt into musl. This lets Rust toolchains match either a versioned LLVM
+    # glibc platform or the generic LLVM glibc platform without depending on
+    # LLVM's concrete libc version constraint.
+    default_constraint_value = "glibc",
+)
+
+constraint_value(
+    name = "glibc",
+    constraint_setting = "linux_libc",
+)
+
+constraint_value(
+    name = "musl",
+    constraint_setting = "linux_libc",
+)
+
 alias(
     name = "windows_abi",
     actual = "@llvm//constraints/windows/abi:abi",

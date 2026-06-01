@@ -66,25 +66,18 @@ use_repo(crate, "crates")
 
 ### `.bazelrc`
 
-Set an explicit host platform for operating systems with ABI choices. Linux and Windows host platforms need an ABI constraint so Rust toolchain resolution can choose the matching exec toolchain.
+Linux hosts work with Bazel's default host platform. If you also build on Windows,
+set an explicit host platform there so Rust toolchain resolution can choose the
+right ABI.
 
 ```bazelrc
 common --enable_platform_specific_config
-common:linux --host_platform=//platforms:local_gnu
 common:windows --host_platform=//platforms:local_windows_msvc
 ```
 
 ### `platforms/BUILD.bazel`
 
 ```bzl
-platform(
-    name = "local_gnu",
-    parents = ["@platforms//host"],
-    constraint_values = [
-        "@llvm//constraints/libc:gnu.2.28",
-    ],
-)
-
 platform(
     name = "local_windows_msvc",
     parents = ["@platforms//host"],
