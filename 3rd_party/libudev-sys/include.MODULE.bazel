@@ -1,0 +1,10 @@
+bazel_dep(name = "systemd", version = "260.1")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "libudev-sys",
+    gen_build_script = "off",
+    deps = ["@systemd//:libudev"],
+)
+
+inject_repo(crate, "systemd")
