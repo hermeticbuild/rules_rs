@@ -65,6 +65,7 @@ rust_library(
     name = "gen_rust_project_lib",
     srcs = [
         "@rules_rust//tools/rust_analyzer:aquery.rs",
+        "@rules_rust//tools/rust_analyzer:flycheck.rs",
         "@rules_rust//tools/rust_analyzer:lib.rs",
         "@rules_rust//tools/rust_analyzer:rust_project.rs",
     ],
