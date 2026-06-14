@@ -17,7 +17,10 @@ common --remote_download_minimal
 common --nobuild_runfile_links
 common --noexperimental_throttle_remote_action_building
 
-common:remote --jobs=800
+common:remote --jobs=200
+common:remote --action_env=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 common:remote --extra_execution_platforms=//:rbe
+common:remote --host_action_env=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 common:remote --platforms=//:rbe
 common:remote --remote_executor=grpcs://remote.buildbuddy.io
+common:remote --shell_executable=/bin/bash

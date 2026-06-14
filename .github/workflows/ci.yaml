@@ -126,6 +126,7 @@ jobs:
             --bazelrc=.bazelrc \
             build \
             --config=remote \
+            --disk_cache= \
             --repository_cache= \
             --repo_contents_cache= \
             --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY \
