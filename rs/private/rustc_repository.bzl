@@ -54,17 +54,65 @@ def _symlink_rust_objcopy_shared_libraries(rctx, exec_triple):
         if entry.basename.startswith("libLLVM"):
             rctx.symlink(entry, "{}/{}".format(rustlib_lib, entry.basename))
 
+# Routes the macOS rust-lld through the sanitize_rust_lld rule (see that file for
+# why this is a build action and not repository-rule work). The public rust-lld
+# filegroup interface is preserved: srcs is the sanitized binary, data carries
+# the auxiliary linker tools unchanged. exec_compatible_with pins the action to a
+# macOS execution platform so it lands on the laptop or macOS RBE worker that
+# actually uses rust-lld.
+_MACOS_RUST_LLD_LOAD = 'load("@rules_rs//rs/private:sanitize_rust_lld.bzl", "sanitize_rust_lld")'
+
+_MACOS_RUST_LLD_BUILD = """\
+sanitize_rust_lld(
+    name = "sanitized-rust-lld",
+    src = "lib/rustlib/{target_triple}/bin/rust-lld{binary_ext}",
+    target_triple = "{target_triple}",
+    exec_compatible_with = ["@platforms//os:macos"],
+)
+
+filegroup(
+    name = "rust-lld",
+    srcs = [":sanitized-rust-lld"],
+    data = glob(
+        include = [
+            "lib/rustlib/{target_triple}/bin/*-ld{binary_ext}",
+            "lib/rustlib/{target_triple}/bin/gcc-ld/*",
+        ],
+        exclude = [
+            "lib/rustlib/{target_triple}/bin/rust-lld{binary_ext}",
+        ],
+        allow_empty = True,
+    ),
+    visibility = ["//visibility:public"],
+)
+"""
+
 def _rustc_repository_impl(rctx):
     exec_triple = triple(rctx.attr.triple)
     download_and_extract(rctx, "rustc", "rustc", exec_triple)
+
     # Upstream Linux rustc bundles libLLVM, which dynamically links against libz.so.1.
     _add_linux_zlib(rctx, exec_triple)
     _symlink_rust_objcopy_shared_libraries(rctx, exec_triple)
-    build_content = [BUILD_for_compiler(
+
+    is_macos = exec_triple.system == "macos"
+
+    # On macOS the linker filegroup is emitted by _MACOS_RUST_LLD_BUILD below so
+    # that rust-lld is routed through the rpath-sanitizing rule; everywhere else
+    # the upstream linker filegroup is used unchanged.
+    build_content = []
+    if is_macos:
+        build_content.append(_MACOS_RUST_LLD_LOAD)
+    build_content.append(BUILD_for_compiler(
         exec_triple,
-        include_linker = True,
+        include_linker = not is_macos,
         include_objcopy = True,
-    )]
+    ))
+    if is_macos:
+        build_content.append(_MACOS_RUST_LLD_BUILD.format(
+            binary_ext = "",
+            target_triple = exec_triple.str,
+        ))
     if includes_rust_analyzer_proc_macro_srv(rctx.attr.version, rctx.attr.iso_date):
         build_content.append(BUILD_for_rust_analyzer_proc_macro_srv(exec_triple))
     rctx.file("BUILD.bazel", "\n".join(build_content))
