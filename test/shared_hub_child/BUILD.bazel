@@ -1,0 +1,10 @@
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+
+rust_library(
+    name = "child",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "shared_hub_child",
+    edition = "2021",
+    visibility = ["//visibility:public"],
+    deps = ["@shared_hub//:log"],
+)

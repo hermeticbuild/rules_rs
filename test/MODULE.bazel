@@ -116,6 +116,15 @@ local_path_override(
     path = "..",
 )
 
+# A separate bzlmod module that consumes the `@shared_hub` hub declared below
+# via `crate.use_hub` (see shared_hub_child/MODULE.bazel). Exercises sharing one
+# hub across modules.
+bazel_dep(name = "shared_hub_child", version = "0.0.0")
+local_path_override(
+    module_name = "shared_hub_child",
+    path = "shared_hub_child",
+)
+
 rules_rust = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
 use_repo(rules_rust, "rules_rust")
 
@@ -166,6 +175,7 @@ TESTS = [
     "optional_build_deps",
     "platform_dep_features",
     "self_dev_dependency",
+    "shared_hub",
     "target_workspace_dep_feature",
     "vendored_crate_override",
     "workspace_default_features",
@@ -218,7 +228,6 @@ crate.from_cargo(
     ],
 )
 use_repo(crate, "root_package")
-
 crate.annotation(
     crate = "rustls",
     # Test for https://github.com/bazelbuild/rules_rust/issues/3626
@@ -302,15 +311,22 @@ crate.annotation(
 
 ### Fix -sys crates
 include("//:3rd_party/bzip2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/glib-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libssh2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/lzma-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libudev-sys/include.MODULE.bazel")
+
 include("//:3rd_party/apriltag-sys/include.MODULE.bazel")
+
 include("//:3rd_party/zstd-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): alsa-sys is not curently tested, fix it
 include("//:3rd_party/alsa-sys/include.MODULE.bazel")
+
 include("//:3rd_party/openssl-sys/include.MODULE.bazel")
 
 single_version_override(
@@ -378,7 +394,9 @@ crate.annotation(
 )
 
 include("//:3rd_party/gdk-pixbuf-sys/include.MODULE.bazel")
+
 include("//:3rd_party/cairo-sys-rs/include.MODULE.bazel")
+
 include("//:3rd_party/atk-sys/include.MODULE.bazel")
 
 crate.annotation(
@@ -405,7 +423,9 @@ clang++: error: no such file or directory: 'bcrypt.lib'
 inject_repo(crate, "mimalloc")
 
 include("//:3rd_party/libz-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libgit2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/coreaudio-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): fix this for realz

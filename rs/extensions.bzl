@@ -641,9 +641,13 @@ def _crate_impl(mctx):
     annotations_by_hub_name = {}
 
     for mod in mctx.modules:
-        if not mod.tags.from_cargo:
-            fail("`.from_cargo` is required. Please update %s" % mod.name)
+        if not mod.tags.from_cargo and not mod.tags.use_hub:
+            fail(("Module '%s' uses the `crate` extension but declares neither " +
+                  "`crate.from_cargo(...)` (to create a hub) nor " +
+                  "`crate.use_hub(...)` (to consume a hub another module " +
+                  "declares). Please add one.") % mod.name)
 
+    for mod in mctx.modules:
         for cfg in mod.tags.from_cargo:
             annotations = build_annotation_map(mod, cfg.name)
             annotations_by_hub_name[cfg.name] = annotations
@@ -659,6 +663,18 @@ def _crate_impl(mctx):
             # Process git downloads first because they may require a followup download if the repo is a workspace,
             # so we want to enqueue them early so they don't get delayed by 1-shot registry downloads.
             start_github_downloads(mctx, downloader_state, annotations, parsed_packages)
+
+    # A `use_hub` consumer must reference a hub some module actually creates.
+    for mod in mctx.modules:
+        for hub in mod.tags.use_hub:
+            if hub.name not in packages_by_hub_name:
+                fail(("Module '%s' calls `crate.use_hub(name = \"%s\")`, but no " +
+                      "module declares a matching `crate.from_cargo` hub. Hubs " +
+                      "in this module graph: %s.") % (
+                    mod.name,
+                    hub.name,
+                    sorted(packages_by_hub_name.keys()),
+                ))
 
     for mod in mctx.modules:
         for cfg in mod.tags.from_cargo:
@@ -797,6 +813,25 @@ def _crate_impl(mctx):
             **kwargs
         )
 
+    # A consumer imports its hub via `use_repo` on the proxy that carries the
+    # `use_hub` tag, so that hub must be reported as a root direct dep or bzlmod
+    # flags the import. A regular `use_hub` reports the hub as a regular dep even
+    # if a same-named hub was created by a `dev_dependency` `from_cargo` (the
+    # "own hub standalone, shared hub as a dependency" idiom) — otherwise bzlmod
+    # warns that a regularly-imported repo was reported as a dev dependency.
+    for mod in mctx.modules:
+        if not mod.is_root:
+            continue
+        for hub in mod.tags.use_hub:
+            if mctx.is_dev_dependency(hub):
+                if hub.name not in direct_deps and hub.name not in direct_dev_deps:
+                    direct_dev_deps.append(hub.name)
+            else:
+                if hub.name in direct_dev_deps:
+                    direct_dev_deps.remove(hub.name)
+                if hub.name not in direct_deps:
+                    direct_deps.append(hub.name)
+
     kwargs = dict(
         root_module_direct_deps = direct_deps,
         root_module_direct_dev_deps = direct_dev_deps,
@@ -838,6 +873,24 @@ _from_cargo = tag_class(
             default = True,
         ),
         "debug": attr.bool(),
+    },
+)
+
+_use_hub = tag_class(
+    doc = """Consume a `@<name>` hub declared by another module instead of \
+declaring your own `from_cargo`.
+
+Use this when a dependency module (e.g. a git submodule with its own \
+`MODULE.bazel`) should share a single hub with the module that owns it, so a \
+crate present in that hub resolves to one shared Bazel target across modules \
+(important for crates with global/`static` state such as `log` or `tracing`). \
+The named hub must be created by some module's `crate.from_cargo(...)` in the \
+same module graph, and that workspace must contain the crates you reference.""",
+    attrs = {
+        "name": attr.string(
+            doc = "The name of the hub repo to consume. Must match a `crate.from_cargo(name = ...)` declared by another module.",
+            default = "crates",
+        ),
     },
 )
 
@@ -1004,6 +1057,7 @@ crate = module_extension(
     tag_classes = {
         "annotation": _annotation,
         "from_cargo": _from_cargo,
+        "use_hub": _use_hub,
     },
 )
 

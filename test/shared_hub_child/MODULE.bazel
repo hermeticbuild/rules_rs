@@ -1,0 +1,16 @@
+module(name = "shared_hub_child", version = "0.0.0")
+
+bazel_dep(name = "rules_rs", version = "0.0.0")
+# Honored only when this module is built standalone (as root). When it is a
+# dependency (as in this test), the test root module provides rules_rs.
+local_path_override(
+    module_name = "rules_rs",
+    path = "../..",
+)
+
+# Consume the "shared_hub" hub declared by the module that owns it, instead of
+# declaring our own. A crate in that hub (here `log`) then resolves to one
+# shared target across both modules.
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.use_hub(name = "shared_hub")
+use_repo(crate, "shared_hub")
