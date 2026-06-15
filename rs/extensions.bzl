@@ -1,7 +1,7 @@
 load("@aspect_tools_telemetry_report//:defs.bzl", "TELEMETRY")  # buildifier: disable=load
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
-load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL")
+load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL", "RS_HOST_RUSTC_LABEL")
 load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(
@@ -86,6 +86,40 @@ def _additive_build_file_content(mctx, annotation):
     content += annotation.additive_build_file_content
     return content
 
+def _rustc_cfg_attrs(mctx, rustc_path, triples, extra_cfg_flags):
+    """Run rustc --print=cfg for each triple and return platform_cfg_attrs.
+
+    Aligns with Cargo's behavior: custom --cfg flags passed via RUSTFLAGS
+    are visible during dependency resolution.
+    """
+    cfg_attrs = []
+    for triple in triples:
+        args = [rustc_path, "--print=cfg", "--target=" + triple]
+        for flag in extra_cfg_flags:
+            if flag.startswith("--cfg"):
+                args.append(flag)
+            elif flag.startswith("-C"):
+                # codegen options don't affect cfg
+                pass
+
+        result = mctx.execute(args, timeout = 30)
+        if result.return_code != 0:
+            fail("rustc --print=cfg failed for %s:\n%s\n%s" % (triple, result.stdout, result.stderr))
+
+        attrs = {"_triple": triple, "true": True, "false": False}
+        for line in result.stdout.strip().split("\n"):
+            if not line:
+                continue
+            eq_idx = line.find("=")
+            if eq_idx != -1:
+                key = line[:eq_idx]
+                value = line[eq_idx + 1:].strip('"')
+                attrs[key] = value
+            else:
+                attrs[line] = True
+        cfg_attrs.append(attrs)
+    return cfg_attrs
+
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
@@ -101,7 +135,8 @@ def _generate_hub_and_spokes(
         validate_lockfile,
         debug,
         use_legacy_rules_rust_platforms,
-        dry_run = False):
+        dry_run = False,
+        extra_cfg_flags = []):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
     Args:
@@ -119,6 +154,7 @@ def _generate_hub_and_spokes(
         validate_lockfile (bool): If true, validate we have appropriate versions in Cargo.lock
         debug (bool): Enable debug logging
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
+        extra_cfg_flags (list[string]): Extra --cfg flags to pass for dependency resolution, e.g. ['--cfg=foo'].
     """
     _date(mctx, "start")
 
@@ -254,6 +290,9 @@ def _generate_hub_and_spokes(
     # Only files in the current Bazel workspace can/should be watched, so check where our manifests are located.
     watch_manifests = cargo_lock_path.repo_name == ""
 
+    rustc_path = mctx.path(RS_HOST_RUSTC_LABEL)
+    platform_cfg_attrs = _rustc_cfg_attrs(mctx, rustc_path, platform_triples, extra_cfg_flags)
+
     workspace_resolution = resolve_cargo_workspace_members(
         mctx,
         cargo_metadata = cargo_metadata,
@@ -269,6 +308,7 @@ def _generate_hub_and_spokes(
         dep_label_prefix = "@%s//:" % hub_name,
         watch_manifests = watch_manifests,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        platform_cfg_attrs = platform_cfg_attrs,
     )
     cfg_match_cache = workspace_resolution.cfg_match_cache
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
@@ -719,9 +759,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True, extra_cfg_flags = cfg.extra_cfg_flags)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, extra_cfg_flags = cfg.extra_cfg_flags)
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
@@ -838,6 +878,11 @@ _from_cargo = tag_class(
             default = True,
         ),
         "debug": attr.bool(),
+        "extra_cfg_flags": attr.string_list(
+            doc = "Extra --cfg flags to pass to rustc --print=cfg for dependency resolution. " +
+                  "Equivalent to the --cfg flags in RUSTFLAGS. " +
+                  "Example: ['--cfg=foo'].",
+        ),
     },
 )
 

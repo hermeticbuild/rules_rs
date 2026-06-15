@@ -416,9 +416,12 @@ def _toolchains_impl(mctx):
             rustc = "@{}//:bin/rustc{}".format(host_rustc_repos[version], host_exe_suffix),
         )
 
+    host_rustc = "@{}//:bin/rustc{}".format(host_rustc_repos[version_tags[0].version], host_exe_suffix)
+
     host_tools_repository(
         name = "rs_rust_host_tools",
         host_cargo = host_cargo,
+        host_rustc = host_rustc,
     )
 
     # `rs_rust_host_tools` is an implementation detail of rules_rs itself.
