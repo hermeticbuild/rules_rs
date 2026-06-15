@@ -3,6 +3,7 @@ load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL", "RS_HOST_RUSTC_LABEL")
 load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
+load("//rs/private:cfg_parser.bzl", "parse_rustc_cfg_output")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
@@ -92,31 +93,27 @@ def _rustc_cfg_attrs(mctx, rustc_path, triples, extra_cfg_flags):
     Aligns with Cargo's behavior: custom --cfg flags passed via RUSTFLAGS
     are visible during dependency resolution.
     """
+    if not extra_cfg_flags:
+        # Keep the existing fast path: resolve_cargo_workspace_members derives
+        # built-in target cfgs from each triple when this returns None.
+        return None
+
     cfg_attrs = []
     for triple in triples:
         args = [rustc_path, "--print=cfg", "--target=" + triple]
         for flag in extra_cfg_flags:
-            if flag.startswith("--cfg"):
-                args.append(flag)
-            elif flag.startswith("-C"):
-                # codegen options don't affect cfg
-                pass
+            if not flag.startswith("--cfg="):
+                fail("extra_cfg_flags entries must use --cfg=<predicate>, got: %s" % flag)
+            args.append(flag)
 
         result = mctx.execute(args, timeout = 30)
         if result.return_code != 0:
             fail("rustc --print=cfg failed for %s:\n%s\n%s" % (triple, result.stdout, result.stderr))
 
-        attrs = {"_triple": triple, "true": True, "false": False}
-        for line in result.stdout.strip().split("\n"):
-            if not line:
-                continue
-            eq_idx = line.find("=")
-            if eq_idx != -1:
-                key = line[:eq_idx]
-                value = line[eq_idx + 1:].strip('"')
-                attrs[key] = value
-            else:
-                attrs[line] = True
+        attrs = parse_rustc_cfg_output(result.stdout)
+        attrs["_triple"] = triple
+        attrs["true"] = True
+        attrs["false"] = False
         cfg_attrs.append(attrs)
     return cfg_attrs
 

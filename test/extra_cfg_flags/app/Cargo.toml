@@ -1,0 +1,9 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[target.'cfg(my_custom_flag)'.dependencies]
+itoa = { workspace = true }

@@ -7,6 +7,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@self_dev_dependency//:data.bzl", self_dev_dependency_dep_data = "DEP_DATA")
 load("@self_dev_dependency//:defs.bzl", self_dev_dependency_aliases = "aliases")
+load("@extra_cfg_flags//:data.bzl", extra_cfg_flags_dep_data = "DEP_DATA")
 load("@target_workspace_dep_feature//:data.bzl", target_workspace_dep_feature_dep_data = "DEP_DATA")
 load("@workspace_default_features//:data.bzl", workspace_default_features_dep_data = "DEP_DATA")
 load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
@@ -263,6 +264,12 @@ verify_crate_feature_absent(
 )
 
 verify_dep_present(
+    name = "verify_extra_cfg_flags_dep_present",
+    dep_data = extra_cfg_flags_dep_data["extra_cfg_flags/app"],
+    expected = "@extra_cfg_flags//:itoa-1.0.17",
+)
+
+verify_dep_present(
     name = "verify_workspace_default_features_dep_present",
     dep_data = workspace_default_features_dep_data["workspace_default_features/app"],
     expected = "@workspace_default_features//:itoa-1.0.17",
@@ -324,6 +331,7 @@ filegroup(
         ":verify_single_crate_dep_data_key",
         ":verify_target_workspace_dep_feature_dep_absent",
         ":verify_target_workspace_dep_feature_feature_absent",
+        ":verify_extra_cfg_flags_dep_present",
         ":verify_workspace_default_features_default_present",
         ":verify_workspace_default_features_dep_present",
         ":verify_workspace_default_features_subfeature_present",

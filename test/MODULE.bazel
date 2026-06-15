@@ -202,6 +202,24 @@ TESTS = [
 
 [use_repo(crate, test) for test in TESTS]
 
+# Test extra_cfg_flags: verify custom --cfg flags affect dependency resolution.
+crate.from_cargo(
+    name = "extra_cfg_flags",
+    cargo_lock = "//:extra_cfg_flags/Cargo.lock",
+    cargo_toml = "//:extra_cfg_flags/Cargo.toml",
+    debug = True,
+    extra_cfg_flags = ["--cfg=my_custom_flag"],
+    platform_triples = [
+        "aarch64-unknown-linux-gnu",
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-gnullvm",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-gnullvm",
+    ],
+)
+use_repo(crate, "extra_cfg_flags")
+
 # Workspace member whose Cargo.toml lives at the bazel workspace root.
 crate.from_cargo(
     name = "root_package",

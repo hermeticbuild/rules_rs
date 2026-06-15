@@ -242,17 +242,12 @@ def triple_to_cfg_attrs(triple):
 def _eval_eq(ctx, key, value, features):
     if key == "feature":
         return value in features
-    if key == "target_feature":
+    actual = ctx.get(key)
+    if actual == None and key == "target_feature":
         return _target_has_feature(ctx, value)
-    known = [
-        "target_os","target_family","target_arch","target_env",
-        "target_vendor","target_endian","target_pointer_width","target_abi",
-    ]
-    if key in known:
-        return ctx.get(key, "") == value
-    # Unknown keys evaluate to False
-    # fail("Unknown key %s" % key)
-    return False
+    if type(actual) == "list":
+        return value in actual
+    return actual == value
 
 def _eval_pred(ctx, name):
     return ctx.get(name, False)
@@ -331,3 +326,32 @@ def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features=[]):
 
 def cfg_matches_ast_for_triples(ast, cfg_attrs, features=[]):
     return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if _cfg_eval(ast, cfg_attr, features)]
+
+def parse_rustc_cfg_output(stdout):
+    """Parse rustc --print=cfg output into cfg_attrs dict.
+
+    rustc --print=cfg output format:
+        predicate_name
+        key="value"
+
+    Returns a dict suitable for use as a single cfg_attr in cfg_matches_expr_for_cfg_attrs.
+    """
+    attrs = {}
+    for line in stdout.strip().split("\n"):
+        if not line:
+            continue
+        eq_idx = line.find("=")
+        if eq_idx == -1:
+            attrs[line] = True
+            continue
+
+        key = line[:eq_idx]
+        value = line[eq_idx + 1:].strip('"')
+        existing = attrs.get(key)
+        if existing == None:
+            attrs[key] = value
+        elif type(existing) == "list":
+            existing.append(value)
+        else:
+            attrs[key] = [existing, value]
+    return attrs
