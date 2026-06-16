@@ -26,6 +26,7 @@ load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repos
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name")
+load("//rs/private:semver.bzl", "select_matching_version")
 load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
@@ -281,12 +282,24 @@ def _generate_hub_and_spokes(
 
     use_home_cargo_credentials = bool(cargo_credentials)
 
+    # Union of the features actually enabled for each crate (by name, across all
+    # versions and platform triples). Returned so `crate.use_hub` consumers can
+    # be validated against what the hub really builds — see `_crate_impl`.
+    enabled_features_by_crate = {}
+
     for package in packages:
         crate_name = package["name"]
         version = package["version"]
         source = package["source"]
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
+
+        crate_enabled = enabled_features_by_crate.get(crate_name)
+        if crate_enabled == None:
+            crate_enabled = set()
+            enabled_features_by_crate[crate_name] = crate_enabled
+        for triple_features in feature_resolutions.features_enabled.values():
+            crate_enabled.update(triple_features)
 
         annotation = annotation_for(annotations, crate_name, version)
         suggested_annotation = None
@@ -421,6 +434,11 @@ crate.annotation(
     repo_root = _normalize_path(cargo_metadata["workspace_root"])
     workspace_package = _label_directory(cargo_lock_path)
 
+    # The version (and, for git deps, the commit) each bare `@<hub>//:<crate>`
+    # alias resolves to. Returned so `crate.use_hub` consumers can assert it via
+    # `expect_version` / `expect_rev` — see `_crate_impl`.
+    resolution_by_crate = {}
+
     hub_contents = []
     for name, versions in versions_by_name.items():
         for version in versions:
@@ -458,6 +476,15 @@ alias(
             fq = sorted(workspace_versions)[-1]
             default_version = fq[len(name) + 1:]
             annotation = annotation_for(annotations, name, default_version)
+
+            default_package = package_by_fq.get(fq)
+            default_source = default_package.get("source", "") if default_package else ""
+            is_git = default_source.startswith("git+")
+            resolution_by_crate[name] = struct(
+                version = default_version,
+                is_git = is_git,
+                commit = parse_git_url(default_source)[1] if is_git else None,
+            )
 
             hub_contents.append("""
 alias(
@@ -623,7 +650,11 @@ RESOLVED_PLATFORMS = select({{
         },
     )
 
-    return facts
+    return struct(
+        facts = facts,
+        enabled_features_by_crate = enabled_features_by_crate,
+        resolution_by_crate = resolution_by_crate,
+    )
 
 def _crate_impl(mctx):
     # TODO(zbarsky): Kick off `cargo` fetch early to mitigate https://github.com/bazelbuild/bazel/issues/26995
@@ -639,6 +670,8 @@ def _crate_impl(mctx):
     cargo_toml_by_hub_name = {}
     cargo_credentials_by_hub_name = {}
     annotations_by_hub_name = {}
+    enabled_features_by_hub_name = {}
+    resolution_by_hub_name = {}
 
     for mod in mctx.modules:
         if not mod.tags.from_cargo and not mod.tags.use_hub:
@@ -737,7 +770,172 @@ def _crate_impl(mctx):
                 for _ in range(25):
                     _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
+            result = _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
+            facts |= result.facts
+            enabled_features_by_hub_name[cfg.name] = result.enabled_features_by_crate
+            resolution_by_hub_name[cfg.name] = result.resolution_by_crate
+
+    # A `use_hub` consumer can assert what the shared hub provides via the
+    # optional `expect_*` guardrails. The hub is generated once by its owning
+    # `from_cargo` and never regenerated for a consumer, so a consumer cannot
+    # change what it gets — the owning workspace is the single source of truth.
+    # Validate the consumer's expectations here and fail with an actionable
+    # message at module-resolution time, rather than letting a mismatch surface
+    # later as a confusing `rustc` error deep in the build.
+    for mod in mctx.modules:
+        for hub in mod.tags.use_hub:
+            enabled_by_crate = enabled_features_by_hub_name.get(hub.name, {})
+            resolution = resolution_by_hub_name.get(hub.name, {})
+
+            # `expect_version` and `expect_rev` are mutually exclusive per crate:
+            # a crate is either registry/path-sourced (assert with the former) or
+            # git-sourced (assert with the latter), never both. Reject the
+            # contradiction up front with intent-focused message.
+            for crate_name in hub.expect_version:
+                if crate_name in hub.expect_rev:
+                    fail(("Module '%s' calls `crate.use_hub(name = \"%s\")` " +
+                          "with both `expect_version` and `expect_rev` for " +
+                          "crate '%s'. A crate is either registry/path-sourced " +
+                          "(use `expect_version`) or git-sourced (use " +
+                          "`expect_rev`), so set at most one.") % (
+                        mod.name,
+                        hub.name,
+                        crate_name,
+                    ))
+
+            # `expect_features`: crate -> features that must be enabled. A
+            # feature counts if enabled on at least one platform triple (the
+            # union is what the hub can build). A consumer cannot turn features
+            # on, so the owning workspace must already enable them.
+            for crate_name, wanted_features in hub.expect_features.items():
+                enabled = enabled_by_crate.get(crate_name)
+                if enabled == None:
+                    fail(("Module '%s' calls `crate.use_hub(name = \"%s\", " +
+                          "expect_features = {...})` expecting crate '%s', but " +
+                          "that hub does not contain '%s'. The hub-owning " +
+                          "`crate.from_cargo` workspace must depend on it. " +
+                          "Crates in hub '%s': %s.") % (
+                        mod.name,
+                        hub.name,
+                        crate_name,
+                        crate_name,
+                        hub.name,
+                        sorted(enabled_by_crate.keys()),
+                    ))
+                missing = [f for f in wanted_features if f not in enabled]
+                if missing:
+                    fail(("Module '%s' calls `crate.use_hub(name = \"%s\")` " +
+                          "expecting crate '%s' with feature(s) %s, but hub " +
+                          "'%s' builds '%s' with only %s. A `use_hub` consumer " +
+                          "cannot enable extra features: add the missing " +
+                          "feature(s) to the hub-owning `crate.from_cargo` " +
+                          "workspace's dependency on '%s'.") % (
+                        mod.name,
+                        hub.name,
+                        crate_name,
+                        sorted(missing),
+                        hub.name,
+                        crate_name,
+                        sorted(enabled),
+                        crate_name,
+                    ))
+
+            # `expect_version`: crate -> Cargo version requirement the version
+            # behind `@<hub>//:<crate>` must satisfy. Only meaningful for
+            # registry/path crates; a git crate's lockfile version is just its
+            # manifest version and does not identify the commit, so reject those
+            # and point at `expect_rev`.
+            for crate_name, version_req in hub.expect_version.items():
+                res = resolution.get(crate_name)
+                if res == None:
+                    fail(("Module '%s' calls `crate.use_hub(name = \"%s\", " +
+                          "expect_version = {...})` expecting crate '%s', but " +
+                          "hub '%s' exposes no `@%s//:%s` target. Crates with a " +
+                          "default version in hub '%s': %s.") % (
+                        mod.name,
+                        hub.name,
+                        crate_name,
+                        hub.name,
+                        hub.name,
+                        crate_name,
+                        hub.name,
+                        sorted(resolution.keys()),
+                    ))
+                if res.is_git:
+                    fail(("Module '%s' calls `crate.use_hub(name = \"%s\")` " +
+                          "with `expect_version` for crate '%s', but '%s' is " +
+                          "git-sourced (commit %s) in hub '%s'. A version " +
+                          "requirement cannot identify a git commit — use " +
+                          "`expect_rev = {\"%s\": \"<commit>\"}` instead.") % (
+                        mod.name,
+                        hub.name,
+                        crate_name,
+                        crate_name,
+                        res.commit,
+                        hub.name,
+                        crate_name,
+                    ))
+                if select_matching_version(version_req, [res.version]) == None:
+                    fail(("Module '%s' calls `crate.use_hub(name = \"%s\")` " +
+                          "expecting crate '%s' at a version matching '%s', but " +
+                          "hub '%s' builds '%s' at %s. A `use_hub` consumer " +
+                          "cannot change the resolved version: align the " +
+                          "hub-owning `crate.from_cargo` workspace.") % (
+                        mod.name,
+                        hub.name,
+                        crate_name,
+                        version_req,
+                        hub.name,
+                        crate_name,
+                        res.version,
+                    ))
+
+            # `expect_rev`: crate -> git commit the version behind
+            # `@<hub>//:<crate>` must be built from (prefix match, so short SHAs
+            # work). Only meaningful for git crates; reject registry/path crates.
+            for crate_name, want_commit in hub.expect_rev.items():
+                res = resolution.get(crate_name)
+                if res == None:
+                    fail(("Module '%s' calls `crate.use_hub(name = \"%s\", " +
+                          "expect_rev = {...})` expecting crate '%s', but hub " +
+                          "'%s' exposes no `@%s//:%s` target. Crates with a " +
+                          "default version in hub '%s': %s.") % (
+                        mod.name,
+                        hub.name,
+                        crate_name,
+                        hub.name,
+                        hub.name,
+                        crate_name,
+                        hub.name,
+                        sorted(resolution.keys()),
+                    ))
+                if not res.is_git:
+                    fail(("Module '%s' calls `crate.use_hub(name = \"%s\")` " +
+                          "with `expect_rev` for crate '%s', but '%s' is not " +
+                          "git-sourced in hub '%s' (it resolves to version %s). " +
+                          "`expect_rev` only applies to git dependencies; use " +
+                          "`expect_version` for registry crates.") % (
+                        mod.name,
+                        hub.name,
+                        crate_name,
+                        crate_name,
+                        hub.name,
+                        res.version,
+                    ))
+                if not res.commit.startswith(want_commit):
+                    fail(("Module '%s' calls `crate.use_hub(name = \"%s\")` " +
+                          "expecting crate '%s' at git commit '%s', but hub " +
+                          "'%s' builds '%s' from %s. A `use_hub` consumer " +
+                          "cannot change the resolved commit: align the " +
+                          "hub-owning `crate.from_cargo` workspace.") % (
+                        mod.name,
+                        hub.name,
+                        crate_name,
+                        want_commit,
+                        hub.name,
+                        crate_name,
+                        res.commit,
+                    ))
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
@@ -890,6 +1088,38 @@ same module graph, and that workspace must contain the crates you reference.""",
         "name": attr.string(
             doc = "The name of the hub repo to consume. Must match a `crate.from_cargo(name = ...)` declared by another module.",
             default = "crates",
+        ),
+        "expect_features": attr.string_list_dict(
+            doc = """Optional guardrail: crate name -> features this module needs \
+enabled in the shared hub.
+
+A `use_hub` consumer shares the hub exactly as the owning `from_cargo` built \
+it and cannot turn features on itself, so a feature the consumer needs but the \
+owner did not enable would otherwise fail late with a confusing `rustc` error. \
+List those features here to instead fail fast at module-resolution time with a \
+message naming the hub, crate, and missing features. A feature counts as \
+enabled if the hub enables it on at least one platform triple.""",
+        ),
+        "expect_version": attr.string_dict(
+            doc = """Optional guardrail: crate name -> Cargo version requirement \
+(e.g. `"0.4"`, `"^1.2"`, `">=0.15, <0.17"`) that the version behind \
+`@<hub>//:<crate>` must satisfy.
+
+Like `expect_features`, this only asserts — a consumer cannot change the \
+resolved version. Fails fast if the shared hub builds the crate at a \
+non-matching version. Only valid for registry/path crates; listing a \
+git-sourced crate fails with a pointer to `expect_rev` (a git dep's version \
+does not identify its commit).""",
+        ),
+        "expect_rev": attr.string_dict(
+            doc = """Optional guardrail: crate name -> git commit that the \
+version behind `@<hub>//:<crate>` must be built from. Matched as a prefix, so a \
+short SHA works.
+
+The meaningful pin for a git dependency (its lockfile version is just the \
+manifest version and does not identify the commit). Like the other `expect_*` \
+guardrails this only asserts. Only valid for git-sourced crates; listing a \
+registry/path crate fails with a pointer to `expect_version`.""",
         ),
     },
 )

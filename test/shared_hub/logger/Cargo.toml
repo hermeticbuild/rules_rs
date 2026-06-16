@@ -5,4 +5,6 @@ edition = "2021"
 publish = false
 
 [dependencies]
-log = "0.4"
+# `std` is enabled here, on the hub-owning workspace, so the shared hub builds
+# `log` with it. The consumer module asserts it via `use_hub(expect_features=)`.
+log = { version = "0.4", features = ["std"] }

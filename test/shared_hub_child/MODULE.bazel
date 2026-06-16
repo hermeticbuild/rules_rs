@@ -12,5 +12,15 @@ local_path_override(
 # declaring our own. A crate in that hub (here `log`) then resolves to one
 # shared target across both modules.
 crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
-crate.use_hub(name = "shared_hub")
+# The `expect_*` args are optional guardrails asserting what the shared hub
+# provides. A consumer cannot change what it gets from the hub, so these fail
+# fast at module-resolution time with a clear message if the hub-owning
+# workspace stops providing it (instead of a confusing `rustc` error later):
+#   - expect_features: `log` is built with `std` enabled (owner turns it on).
+#   - expect_version:  `@shared_hub//:log` satisfies the Cargo req "0.4".
+crate.use_hub(
+    name = "shared_hub",
+    expect_features = {"log": ["std"]},
+    expect_version = {"log": "0.4"},
+)
 use_repo(crate, "shared_hub")
