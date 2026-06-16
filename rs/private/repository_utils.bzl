@@ -192,7 +192,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    has_lib = {has_lib},
 {indent}    binaries = {binaries},
 {indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
-{skip_deps_verification_attr}{indent})
+{world_split_attrs}{skip_deps_verification_attr}{indent})
 """
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
@@ -212,6 +212,47 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_legacy_rules_rust_platforms)
 
     list_indent = ",\n%s        " % indent
+
+    # Split-mode attrs, rendered only when present so unified output stays
+    # byte-identical; getattr() tolerates old attr structs.
+    world_split_attrs = ""
+    build_script_aliases = getattr(attr, "build_script_aliases", {})
+    if build_script_aliases:
+        world_split_attrs += "{indent}    build_script_aliases = {{\n{indent}        {aliases}\n{indent}    }},\n".format(
+            indent = indent,
+            aliases = list_indent.join(['"%s": "%s"' % kv for kv in build_script_aliases.items()]),
+        )
+    host_crate_features_select = getattr(attr, "host_crate_features_select", {})
+    if host_crate_features_select:
+        host_crate_features, host_conditional_crate_features = compute_select(
+            [],
+            {platform: _exclude_deps_from_features(features) for platform, features in host_crate_features_select.items()},
+        )
+        host_deps, conditional_host_deps = render_select([], getattr(attr, "host_deps_select", {}), use_legacy_rules_rust_platforms)
+        host_build_deps, conditional_host_build_deps = render_select([], getattr(attr, "host_build_script_deps_select", {}), use_legacy_rules_rust_platforms)
+        world_split_attrs += """{indent}    host_deps = [
+{indent}        {host_deps}
+{indent}    ]{conditional_host_deps},
+{indent}    host_crate_features = {host_crate_features},
+{indent}    host_conditional_crate_features = {host_conditional_crate_features},
+{indent}    host_build_deps = [
+{indent}        {host_build_deps}
+{indent}    ]{conditional_host_build_deps},
+{indent}    host_aliases = {{
+{indent}        {host_aliases}
+{indent}    }},
+""".format(
+            indent = indent,
+            host_deps = list_indent.join(['"%s"' % d for d in sorted(host_deps)]),
+            conditional_host_deps = " + " + conditional_host_deps if conditional_host_deps else "",
+            host_crate_features = repr(sorted(host_crate_features)),
+            host_conditional_crate_features = repr(host_conditional_crate_features),
+            host_build_deps = list_indent.join(['"%s"' % d for d in sorted(host_build_deps)]),
+            conditional_host_build_deps = " + " + conditional_host_build_deps if conditional_host_build_deps else "",
+            host_aliases = list_indent.join(['"%s": "%s"' % kv for kv in getattr(attr, "host_aliases", {}).items()]),
+        )
+    if getattr(attr, "unactivated", False):
+        world_split_attrs += "%s    unactivated = True,\n" % indent
     extra_deps = " + " + extra_deps if extra_deps else ""
     extra_compile_data = getattr(attr, "extra_compile_data", [])
     extra_compile_data_attr = ""
@@ -265,6 +306,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         has_lib = values["has_lib"],
         binaries = values["binaries"],
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        world_split_attrs = world_split_attrs,
         skip_deps_verification_attr = skip_deps_verification_attr,
     )
 
@@ -309,6 +351,13 @@ rust_crate_attrs = {
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
     "use_legacy_rules_rust_platforms": attr.bool(),
+    # Split-mode attrs, all default-empty (rendered call unchanged when absent).
+    "build_script_aliases": attr.string_dict(),
+    "host_deps_select": attr.string_list_dict(),
+    "host_crate_features_select": attr.string_list_dict(),
+    "host_build_script_deps_select": attr.string_list_dict(),
+    "host_aliases": attr.string_dict(),
+    "unactivated": attr.bool(default = False),
 }
 
 common_attrs = rust_crate_attrs | {

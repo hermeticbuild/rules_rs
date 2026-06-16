@@ -7,9 +7,12 @@ load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
     "cargo_toml_fact",
+    "classify_worlds",
+    "is_divergent_class",
     "platform_label",
     "render_dep_data",
     "render_string_list",
+    "render_world_views",
     "resolve_cargo_workspace_members",
     "resolve_package_facts",
     "split_lockfile_packages",
@@ -86,6 +89,12 @@ def _additive_build_file_content(mctx, annotation):
     content += annotation.additive_build_file_content
     return content
 
+def _class_counts(classes_by_fq):
+    counts = {}
+    for crate_class in classes_by_fq.values():
+        counts[crate_class] = counts.get(crate_class, 0) + 1
+    return counts
+
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
@@ -101,6 +110,8 @@ def _generate_hub_and_spokes(
         validate_lockfile,
         debug,
         use_legacy_rules_rust_platforms,
+        resolver_feature_worlds = "unified",
+        proc_macro_packages = None,
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
@@ -118,6 +129,8 @@ def _generate_hub_and_spokes(
         cargo_config (label): .cargo/config.toml file
         validate_lockfile (bool): If true, validate we have appropriate versions in Cargo.lock
         debug (bool): Enable debug logging
+        resolver_feature_worlds (string): "unified" (legacy) or "split" (cargo resolver v2 host/target worlds)
+        proc_macro_packages (label): Optional JSON file mapping "name-version" -> bool for proc-macro packages
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
     """
     _date(mctx, "start")
@@ -247,6 +260,15 @@ def _generate_hub_and_spokes(
 
         facts_by_fq_crate[_fq_crate(name, version)] = fact
 
+    if proc_macro_packages:
+        # Offline "name-version" -> bool map (from `cargo metadata`); stamped
+        # bits override the one derived from path+/git+ manifests.
+        proc_macro_overrides = json.decode(mctx.read(proc_macro_packages))
+        for package in packages:
+            override = proc_macro_overrides.get(_fq_crate(package["name"], package["version"]))
+            if override != None:
+                package["is_proc_macro"] = bool(override)
+
     resolved_facts = resolve_package_facts(packages, facts_by_fq_crate, platform_triples)
     feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate
     versions_by_name = resolved_facts.versions_by_name
@@ -269,11 +291,31 @@ def _generate_hub_and_spokes(
         dep_label_prefix = "@%s//:" % hub_name,
         watch_manifests = watch_manifests,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        resolver_feature_worlds = resolver_feature_worlds,
     )
     cfg_match_cache = workspace_resolution.cfg_match_cache
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
     workspace_dep_labels_by_triple = workspace_resolution.workspace_dep_labels_by_triple
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
+
+    # Split mode: classify each spoke's world relationship; classes drive _host
+    # emission, label rewriting, the report and unactivated stubs. None when
+    # unified (no render changes).
+    classes_by_fq = None
+    if resolver_feature_worlds == "split":
+        classes_by_fq = classify_worlds(packages, platform_triples)
+        if debug:
+            class_counts = _class_counts(classes_by_fq)
+            divergent_fqs = sorted([
+                fq
+                for fq, crate_class in classes_by_fq.items()
+                if is_divergent_class(crate_class)
+            ])
+            print("split-worlds: resolved in %d rounds; class counts %s; divergent: %s" % (
+                workspace_resolution.resolution_rounds,
+                class_counts,
+                divergent_fqs,
+            ))
 
     _date(mctx, "set up initial deps!")
 
@@ -285,8 +327,9 @@ def _generate_hub_and_spokes(
         crate_name = package["name"]
         version = package["version"]
         source = package["source"]
+        fq = _fq_crate(crate_name, version)
 
-        feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
+        feature_resolutions = feature_resolutions_by_fq_crate[fq]
 
         annotation = annotation_for(annotations, crate_name, version)
         suggested_annotation = None
@@ -340,6 +383,24 @@ crate.annotation(
             crate_features_select = _select(feature_resolutions.features_enabled),
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
+
+        if classes_by_fq != None:
+            # Split mode: swap in the world-merged base views (+ host views for
+            # divergent crates). Annotation kwargs above apply to both worlds.
+            views = render_world_views(feature_resolutions, classes_by_fq[fq], classes_by_fq, platform_triples)
+            kwargs["build_script_deps_select"] = _select(views.build_deps)
+            kwargs["deps_select"] = _select(views.deps)
+            kwargs["aliases"] = views.aliases
+            kwargs["crate_features_select"] = _select(views.crate_features)
+            if views.build_script_aliases != None:
+                kwargs["build_script_aliases"] = views.build_script_aliases
+            if views.host_crate_features != None:
+                kwargs["host_deps_select"] = _select(views.host_deps)
+                kwargs["host_crate_features_select"] = _select(views.host_crate_features)
+                kwargs["host_build_script_deps_select"] = _select(views.host_build_deps)
+                kwargs["host_aliases"] = views.host_aliases
+            if views.unactivated:
+                kwargs["unactivated"] = True
 
         repo_name = _spoke_repo(hub_name, crate_name, version)
         package["target_repo_name"] = repo_name
@@ -434,6 +495,15 @@ alias(
     name = "{name}-{version}",
     actual = "{actual}",
 )""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
+
+            if classes_by_fq != None and is_divergent_class(classes_by_fq.get(_fq_crate(name, version))):
+                # Host-world edges are always version-qualified, so only the fq
+                # `_host` alias is needed (no bare-name variant).
+                hub_contents.append("""
+alias(
+    name = "{name}-{version}_host",
+    actual = "{actual}",
+)""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name + "_host")))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""
@@ -614,13 +684,27 @@ RESOLVED_PLATFORMS = select({{
     if dry_run:
         return
 
+    hub_files = {
+        "BUILD.bazel": "\n".join(hub_contents),
+        "defs.bzl": defs_bzl_contents,
+        "data.bzl": data_bzl_contents,
+    }
+
+    if classes_by_fq != None:
+        # Deterministic divergence report; consumers can snapshot it to surface
+        # class transitions in lockfile-diff review.
+        class_counts = _class_counts(classes_by_fq)
+        hub_files["worlds_report.json"] = json.encode_indent(
+            {
+                "classes": {fq: classes_by_fq[fq] for fq in sorted(classes_by_fq)},
+                "counts": {crate_class: class_counts[crate_class] for crate_class in sorted(class_counts)},
+            },
+            indent = "  ",
+        ) + "\n"
+
     _hub_repo(
         name = hub_name,
-        contents = {
-            "BUILD.bazel": "\n".join(hub_contents),
-            "defs.bzl": defs_bzl_contents,
-            "data.bzl": data_bzl_contents,
-        },
+        contents = hub_files,
     )
 
     return facts
@@ -719,9 +803,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, resolver_feature_worlds = cfg.resolver_feature_worlds, proc_macro_packages = cfg.proc_macro_packages, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, resolver_feature_worlds = cfg.resolver_feature_worlds, proc_macro_packages = cfg.proc_macro_packages)
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
@@ -836,6 +920,21 @@ _from_cargo = tag_class(
         "validate_lockfile": attr.bool(
             doc = "If true, fail if Cargo.lock versions don't satisfy Cargo.toml requirements.",
             default = True,
+        ),
+        "resolver_feature_worlds": attr.string(
+            doc = "Feature resolution mode. 'unified' computes one feature set per crate/triple " +
+                  "(legacy, cargo resolver v1-like unification of host and target). 'split' mirrors " +
+                  "cargo resolver v2: build-dependencies and proc-macro subtrees resolve features " +
+                  "separately from normal dependencies.",
+            values = ["unified", "split"],
+            default = "unified",
+        ),
+        "proc_macro_packages": attr.label(
+            doc = "Optional JSON file mapping \"<name>-<version>\" to true for every proc-macro " +
+                  "package in the lockfile (e.g. generated offline from `cargo metadata`). Used by " +
+                  "resolver_feature_worlds = \"split\" to classify dependency edges. For path/git " +
+                  "crates, `[lib] proc-macro = true` from the crate manifest is honored when this " +
+                  "file has no entry; workspace members are detected from `cargo metadata` directly.",
         ),
         "debug": attr.bool(),
     },

@@ -45,7 +45,18 @@ def rust_crate(
         use_legacy_rules_rust_platforms,
         extra_compile_data = [],
         rustc_env = {},
-        skip_deps_verification = False):
+        skip_deps_verification = False,
+        # Host/target feature-world split (resolver_feature_worlds = "split").
+        # host_crate_features != None marks a divergent crate: a second
+        # `:<name>_host` instance (and `_bs_host`, if there is a build script)
+        # is emitted with the host-world views.
+        build_script_aliases = None,
+        host_deps = None,
+        host_crate_features = None,
+        host_conditional_crate_features = {},
+        host_build_deps = None,
+        host_aliases = {},
+        unactivated = False):
     package_metadata(
         name = name + "_package_metadata",
         purl = purl,
@@ -82,10 +93,29 @@ def rust_crate(
     crate_tags = default_tags + tags
     build_script_target_tags = crate_tags + build_script_tags
 
+    if unactivated:
+        # Pinned in Cargo.lock but unreached by any workspace dep/feature in
+        # split mode (cargo wouldn't build it either). Emit a loud incompatible
+        # stub so hand-written references fail at analysis with a clear message.
+        stub_name = name + "_not_activated_by_workspace_resolution"
+        native.filegroup(
+            name = stub_name,
+            tags = crate_tags,
+            target_compatible_with = ["@platforms//:incompatible"],
+            visibility = ["//visibility:public"],
+        )
+        native.alias(
+            name = name,
+            actual = stub_name,
+            tags = crate_tags,
+            visibility = ["//visibility:public"],
+        )
+        return
+
     if build_script:
         build_script_kwargs = dict(
             deps = build_deps,
-            aliases = aliases,
+            aliases = build_script_aliases if build_script_aliases != None else aliases,
             compile_data = compile_data,
             crate_name = "build_script_build",
             crate_root = build_script,
@@ -137,6 +167,41 @@ def rust_crate(
             )
 
         maybe_build_script = ["_bs"]
+
+        if host_crate_features != None:
+            # The host instance's build script: host features + host build-dep
+            # view (a build script gets its instance's features).
+            host_build_script_kwargs = dict(build_script_kwargs)
+            host_build_script_kwargs["deps"] = host_build_deps
+            host_build_script_kwargs["aliases"] = host_aliases
+            host_build_script_kwargs["link_deps"] = host_deps
+            host_build_script_kwargs["tags"] = build_script_target_tags + ["manual", "rules-rs-host-variant"]
+
+            if host_conditional_crate_features:
+                # Host features may still vary by triple; reuse the per-triple
+                # fanout machinery (see the base `_bs` comment above).
+                host_branches = {}
+                for triple in triples:
+                    host_build_script_name = "_bs_host_" + triple
+                    host_branches[_platform(triple, use_legacy_rules_rust_platforms)] = host_build_script_name
+
+                    cargo_build_script(
+                        name = host_build_script_name,
+                        crate_features = host_crate_features + host_conditional_crate_features.get(triple, []),
+                        **host_build_script_kwargs
+                    )
+
+                native.alias(
+                    name = "_bs_host",
+                    actual = select(host_branches),
+                    tags = build_script_target_tags + ["rules-rs-host-variant"],
+                )
+            else:
+                cargo_build_script(
+                    name = "_bs_host",
+                    crate_features = host_crate_features,
+                    **host_build_script_kwargs
+                )
     else:
         maybe_build_script = []
 
@@ -196,6 +261,30 @@ def rust_crate(
             (_rust_proc_macro if skip_deps_verification else rust_proc_macro)(**kwargs)
         else:
             (_rust_library if skip_deps_verification else rust_library)(**kwargs)
+
+        if host_crate_features != None:
+            # The divergent crate's host-world instance: same sources/rule kind,
+            # only features/deps/aliases differ. Reached only via host-world
+            # edges (proc-macro/build-script closures), configured as exec.
+            host_kwargs = dict(kwargs)
+            host_kwargs["name"] = name + "_host"
+
+            # Pin the crate name: with [lib] name unset rules_rust derives it
+            # from the LABEL, giving this instance `<name>_host` and the wrong
+            # extern name (E0432/E0433). Both instances need the same extern.
+            host_kwargs["crate_name"] = crate_name if crate_name else name.replace("-", "_")
+            host_kwargs["aliases"] = host_aliases
+            host_kwargs["deps"] = host_deps + (["_bs_host"] if build_script else [])
+            host_kwargs["crate_features"] = host_crate_features + select(
+                {_platform(k, use_legacy_rules_rust_platforms): v for k, v in host_conditional_crate_features.items()} |
+                {"//conditions:default": []},
+            )
+            host_kwargs["tags"] = crate_tags + ["rules-rs-host-variant"]
+
+            if is_proc_macro:
+                (_rust_proc_macro if skip_deps_verification else rust_proc_macro)(**host_kwargs)
+            else:
+                (_rust_library if skip_deps_verification else rust_library)(**host_kwargs)
 
     binary_lib_dep = [name] if has_lib else []
     for binary, crate_root in binaries.items():
