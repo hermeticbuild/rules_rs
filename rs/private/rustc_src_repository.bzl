@@ -114,6 +114,10 @@ def _crate_attr(
         crate_features_select,
         deps,
         deps_select,
+        host_crate_features,
+        host_crate_features_select,
+        host_deps,
+        host_deps_select,
         extra_compile_data):
     return struct(
         allow_build_script_to_detect_nonhermetic_paths = False,
@@ -134,6 +138,10 @@ def _crate_attr(
         data = [],
         deps = deps,
         deps_select = deps_select,
+        host_crate_features = host_crate_features,
+        host_crate_features_select = host_crate_features_select,
+        host_deps = host_deps,
+        host_deps_select = host_deps_select,
         extra_compile_data = extra_compile_data,
         rustc_env = {"RUSTC_BOOTSTRAP": "1"},
         rustc_flags = ["-Zforce-unstable-if-unmarked"],
@@ -150,6 +158,10 @@ def _resolved_crate_attr(feature_resolutions, platform_triples):
         crate_features_select = _resolved_select_by_triple(platform_triples, feature_resolutions.features_enabled),
         deps = [],
         deps_select = _resolved_select_by_triple(platform_triples, feature_resolutions.deps),
+        host_crate_features = [],
+        host_crate_features_select = _resolved_select_by_triple(platform_triples, feature_resolutions.host_features_enabled),
+        host_deps = [],
+        host_deps_select = _resolved_select_by_triple(platform_triples, feature_resolutions.host_deps),
         extra_compile_data = [],
     )
 
@@ -393,6 +405,10 @@ alias(
             crate_features_select = _select_by_triple(ALL_TARGET_TRIPLES, dep_data["crate_features_by_platform"]),
             deps = dep_data["deps"],
             deps_select = _select_by_triple(ALL_TARGET_TRIPLES, dep_data["deps_by_platform"]),
+            host_crate_features = dep_data["crate_features"],
+            host_crate_features_select = _select_by_triple(ALL_TARGET_TRIPLES, dep_data["crate_features_by_platform"]),
+            host_deps = dep_data["host_deps"],
+            host_deps_select = _select_by_triple(ALL_TARGET_TRIPLES, dep_data["host_deps_by_platform"]),
             extra_compile_data = _extra_compile_data(name, source_root),
         )
         rctx.file(paths.join(bazel_package, "BUILD.bazel"), _render_crate_build_file(source_root, crate_attr, cargo.values, cargo.bazel_metadata))

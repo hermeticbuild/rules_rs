@@ -65,8 +65,11 @@ def cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache):
 def new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples):
     return struct(
         features_enabled = {triple: set() for triple in platform_triples},
+        host_features_enabled = {triple: set() for triple in platform_triples},
+        host_activated = {triple: False for triple in platform_triples},
         build_deps = {triple: set() for triple in platform_triples},
         deps = {triple: set() for triple in platform_triples},
+        host_deps = {triple: set() for triple in platform_triples},
         aliases = {},
         package_index = package_index,
         possible_deps = possible_deps,
@@ -461,6 +464,7 @@ def _resolve_possible_deps(
             if dep_fq not in feature_resolutions_by_fq_crate:
                 fail("Resolved %s dependency %s but no crate metadata was available" % (name, dep_fq))
             dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
+            dep["host_bazel_target"] = "%s%s__host" % (dep_label_prefix, dep_fq)
             dep["feature_resolutions"] = feature_resolutions_by_fq_crate[dep_fq]
 
             target = dep.get("target")
@@ -601,6 +605,7 @@ def resolve_cargo_workspace_members(
 
             if not is_first_party_dep or materialize_workspace_members:
                 dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
+                dep["host_bazel_target"] = "%s%s__host" % (dep_label_prefix, dep_fq)
 
             feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
 
@@ -617,7 +622,11 @@ def resolve_cargo_workspace_members(
             for triple in match_info.matches:
                 if not is_first_party_dep or materialize_workspace_members:
                     workspace_dep_labels_by_triple[triple].add(":" + dep_name)
-                feature_resolutions.features_enabled[triple].update(features)
+                if dep.get("kind") == "build":
+                    feature_resolutions.host_features_enabled[triple].update(features)
+                    feature_resolutions.host_activated[triple] = True
+                else:
+                    feature_resolutions.features_enabled[triple].update(features)
 
     for crate, annotation_versions in annotations.items():
         for version_key, annotation in annotation_versions.items():
@@ -629,13 +638,19 @@ def resolve_cargo_workspace_members(
             if not annotation.crate_features and not annotation.crate_features_select:
                 continue
             for version in target_versions:
-                features_enabled = feature_resolutions_by_fq_crate[fq_crate(crate, version)].features_enabled
+                feature_resolutions = feature_resolutions_by_fq_crate[fq_crate(crate, version)]
+                features_enabled = feature_resolutions.features_enabled
+                host_features_enabled = feature_resolutions.host_features_enabled
                 if annotation.crate_features:
                     for triple in platform_triples:
                         features_enabled[triple].update(annotation.crate_features)
+                        host_features_enabled[triple].update(annotation.crate_features)
+                        feature_resolutions.host_activated[triple] = True
                 for triple, features in annotation.crate_features_select.items():
                     if triple in features_enabled:
                         features_enabled[triple].update(features)
+                        host_features_enabled[triple].update(features)
+                        feature_resolutions.host_activated[triple] = True
 
     resolve(ctx, resolver_packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug)
 
@@ -681,6 +696,7 @@ def workspace_dep_data(
         crate_features = {triple: set() for triple in platform_triples}
         deps = {triple: set() for triple in platform_triples}
         build_deps = {triple: set() for triple in platform_triples}
+        host_deps = {triple: set() for triple in platform_triples}
         dev_deps = {triple: set() for triple in platform_triples}
         package_dir = manifest_package_dir(package["manifest_path"], repo_root)
         package_manifest_dir = normalize_path(package["manifest_path"]).removesuffix("/Cargo.toml")
@@ -749,12 +765,14 @@ def workspace_dep_data(
         if feature_resolutions:
             for triple in platform_triples:
                 crate_features[triple].update(exclude_deps_from_features(feature_resolutions.features_enabled[triple]))
+                host_deps[triple].update(feature_resolutions.host_deps[triple])
 
         bazel_package = paths.join(workspace_package, package_dir) if package_dir else workspace_package
 
         crate_features, crate_features_by_platform = shared_and_per_platform(crate_features, use_legacy_rules_rust_platforms)
         deps, deps_by_platform = shared_and_per_platform(deps, use_legacy_rules_rust_platforms)
         build_deps, build_deps_by_platform = shared_and_per_platform(build_deps, use_legacy_rules_rust_platforms)
+        host_deps, host_deps_by_platform = shared_and_per_platform(host_deps, use_legacy_rules_rust_platforms)
         dev_deps, dev_deps_by_platform = shared_and_per_platform(dev_deps, use_legacy_rules_rust_platforms)
 
         dep_data[bazel_package] = {
@@ -762,6 +780,8 @@ def workspace_dep_data(
             "binaries": binaries,
             "build_deps": build_deps,
             "build_deps_by_platform": build_deps_by_platform,
+            "host_deps": host_deps,
+            "host_deps_by_platform": host_deps_by_platform,
             "crate_features": crate_features,
             "crate_features_by_platform": crate_features_by_platform,
             "deps": deps,

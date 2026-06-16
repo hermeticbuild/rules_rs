@@ -1,5 +1,7 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_fq_deps", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages")
+load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_fq_deps", "new_feature_resolutions", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages")
+load(":cfg_parser.bzl", "triple_to_cfg_attrs")
+load(":resolver.bzl", "resolve")
 
 def _select_package_fq_dep_uses_package_name_impl(ctx):
     env = unittest.begin(ctx)
@@ -265,12 +267,73 @@ def _resolve_package_facts_attaches_feature_resolutions_impl(ctx):
 
 resolve_package_facts_attaches_feature_resolutions_test = unittest.make(_resolve_package_facts_attaches_feature_resolutions_impl)
 
+def _resolver_keeps_build_dep_features_in_host_namespace_impl(ctx):
+    env = unittest.begin(ctx)
+
+    triple = "x86_64-unknown-linux-gnu"
+    app_deps = [
+        {
+            "bazel_target": "//:common",
+            "features": ["normal_feat"],
+            "feature_resolutions": None,
+            "host_bazel_target": "//:common__host",
+            "name": "common",
+            "target": set([triple]),
+        },
+        {
+            "bazel_target": "//:common",
+            "features": ["build_feat"],
+            "feature_resolutions": None,
+            "host_bazel_target": "//:common__host",
+            "kind": "build",
+            "name": "common",
+            "target": set([triple]),
+        },
+    ]
+    app_features = new_feature_resolutions(0, app_deps, {}, [triple])
+    common_features = new_feature_resolutions(1, [], {}, [triple])
+    app_deps[0]["feature_resolutions"] = common_features
+    app_deps[1]["feature_resolutions"] = common_features
+
+    packages = [
+        {
+            "feature_resolutions": app_features,
+            "name": "app",
+            "version": "0.1.0",
+        },
+        {
+            "feature_resolutions": common_features,
+            "name": "common",
+            "version": "1.0.0",
+        },
+    ]
+
+    resolve(
+        ctx,
+        packages,
+        {
+            "app-0.1.0": app_features,
+            "common-1.0.0": common_features,
+        },
+        {triple: triple_to_cfg_attrs(triple)},
+        False,
+    )
+
+    asserts.equals(env, ["normal_feat"], sorted(common_features.features_enabled[triple]))
+    asserts.equals(env, ["build_feat"], sorted(common_features.host_features_enabled[triple]))
+    asserts.equals(env, ["//:common"], sorted(app_features.deps[triple]))
+    asserts.equals(env, ["//:common__host"], sorted(app_features.build_deps[triple]))
+    return unittest.end(env)
+
+resolver_keeps_build_dep_features_in_host_namespace_test = unittest.make(_resolver_keeps_build_dep_features_in_host_namespace_impl)
+
 def cargo_workspace_graph_tests():
     return unittest.suite(
         "cargo_workspace_graph_tests",
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
         resolve_package_facts_attaches_feature_resolutions_test,
+        resolver_keeps_build_dep_features_in_host_namespace_test,
         select_package_fq_dep_uses_package_name_test,
         select_package_fq_dep_uses_req_for_duplicate_versions_test,
         split_lockfile_packages_finds_local_package_paths_test,

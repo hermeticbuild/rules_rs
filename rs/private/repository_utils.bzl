@@ -172,6 +172,11 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {extra_compile_data_attr}{indent}    crate_features = {crate_features},
 {indent}    triples = {triples},
 {indent}    conditional_crate_features = {conditional_crate_features},
+{indent}    host_deps = [
+{indent}        {host_deps}
+{indent}    ]{conditional_host_deps},
+{indent}    host_crate_features = {host_crate_features},
+{indent}    host_conditional_crate_features = {host_conditional_crate_features},
 {indent}    crate_root = {crate_root},
 {indent}    edition = {edition},
 {rustc_env_attr}{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
@@ -202,8 +207,13 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
     )
+    host_crate_features, host_conditional_crate_features = compute_select(
+        _exclude_deps_from_features(attr.host_crate_features),
+        {platform: _exclude_deps_from_features(features) for platform, features in attr.host_crate_features_select.items()},
+    )
     use_legacy_rules_rust_platforms = attr.use_legacy_rules_rust_platforms
     build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select, use_legacy_rules_rust_platforms)
+    host_deps, conditional_host_deps = render_select(attr.host_deps, attr.host_deps_select, use_legacy_rules_rust_platforms)
     build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select, use_legacy_rules_rust_platforms)
     build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_legacy_rules_rust_platforms)
     rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_legacy_rules_rust_platforms)
@@ -242,6 +252,10 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         crate_features = repr(sorted(crate_features)),
         triples = repr(attr.crate_features_select.keys()),
         conditional_crate_features = repr(conditional_crate_features),
+        host_deps = list_indent.join(['"%s"' % d for d in sorted(host_deps)]),
+        conditional_host_deps = " + " + conditional_host_deps if conditional_host_deps else "",
+        host_crate_features = repr(sorted(host_crate_features)),
+        host_conditional_crate_features = repr(host_conditional_crate_features),
         crate_root = values["crate_root"],
         edition = values["edition"],
         rustc_env_attr = rustc_env_attr,
@@ -305,9 +319,13 @@ rust_crate_attrs = {
     "data": attr.label_list(default = []),
     "deps": attr.string_list(default = []),
     "deps_select": attr.string_list_dict(),
+    "host_deps": attr.string_list(default = []),
+    "host_deps_select": attr.string_list_dict(),
     "aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
+    "host_crate_features": attr.string_list(default = []),
+    "host_crate_features_select": attr.string_list_dict(),
     "use_legacy_rules_rust_platforms": attr.bool(),
 }
 

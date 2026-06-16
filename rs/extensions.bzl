@@ -372,9 +372,13 @@ crate.annotation(
             deps = annotation.deps,
             crate_tags = annotation.tags,
             deps_select = _select(feature_resolutions.deps),
+            host_deps = [],
+            host_deps_select = _select(feature_resolutions.host_deps),
             aliases = feature_resolutions.aliases,
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
+            host_crate_features = annotation.crate_features,
+            host_crate_features_select = _select(feature_resolutions.host_features_enabled),
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
 
@@ -471,6 +475,12 @@ alias(
     name = "{name}-{version}",
     actual = "{actual}",
 )""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
+
+            hub_contents.append("""
+alias(
+    name = "{name}-{version}__host",
+    actual = "{actual}",
+)""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name + "__host")))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""

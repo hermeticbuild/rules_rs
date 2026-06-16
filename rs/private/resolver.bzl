@@ -12,6 +12,16 @@ def _count(feature_resolutions_by_fq_crate):
         for deps in feature_resolutions.deps.values():
             n += len(deps)
 
+        for host_deps in feature_resolutions.host_deps.values():
+            n += len(host_deps)
+
+        for host_features in feature_resolutions.host_features_enabled.values():
+            n += len(host_features)
+
+        for host_activated in feature_resolutions.host_activated.values():
+            if host_activated:
+                n += 1
+
         # No need to count aliases, they only get set when deps are set.
     return n
 
@@ -39,8 +49,10 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
 
         feature_resolutions = package["feature_resolutions"]
         features_enabled = feature_resolutions.features_enabled
+        host_features_enabled = feature_resolutions.host_features_enabled
 
         deps = feature_resolutions.deps
+        host_deps = feature_resolutions.host_deps
 
         if _propagate_feature_enablement(
             package_changed,
@@ -53,11 +65,24 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
         ):
             package_changed = True
 
+        if _propagate_feature_enablement(
+            package_changed,
+            new_dirty_package_indices,
+            package,
+            host_features_enabled,
+            feature_resolutions,
+            cfg_attrs_by_triple,
+            debug,
+            host = True,
+        ):
+            package_changed = True
+
         # Propagate features across currently enabled dependencies.
         for dep in feature_resolutions.possible_deps:
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
                 continue
+            host_bazel_target = dep.get("host_bazel_target", bazel_target)
 
             kind = dep.get("kind", "normal")
 
@@ -84,15 +109,26 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
                     if dep_name not in features_for_triple and prefixed_dep_alias not in features_for_triple:
                         continue
 
-                triple_deps = deps[triple] if kind == "normal" else feature_resolutions.build_deps[triple]
-                if package_changed or bazel_target not in triple_deps:
+                if kind == "normal":
+                    triple_deps = deps[triple]
+                    dep_target = bazel_target
+                    dep_features_by_triple = dep_feature_resolutions.features_enabled
+                else:
+                    triple_deps = feature_resolutions.build_deps[triple]
+                    dep_target = host_bazel_target
+                    dep_features_by_triple = dep_feature_resolutions.host_features_enabled
+                    if not dep_feature_resolutions.host_activated[triple]:
+                        dep_feature_resolutions.host_activated[triple] = True
+                        new_dirty_package_indices.add(dep_feature_resolutions.package_index)
+
+                if package_changed or dep_target not in triple_deps:
                     package_changed = True
-                    triple_deps.add(bazel_target)
+                    triple_deps.add(dep_target)
 
                 if has_alias:
-                    feature_resolutions.aliases[bazel_target] = dep_name.replace("-", "_")
+                    feature_resolutions.aliases[dep_target] = dep_name.replace("-", "_")
 
-                triple_features = dep_feature_resolutions.features_enabled[triple]
+                triple_features = dep_features_by_triple[triple]
 
                 dep_features = dep.get("features")
                 if dep_features:
@@ -110,10 +146,69 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
                 else:
                     match.difference_update(to_remove)
 
+        if _propagate_host_deps(
+            package_changed,
+            new_dirty_package_indices,
+            feature_resolutions,
+            host_features_enabled,
+            host_deps,
+            cfg_attrs_by_triple,
+        ):
+            package_changed = True
+
         if package_changed:
             new_dirty_package_indices.add(index)
 
     return new_dirty_package_indices
+
+def _propagate_host_deps(
+        package_changed,
+        dirty_package_indices,
+        feature_resolutions,
+        host_features_enabled,
+        host_deps,
+        cfg_attrs_by_triple):
+    for dep in feature_resolutions.possible_deps:
+        host_bazel_target = dep.get("host_bazel_target")
+        if not host_bazel_target:
+            continue
+        if dep.get("kind", "normal") != "normal":
+            continue
+
+        dep_feature_resolutions = dep["feature_resolutions"]
+        dep_name = dep["name"]
+        prefixed_dep_alias = "dep:" + dep_name
+        optional = dep.get("optional", False)
+
+        for triple in dep["target"]:
+            if not feature_resolutions.host_activated[triple]:
+                continue
+
+            if not _dep_target_matches_triple(dep, triple, host_features_enabled[triple], cfg_attrs_by_triple):
+                continue
+
+            if optional:
+                features_for_triple = host_features_enabled[triple]
+                if dep_name not in features_for_triple and prefixed_dep_alias not in features_for_triple:
+                    continue
+
+            triple_deps = host_deps[triple]
+            if host_bazel_target not in triple_deps:
+                package_changed = True
+                triple_deps.add(host_bazel_target)
+
+            dep_features = dep.get("features")
+            if not dep_feature_resolutions.host_activated[triple]:
+                dep_feature_resolutions.host_activated[triple] = True
+                dirty_package_indices.add(dep_feature_resolutions.package_index)
+            if dep_features:
+                triple_features = dep_feature_resolutions.host_features_enabled[triple]
+                prev_length = len(triple_features)
+                triple_features.update(dep_features)
+                if prev_length != len(triple_features):
+                    dirty_package_indices.add(dep_feature_resolutions.package_index)
+
+    return package_changed
 
 def _propagate_feature_enablement(
         package_changed,
@@ -122,7 +217,8 @@ def _propagate_feature_enablement(
         features_enabled,
         feature_resolutions,
         cfg_attrs_by_triple,
-        debug):
+        debug,
+        host = False):
     possible_features = feature_resolutions.possible_features
 
     for triple, feature_set in features_enabled.items():
@@ -159,7 +255,13 @@ def _propagate_feature_enablement(
                         dep_optional = dep.get("optional", False)
                         if not optional_marker or not dep_optional or dep_name in feature_set or ("dep:" + dep_name) in feature_set:
                             dep_feature_resolutions = dep["feature_resolutions"]
-                            triple_features = dep_feature_resolutions.features_enabled[triple]
+                            if host or dep.get("kind", "normal") != "normal":
+                                triple_features = dep_feature_resolutions.host_features_enabled[triple]
+                                if not dep_feature_resolutions.host_activated[triple]:
+                                    dep_feature_resolutions.host_activated[triple] = True
+                                    dirty_package_indices.add(dep_feature_resolutions.package_index)
+                            else:
+                                triple_features = dep_feature_resolutions.features_enabled[triple]
                             if dep_feature not in triple_features:
                                 triple_features.add(dep_feature)
                                 dirty_package_indices.add(dep_feature_resolutions.package_index)
@@ -181,7 +283,8 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple
     # Do some rounds of mutual resolution; bail when no more changes
     dirty_package_indices = range(len(packages))
     for i in range(_MAX_ROUNDS):
-        mctx.report_progress("Running round %s of dependency/feature resolution" % i)
+        if hasattr(mctx, "report_progress"):
+            mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
         dirty_package_indices = _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, debug)
         if not dirty_package_indices:
