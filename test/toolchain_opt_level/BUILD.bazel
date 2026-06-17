@@ -1,0 +1,20 @@
+load(":toolchain_opt_level_test.bzl", "opt_level_info")
+
+opt_level_info(
+    name = "opt_level_info",
+)
+
+genrule(
+    name = "verify_toolchain_opt_level",
+    srcs = [":opt_level_info"],
+    outs = ["verify_toolchain_opt_level.txt"],
+    cmd = """
+        grep "opt_level.opt. = 2" $(location :opt_level_info)
+        echo ok > $@
+    """,
+    # Not compatible with Windows due to the use of 'grep'
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)

@@ -2,12 +2,12 @@
 
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load(
-    "@rules_rust//rust/private:repository_utils.bzl",
+    "@rules_rust//rust/private:repository_utils.bzl",  # buildifier: disable=bzl-visibility
     "DEFAULT_STATIC_RUST_URL_TEMPLATES",
     "check_version_valid",
     "produce_tool_suburl",
 )
-load("//rs/experimental/miri/private:miri_repository.bzl", "miri_repository")
+load("//rs/experimental/miri/private:miri_repository.bzl", "miri_repository")  # buildifier: disable=bzl-visibility
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_AND_2_TRIPLES")
 load("//rs/private:bpf_linker_repository.bzl", "BPF_LINKER_SUPPORTED_EXEC_TRIPLES", "declare_bpf_linker_repository")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
@@ -91,6 +91,14 @@ _TOOLCHAIN_TAG = tag_class(
         "extra_exec_rustc_flags": attr.string_list_dict(
             doc = "Additional rustc flags by exec triple.",
         ),
+        "opt_level": attr.string_dict(
+            doc = "Rustc optimization levels per Bazel compilation mode. " +
+                  "Keys are 'dbg', 'fastbuild', 'opt'. " +
+                  "Values are rustc opt-level strings: '0', '1', '2', '3', 's', 'z'. " +
+                  "Defaults to the rules_rust toolchain default: " +
+                  "{\"dbg\": \"0\", \"fastbuild\": \"0\", \"opt\": \"3\"}.",
+            default = {},
+        ),
     },
 )
 
@@ -169,6 +177,7 @@ def _toolchains_impl(mctx):
             edition = _DEFAULT_EDITION,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
+            opt_level = {},
         ))
 
     versions = set([])
@@ -438,7 +447,8 @@ def _toolchains_impl(mctx):
             (existing.rust_analyzer_version or existing.version) != rust_analyzer_version or
             existing.edition != tag.edition or
             existing.extra_rustc_flags != tag.extra_rustc_flags or
-            existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags
+            existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags or
+            existing.opt_level != tag.opt_level
         ):
             fail("Toolchain repo {} has conflicting tag configurations".format(repo_name))
 
@@ -452,6 +462,7 @@ def _toolchains_impl(mctx):
                 edition = tag.edition,
                 extra_rustc_flags = tag.extra_rustc_flags,
                 extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
+                opt_level = tag.opt_level,
             )
         is_dev_dependency = had_tags and mctx.is_dev_dependency(tag)
         if is_dev_dependency:

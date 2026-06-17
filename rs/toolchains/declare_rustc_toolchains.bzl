@@ -1,3 +1,5 @@
+"""Toolchain declaration"""
+
 load("@rules_rust//rust:toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES", "triple_to_rust_constraint_set")
@@ -23,14 +25,27 @@ def _rustc_flags_to_select(rustc_flags_by_triple):
     )
 
 def declare_rustc_toolchains(
+        name = None,
         *,
         version,
         edition,
         extra_rustc_flags = {},
         extra_exec_rustc_flags = {},
+        opt_level = {},
         execs = SUPPORTED_EXEC_TRIPLES,
         targets = ALL_TARGET_TRIPLES):
-    """Declare toolchains for all supported target platforms."""
+    """Declare toolchains for all supported target platforms.
+
+    Args:
+        name: Unused; required by Bazel macro naming convention.
+        version: Rust version string (e.g. "1.86.0" or "nightly/2025-04-03").
+        edition: Default Rust edition to apply to toolchains (e.g. "2021").
+        extra_rustc_flags: Additional rustc flags keyed by target triple.
+        extra_exec_rustc_flags: Additional rustc flags keyed by exec triple.
+        opt_level: Rustc optimization levels per Bazel compilation mode.
+        execs: Exec triples to declare toolchains for.
+        targets: Target triples to declare toolchains for.
+    """
 
     version_key = sanitize_version(version)
     channel = _channel(version)
@@ -155,6 +170,7 @@ def declare_rustc_toolchains(
             default_edition = edition,
             extra_exec_rustc_flags = _rustc_flags_to_select(extra_exec_rustc_flags),
             extra_rustc_flags = _rustc_flags_to_select(extra_rustc_flags),
+            opt_level = opt_level if opt_level else None,
             exec_triple = triple,
             target_triple = select(target_triple_select),
             visibility = ["//visibility:public"],

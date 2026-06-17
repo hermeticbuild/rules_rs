@@ -127,6 +127,11 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
 toolchains.toolchain(
     edition = "2024",
+    opt_level = {
+        "dbg": "0",
+        "fastbuild": "0",
+        "opt": "2",
+    },
     version = "1.92.0",
 )
 toolchains.experimental_miri(version = "nightly/2026-04-20")
@@ -218,7 +223,6 @@ crate.from_cargo(
     ],
 )
 use_repo(crate, "root_package")
-
 crate.annotation(
     crate = "rustls",
     # Test for https://github.com/bazelbuild/rules_rust/issues/3626
@@ -302,15 +306,22 @@ crate.annotation(
 
 ### Fix -sys crates
 include("//:3rd_party/bzip2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/glib-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libssh2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/lzma-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libudev-sys/include.MODULE.bazel")
+
 include("//:3rd_party/apriltag-sys/include.MODULE.bazel")
+
 include("//:3rd_party/zstd-sys/include.MODULE.bazel")
 
-# TODO(zbarsky): alsa-sys is not curently tested, fix it
+# TODO(zbarsky): alsa-sys is not currently tested, fix it
 include("//:3rd_party/alsa-sys/include.MODULE.bazel")
+
 include("//:3rd_party/openssl-sys/include.MODULE.bazel")
 
 single_version_override(
@@ -378,7 +389,9 @@ crate.annotation(
 )
 
 include("//:3rd_party/gdk-pixbuf-sys/include.MODULE.bazel")
+
 include("//:3rd_party/cairo-sys-rs/include.MODULE.bazel")
+
 include("//:3rd_party/atk-sys/include.MODULE.bazel")
 
 crate.annotation(
@@ -388,14 +401,9 @@ crate.annotation(
 
 bazel_dep(name = "mimalloc", version = "2.2.4.bcr.1")
 
-"""
-ERROR: /Users/dzbarsky/Library/Caches/bazel/_bazel_dzbarsky/16a3c4547ef278628dec1184581db8ea/external/mimalloc+/BUILD.bazel:77:18: Linking external/mimalloc+/libmimalloc-override.so failed: (Exit 1): clang++ failed: error executing CppLink command (from cc_shared_library rule target @@mimalloc+//:mimalloc-override) external/llvm++http_archive+llvm-toolchain-minimal-21.1.8-linux-amd64/bin/clang++ -target aarch64-w64-windows-gnu '--sysroot=/dev/null' '--unwindlib=none' -nostdlib++ ... (remaining 52 arguments skipped)
-clang++: error: no such file or directory: 'psapi.lib'
-clang++: error: no such file or directory: 'shell32.lib'
-clang++: error: no such file or directory: 'user32.lib'
-clang++: error: no such file or directory: 'advapi32.lib'
-clang++: error: no such file or directory: 'bcrypt.lib'
-"""
+# ERROR: .../mimalloc+/BUILD.bazel:77:18: Linking mimalloc-override.so failed
+# clang++ -target aarch64-w64-windows-gnu failed: no such file or directory for
+# psapi.lib, shell32.lib, user32.lib, advapi32.lib, bcrypt.lib
 #crate.annotation(
 #    crate = "libmimalloc-sys",
 #    gen_build_script = "off",
@@ -405,7 +413,9 @@ clang++: error: no such file or directory: 'bcrypt.lib'
 inject_repo(crate, "mimalloc")
 
 include("//:3rd_party/libz-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libgit2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/coreaudio-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): fix this for realz

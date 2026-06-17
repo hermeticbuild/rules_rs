@@ -1,3 +1,5 @@
+"""Toolchain repository"""
+
 def _toolchains_repository_impl(rctx):
     rctx.file(
         "BUILD.bazel",
@@ -11,6 +13,7 @@ declare_rustc_toolchains(
     edition = {edition},
     extra_rustc_flags = {extra_rustc_flags},
     extra_exec_rustc_flags = {extra_exec_rustc_flags},
+    opt_level = {opt_level},
 )
 
 declare_rustfmt_toolchains(
@@ -30,6 +33,7 @@ declare_rust_analyzer_toolchains(
             edition = repr(rctx.attr.edition),
             extra_rustc_flags = repr(rctx.attr.extra_rustc_flags),
             extra_exec_rustc_flags = repr(rctx.attr.extra_exec_rustc_flags),
+            opt_level = repr(rctx.attr.opt_level),
         ),
     )
 
@@ -44,5 +48,6 @@ toolchains_repository = repository_rule(
         "edition": attr.string(mandatory = True),
         "extra_rustc_flags": attr.string_list_dict(),
         "extra_exec_rustc_flags": attr.string_list_dict(),
+        "opt_level": attr.string_dict(),
     },
 )
