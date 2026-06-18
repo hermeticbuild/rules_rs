@@ -380,8 +380,9 @@ def split_lockfile_packages(hub_name, cargo_metadata, workspace_cargo_toml, all_
     )
 
 def _package_is_proc_macro(package, package_info):
-    # An explicit stamped bit (e.g. proc_macro_packages override) wins; else
-    # fall back to `[lib] proc-macro` (path+/git+) or `targets[].kind`.
+    # An explicit bit stamped on the package dict wins; else fall back to the
+    # fact's `is_proc_macro` (from `[lib] proc-macro` for path+/git+ manifests
+    # or the sniffed `sparse+` archive) or cargo-metadata `targets[].kind`.
     is_proc_macro = package.get("is_proc_macro")
     if is_proc_macro != None:
         return bool(is_proc_macro)

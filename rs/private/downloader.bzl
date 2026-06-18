@@ -1,7 +1,7 @@
 load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load(":annotations.bzl", "annotation_for")
 load(":cargo_credentials.bzl", "registry_auth_headers")
-load(":registry_utils.bzl", "CRATES_IO_REGISTRY", "sharded_path")
+load(":registry_utils.bzl", "CRATES_IO_REGISTRY", "crate_archive_url", "sharded_path", "sparse_fact_is_current")
 load(":toml2json.bzl", "run_toml2json")
 
 def parse_git_url(url):
@@ -35,6 +35,7 @@ def _sanitize_path_fragment(path):
 def new_downloader_state():
     return struct(
         in_flight_registry_fetches_by_crate = {},
+        in_flight_crate_archive_fetches_by_key = {},
         in_flight_git_crate_fetches_by_url = {},
         pending_git_clones_by_source = {},
     )
@@ -76,13 +77,55 @@ def start_github_downloads(
 
         package["download_token"] = in_flight_fetch
 
+def _crate_archive_extract_dir(name, version):
+    return "%s-%s.crate-extracted" % (name, version)
+
+def _start_crate_archive_download(
+        mctx,
+        state,
+        cargo_credentials,
+        dl_template_by_source,
+        source,
+        package,
+        name,
+        version):
+    dl = dl_template_by_source.get(source)
+    checksum = package.get("checksum")
+    if not dl or not checksum:
+        # No download template (config.json missing) or no checksum to verify
+        # against; skip sniffing and fall back to the manifest/targets paths.
+        return
+
+    archive_key = name + "-" + version
+    archive_fetch = state.in_flight_crate_archive_fetches_by_key.get(archive_key)
+    if not archive_fetch:
+        url = crate_archive_url(dl, name, version, checksum)
+        output = archive_key + ".crate.tar.gz"
+        archive_fetch = {
+            "output": output,
+            "extract_dir": _crate_archive_extract_dir(name, version),
+            "strip_prefix": archive_key,
+            "is_proc_macro": None,
+            "token": mctx.download(
+                url,
+                output,
+                sha256 = checksum,
+                headers = registry_auth_headers(cargo_credentials, source),
+                block = False,
+            ),
+        }
+        state.in_flight_crate_archive_fetches_by_key[archive_key] = archive_fetch
+
+    package["crate_archive_fetch"] = archive_fetch
+
 def start_crate_registry_downloads(
         mctx,
         state,
         annotations,
         packages,
         cargo_credentials,
-        debug):
+        debug,
+        dl_template_by_source = {}):
     existing_facts = getattr(mctx, "facts", {}) or {}
 
     for package in packages:
@@ -98,7 +141,8 @@ def start_crate_registry_downloads(
 
         if source.startswith("sparse+"):
             key = name + "_" + version
-            if key in existing_facts:
+            cached = existing_facts.get(key)
+            if cached and sparse_fact_is_current(cached):
                 continue
 
             in_flight_fetch = state.in_flight_registry_fetches_by_crate.get(name)
@@ -113,6 +157,20 @@ def start_crate_registry_downloads(
                 state.in_flight_registry_fetches_by_crate[name] = in_flight_fetch
 
             package["download_token"] = in_flight_fetch
+
+            # Also fetch the `.crate` archive so we can sniff `[lib] proc-macro`
+            # (the sparse index carries no proc-macro bit). Parallel download;
+            # extraction happens at fact-build time. Cached per (name, version).
+            _start_crate_archive_download(
+                mctx,
+                state,
+                cargo_credentials,
+                dl_template_by_source,
+                source,
+                package,
+                name,
+                version,
+            )
         elif source.startswith("git+"):
             # TODO(zbarsky): Ideally other forges could use the single-file fastpath...
             if source.startswith("git+https://github.com/"):

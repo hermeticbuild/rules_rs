@@ -775,8 +775,8 @@ def _proc_macro_bit_plumbing_impl(ctx):
     fact = cargo_toml_fact({"package": {"name": "x"}})
     asserts.false(env, fact["is_proc_macro"])
 
-    # resolve_package_facts: a bit stamped on the package dict (the
-    # proc_macro_packages JSON override) wins over the fact's manifest bit.
+    # resolve_package_facts: a bit stamped directly on the package dict wins
+    # over the fact's manifest/sniffed bit.
     packages = [
         {"name": "a", "version": "1.0.0", "is_proc_macro": True},
         {"name": "b", "version": "1.0.0"},

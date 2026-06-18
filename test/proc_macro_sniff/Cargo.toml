@@ -1,0 +1,16 @@
+[package]
+name = "proc_macro_sniff"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+# A registry proc-macro: the resolver must learn `[lib] proc-macro = true` by
+# sniffing the `.crate` archive (the sparse index carries no such bit).
+serde_derive = "1"
+# Pulled directly in the TARGET world with a non-default feature, while
+# serde_derive pulls it in the HOST world with default features only. That
+# split makes proc-macro2 `divergent` — but only if serde_derive crossed into
+# the host world, which requires it to be detected as a proc-macro.
+proc-macro2 = { version = "1", features = ["span-locations"] }

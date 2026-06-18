@@ -3,7 +3,7 @@ load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL")
 load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
-load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
+load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
     "cargo_toml_fact",
@@ -28,7 +28,7 @@ load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_rep
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
-load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name")
+load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "parse_dl_template", "registry_config_repo_name", "registry_repo_name", "sparse_fact_is_current")
 load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
@@ -95,6 +95,56 @@ def _class_counts(classes_by_fq):
         counts[crate_class] = counts.get(crate_class, 0) + 1
     return counts
 
+def _ensure_dl_templates(mctx, registry_sources, cargo_credentials, dl_templates_by_source):
+    """Downloads each registry's config.json once to learn its `dl` template.
+
+    The sparse index `.jsonl` has no `.crate` download URL, so we read it from
+    the registry config (same source as `registry_config_repository`). Templates
+    are memoized across hubs/cfgs in `dl_templates_by_source`.
+    """
+    pending = []
+    for source in registry_sources:
+        if source in dl_templates_by_source:
+            continue
+        output = "config-%s.json" % registry_repo_name(source)
+        pending.append(struct(
+            source = source,
+            output = output,
+            token = mctx.download(
+                source.removeprefix("sparse+") + "config.json",
+                output,
+                headers = registry_auth_headers(cargo_credentials, source),
+                block = False,
+            ),
+        ))
+
+    for entry in pending:
+        entry.token.wait()
+        dl_templates_by_source[entry.source] = parse_dl_template(mctx.read(entry.output))
+
+def _sniff_registry_proc_macro(mctx, package):
+    """Returns whether a `sparse+` crate is a proc-macro by extracting its
+    `.crate` archive (downloaded in parallel earlier) and reading `[lib]
+    proc-macro` from its Cargo.toml. Result is memoized on the shared fetch."""
+    fetch = package.get("crate_archive_fetch")
+    if not fetch:
+        return False
+
+    cached = fetch["is_proc_macro"]
+    if cached != None:
+        return cached
+
+    fetch["token"].wait()
+    cargo_toml_path = fetch["extract_dir"] + "/Cargo.toml"
+    if not mctx.path(cargo_toml_path).exists:
+        mctx.extract(fetch["output"], output = fetch["extract_dir"], strip_prefix = fetch["strip_prefix"])
+
+    cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
+    lib = cargo_toml_json.get("lib", {})
+    is_proc_macro = bool(lib.get("proc-macro") or lib.get("proc_macro"))
+    fetch["is_proc_macro"] = is_proc_macro
+    return is_proc_macro
+
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
@@ -110,7 +160,6 @@ def _generate_hub_and_spokes(
         validate_lockfile,
         debug,
         use_legacy_rules_rust_platforms,
-        proc_macro_packages = None,
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
@@ -128,7 +177,6 @@ def _generate_hub_and_spokes(
         cargo_config (label): .cargo/config.toml file
         validate_lockfile (bool): If true, validate we have appropriate versions in Cargo.lock
         debug (bool): Enable debug logging
-        proc_macro_packages (label): Optional JSON file mapping "name-version" -> bool for proc-macro packages
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
     """
     _date(mctx, "start")
@@ -166,11 +214,13 @@ def _generate_hub_and_spokes(
 
         if source.startswith("sparse+"):
             key = name + "_" + version
-            fact = existing_facts.get(key)
-            if fact:
-                facts[key] = fact
-                fact = json.decode(fact)
+            cached = existing_facts.get(key)
+            if cached and sparse_fact_is_current(cached):
+                facts[key] = cached
+                fact = json.decode(cached)
             else:
+                # No cached fact, or one predating proc-macro sniffing (no
+                # `is_proc_macro`); the archive was (re)downloaded, so rebuild.
                 package["download_token"].wait()
 
                 # TODO(zbarsky): Should we also dedupe this parsing?
@@ -206,6 +256,10 @@ def _generate_hub_and_spokes(
                     fact = dict(
                         features = features,
                         dependencies = dependencies,
+                        # The sparse index carries no proc-macro bit, so sniff it
+                        # from the `.crate` archive's `[lib] proc-macro`. Cached in
+                        # the fact so warm runs reuse it without re-downloading.
+                        is_proc_macro = _sniff_registry_proc_macro(mctx, package),
                     )
 
                     # Nest a serialized JSON since max path depth is 5.
@@ -257,15 +311,6 @@ def _generate_hub_and_spokes(
             fail("Unknown source %s for crate %s" % (source, name))
 
         facts_by_fq_crate[_fq_crate(name, version)] = fact
-
-    if proc_macro_packages:
-        # Offline "name-version" -> bool map (from `cargo metadata`); stamped
-        # bits override the one derived from path+/git+ manifests.
-        proc_macro_overrides = json.decode(mctx.read(proc_macro_packages))
-        for package in packages:
-            override = proc_macro_overrides.get(_fq_crate(package["name"], package["version"]))
-            if override != None:
-                package["is_proc_macro"] = bool(override)
 
     resolved_facts = resolve_package_facts(packages, facts_by_fq_crate, platform_triples)
     feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate
@@ -703,6 +748,10 @@ def _crate_impl(mctx):
     cargo_credentials_by_hub_name = {}
     annotations_by_hub_name = {}
 
+    # Registry `dl` templates, memoized across hubs, used to fetch `.crate`
+    # archives for proc-macro sniffing.
+    dl_templates_by_source = {}
+
     for mod in mctx.modules:
         if not mod.tags.from_cargo:
             fail("`.from_cargo` is required. Please update %s" % mod.name)
@@ -748,7 +797,9 @@ def _crate_impl(mctx):
                 if source and source.startswith("sparse+"):
                     registry_sources.add(source)
 
-            start_crate_registry_downloads(mctx, downloader_state, annotations, packages, cargo_credentials, cfg.debug)
+            _ensure_dl_templates(mctx, registry_sources, cargo_credentials, dl_templates_by_source)
+
+            start_crate_registry_downloads(mctx, downloader_state, annotations, packages, cargo_credentials, cfg.debug, dl_templates_by_source)
 
             for source in sorted(registry_sources):
                 registry_config_repository(
@@ -782,9 +833,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, proc_macro_packages = cfg.proc_macro_packages, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, proc_macro_packages = cfg.proc_macro_packages)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
@@ -899,13 +950,6 @@ _from_cargo = tag_class(
         "validate_lockfile": attr.bool(
             doc = "If true, fail if Cargo.lock versions don't satisfy Cargo.toml requirements.",
             default = True,
-        ),
-        "proc_macro_packages": attr.label(
-            doc = "Optional JSON file mapping \"<name>-<version>\" to true for every proc-macro " +
-                  "package in the lockfile (e.g. generated offline from `cargo metadata`). Used by " +
-                  "the resolver to classify dependency edges. For path/git " +
-                  "crates, `[lib] proc-macro = true` from the crate manifest is honored when this " +
-                  "file has no entry; workspace members are detected from `cargo metadata` directly.",
         ),
         "debug": attr.bool(),
     },
