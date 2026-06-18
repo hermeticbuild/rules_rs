@@ -73,8 +73,8 @@ def new_feature_resolutions(package_index, possible_deps, possible_features, pla
         possible_features = possible_features,
         # Feature-world split: fields above are the target world. `host` is a
         # lazily-materialized container (ensure_host_state) the host world fills
-        # when it first reaches this crate; unified mode ignores both. Members
-        # are world boundaries (see _dep_world in resolver.bzl).
+        # when it first reaches this crate. Members are world boundaries (see
+        # _dep_world in resolver.bzl).
         target_active = {triple: False for triple in platform_triples},
         host = {"state": None},
         is_proc_macro = is_proc_macro,
@@ -806,9 +806,7 @@ def resolve_cargo_workspace_members(
         dep_label_prefix = "//:",
         skip_internal_rustc_placeholder_crates = True,
         watch_manifests = False,
-        use_legacy_rules_rust_platforms = False,
-        resolver_feature_worlds = "unified"):
-    split = resolver_feature_worlds == "split"
+        use_legacy_rules_rust_platforms = False):
     platform_cfg_attrs = [triple_to_cfg_attrs(triple) for triple in platform_triples]
     platform_cfg_attrs_by_triple = {}
     for cfg_attr in platform_cfg_attrs:
@@ -893,9 +891,8 @@ def resolve_cargo_workspace_members(
         # Members are world boundaries: always target-world roots (single
         # gazelle targets must link base instances everywhere). Only edges to
         # proc-macro SPOKES cross into the host world during seeding.
-        if split:
-            for triple in platform_triples:
-                package_feature_resolutions.target_active[triple] = True
+        for triple in platform_triples:
+            package_feature_resolutions.target_active[triple] = True
 
         if "default" in package.get("features", {}):
             for triple in platform_triples:
@@ -956,7 +953,7 @@ def resolve_cargo_workspace_members(
             # Member edges cross to host only for proc-macro SPOKES (host-only,
             # so the base label is world-consistent). Build/dev edges stay
             # target-world.
-            seed_host = split and feature_resolutions.is_proc_macro and not feature_resolutions.is_workspace_member
+            seed_host = feature_resolutions.is_proc_macro and not feature_resolutions.is_workspace_member
 
             for triple in match_info.matches:
                 if not is_first_party_dep or materialize_workspace_members:
@@ -967,15 +964,14 @@ def resolve_cargo_workspace_members(
                     dep_host_state["active"][triple] = True
                 else:
                     feature_resolutions.features_enabled[triple].update(features)
-                    if split:
-                        feature_resolutions.target_active[triple] = True
+                    feature_resolutions.target_active[triple] = True
 
-                        # Member [build-dependencies] are feature-AMPHIBIOUS:
-                        # edge stays target-world, but features also reach the
-                        # dep's host instance (without activating it) so shared
-                        # crates agree across worlds.
-                        if dep.get("kind") == "build" and not feature_resolutions.is_workspace_member:
-                            seed_pending_host_features(feature_resolutions, triple, features)
+                    # Member [build-dependencies] are feature-AMPHIBIOUS:
+                    # edge stays target-world, but features also reach the
+                    # dep's host instance (without activating it) so shared
+                    # crates agree across worlds.
+                    if dep.get("kind") == "build" and not feature_resolutions.is_workspace_member:
+                        seed_pending_host_features(feature_resolutions, triple, features)
 
     for crate, annotation_versions in annotations.items():
         for version_key, annotation in annotation_versions.items():
@@ -995,10 +991,9 @@ def resolve_cargo_workspace_members(
                 for triple, features in annotation.crate_features_select.items():
                     if triple in features_enabled:
                         features_enabled[triple].update(features)
-                if split:
-                    _seed_annotation_host_features(annotated_feature_resolutions, annotation, platform_triples)
+                _seed_annotation_host_features(annotated_feature_resolutions, annotation, platform_triples)
 
-    resolution_rounds = resolve(ctx, resolver_packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug, split = split)
+    resolution_rounds = resolve(ctx, resolver_packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug)
 
     for package in packages:
         feature_resolutions = package["feature_resolutions"]

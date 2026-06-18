@@ -46,7 +46,7 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False,
-        # Host/target feature-world split (resolver_feature_worlds = "split").
+        # Host/target feature-world split.
         # host_crate_features != None marks a divergent crate: a second
         # `:<name>_host` instance (and `_bs_host`, if there is a build script)
         # is emitted with the host-world views.

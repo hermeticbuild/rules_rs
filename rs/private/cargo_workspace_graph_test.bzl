@@ -266,7 +266,7 @@ def _resolve_package_facts_attaches_feature_resolutions_impl(ctx):
 
 resolve_package_facts_attaches_feature_resolutions_test = unittest.make(_resolve_package_facts_attaches_feature_resolutions_impl)
 
-# --- resolver_feature_worlds = "split" tests ---------------------------------
+# --- feature-world split resolver tests --------------------------------------
 #
 # These drive resolve_package_facts + resolve_cargo_workspace_members end to
 # end with small fixtures: `spoke_facts` maps fq crates to facts and `members`
@@ -283,7 +283,6 @@ def _noop(*_args, **_kwargs):
 def _run_workspace_resolution(
         spoke_facts,
         members,
-        mode,
         triples = [_LINUX],
         annotations = {},
         proc_macro_spokes = []):
@@ -317,7 +316,6 @@ def _run_workspace_resolution(
         platform_triples = triples,
         materialize_workspace_members = False,
         validate_lockfile = False,
-        resolver_feature_worlds = mode,
     )
 
     return struct(
@@ -372,7 +370,7 @@ def _split_sqlx_shape_impl(ctx):
     env = unittest.begin(ctx)
 
     spoke_facts, members = _sqlx_shape_fixtures()
-    result = _run_workspace_resolution(spoke_facts, members, "split", proc_macro_spokes = ["macros-1.0.0"])
+    result = _run_workspace_resolution(spoke_facts, members, proc_macro_spokes = ["macros-1.0.0"])
 
     # Target world carries only the runtime root's request...
     asserts.true(env, _target_active(result, "tls-1.0.0", _LINUX))
@@ -389,21 +387,6 @@ def _split_sqlx_shape_impl(ctx):
     classes = classify_worlds(result.packages, [_LINUX])
     asserts.equals(env, "divergent", classes["tls-1.0.0"])
     asserts.equals(env, "host_only", classes["macros-1.0.0"])
-    return unittest.end(env)
-
-def _unified_sqlx_shape_unifies_impl(ctx):
-    env = unittest.begin(ctx)
-
-    spoke_facts, members = _sqlx_shape_fixtures()
-    result = _run_workspace_resolution(spoke_facts, members, "unified", proc_macro_spokes = ["macros-1.0.0"])
-
-    # Documents the leak split mode removes: both requests unify.
-    asserts.equals(env, ["heavy", "light"], _target_features(result, "tls-1.0.0", _LINUX))
-
-    # Unified mode allocates no host state and consults no activation flags.
-    asserts.equals(env, None, result.by_fq["tls-1.0.0"].host["state"])
-    asserts.equals(env, None, result.by_fq["macros-1.0.0"].host["state"])
-    asserts.false(env, _target_active(result, "tls-1.0.0", _LINUX))
     return unittest.end(env)
 
 def _split_build_dep_crossing_and_stickiness_impl(ctx):
@@ -428,7 +411,7 @@ def _split_build_dep_crossing_and_stickiness_impl(ctx):
         ],
         "lock_dependencies": ["wrapper", "tls"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split")
+    result = _run_workspace_resolution(spoke_facts, members)
 
     # The spoke build-dep edge crosses into the host world, and host-ness is
     # sticky down the normal-dep chain gen -> mid -> tls.
@@ -473,7 +456,7 @@ def _split_member_proc_macro_is_world_boundary_impl(ctx):
         ],
         "lock_dependencies": ["tls", "devdep"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split")
+    result = _run_workspace_resolution(spoke_facts, members)
 
     # The proc-macro member is a target-world root: activation and the
     # "default" self-seed stay target-side, no host state is ever allocated.
@@ -525,7 +508,7 @@ def _split_multi_kind_dep_feature_forwarding_impl(ctx):
         ],
         "lock_dependencies": ["p", "wrapper"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split")
+    result = _run_workspace_resolution(spoke_facts, members)
 
     # p is target-active with `f`. Its `pshared/feat` must reach BOTH worlds:
     # via the [dependencies] entry (sticky target) AND via the
@@ -573,7 +556,7 @@ def _split_optional_weak_features_per_world_impl(ctx):
         ],
         "lock_dependencies": ["p", "wrapper"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split")
+    result = _run_workspace_resolution(spoke_facts, members)
 
     # Host world: `f` enables dep:tlsdep, so the optional dep activates there
     # and the weak `tlsdep?/light` forwards.
@@ -613,7 +596,7 @@ def _split_disjoint_triple_activity_impl(ctx):
         ],
         "lock_dependencies": ["shared", "wrapper"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split", triples = triples)
+    result = _run_workspace_resolution(spoke_facts, members, triples = triples)
 
     # Host-active on linux only (wrapper's cfg-gated build-dep), target-active
     # on darwin only (cfg-gated normal dep) — with different feature views.
@@ -652,7 +635,7 @@ def _split_deep_chain_converges_impl(ctx):
         ],
         "lock_dependencies": ["wrapper"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split")
+    result = _run_workspace_resolution(spoke_facts, members)
 
     deepest = "c%d-1.0.0" % (chain_length - 1)
     asserts.true(env, _host_active(result, deepest, _LINUX))
@@ -684,7 +667,7 @@ def _split_build_dep_chain_activation_drain_impl(ctx):
         ],
         "lock_dependencies": ["wrapper"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split")
+    result = _run_workspace_resolution(spoke_facts, members)
 
     # The whole chain of build-dep crossings activates within one resolve()
     # call's in-round drain.
@@ -722,7 +705,7 @@ def _split_annotations_seed_without_activation_impl(ctx):
         "lonely": {"*": annotation},
         "transitive_tool": {"*": annotation},
     }
-    result = _run_workspace_resolution(spoke_facts, members, "split", annotations = annotations)
+    result = _run_workspace_resolution(spoke_facts, members, annotations = annotations)
 
     # Annotations seed BOTH worlds: pending host seeds are copied when the
     # fixpoint first host-activates the crate (copy-on-activate)...
@@ -765,7 +748,7 @@ def _split_transitive_label_divergence_impl(ctx):
         ],
         "lock_dependencies": ["m", "macros", "r"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split", proc_macro_spokes = ["macros-1.0.0"])
+    result = _run_workspace_resolution(spoke_facts, members, proc_macro_spokes = ["macros-1.0.0"])
 
     # m's per-world feature views are identical (both empty), and so are its
     # per-world dep label sets pre-rewrite...
@@ -835,7 +818,7 @@ def _render_world_views_divergence_impl(ctx):
         ],
         "lock_dependencies": ["m", "macros", "r"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split", proc_macro_spokes = ["macros-1.0.0"])
+    result = _run_workspace_resolution(spoke_facts, members, proc_macro_spokes = ["macros-1.0.0"])
     classes = classify_worlds(result.packages, [_LINUX])
 
     # Divergent leaf: base view is the target instance, host views rendered.
@@ -878,7 +861,7 @@ def _render_world_views_target_only_build_dep_rewrite_impl(ctx):
         ],
         "lock_dependencies": ["p", "tls"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split")
+    result = _run_workspace_resolution(spoke_facts, members)
     classes = classify_worlds(result.packages, [_LINUX])
     asserts.equals(env, "target_only", classes["p-1.0.0"])
     asserts.equals(env, "divergent", classes["tls-1.0.0"])
@@ -913,7 +896,7 @@ def _render_world_views_disjoint_triple_merge_impl(ctx):
         ],
         "lock_dependencies": ["shared", "wrapper"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split", triples = triples)
+    result = _run_workspace_resolution(spoke_facts, members, triples = triples)
     classes = classify_worlds(result.packages, triples)
     asserts.equals(env, "identical", classes["shared-1.0.0"])
 
@@ -943,7 +926,7 @@ def _render_world_views_unactivated_impl(ctx):
         "lock_dependencies": ["used"],
     }]
     annotations = {"lonely": {"*": struct(crate_features = ["annofeat"], crate_features_select = {})}}
-    result = _run_workspace_resolution(spoke_facts, members, "split", annotations = annotations)
+    result = _run_workspace_resolution(spoke_facts, members, annotations = annotations)
     classes = classify_worlds(result.packages, [_LINUX])
     asserts.equals(env, "unactivated", classes["lonely-1.0.0"])
 
@@ -1013,7 +996,7 @@ def _workspace_dep_data_member_world_boundary_impl(ctx):
             "lock_dependencies": ["tls", "devdep"],
         },
     ]
-    result = _run_workspace_resolution(spoke_facts, members, "split", proc_macro_spokes = ["macros-1.0.0"])
+    result = _run_workspace_resolution(spoke_facts, members, proc_macro_spokes = ["macros-1.0.0"])
 
     # tls IS divergent (host world via the proc-macro SPOKE only carries
     # "light"); the member build-dep's "light" lands in the TARGET set.
@@ -1106,7 +1089,7 @@ def _split_host_deps_view_completeness_impl(ctx):
         ],
         "lock_dependencies": ["chacha", "common", "wrapper"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split", triples = triples)
+    result = _run_workspace_resolution(spoke_facts, members, triples = triples)
     classes = classify_worlds(result.packages, triples)
     asserts.equals(env, "divergent", classes["chacha-1.0.0"])
     asserts.equals(env, "divergent", classes["common-1.0.0"])
@@ -1164,7 +1147,7 @@ def _split_optional_dep_target_enablement_does_not_cross_impl(ctx):
         ],
         "lock_dependencies": ["rq", "wrapper"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split")
+    result = _run_workspace_resolution(spoke_facts, members)
 
     # Target world: dns -> dep:hick -> optional dep activated.
     asserts.true(env, _target_active(result, "hick-1.0.0", _LINUX))
@@ -1212,7 +1195,7 @@ def _split_member_build_dep_features_are_amphibious_impl(ctx):
         ],
         "lock_dependencies": ["macros", "codegen"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split", proc_macro_spokes = ["macros-1.0.0"])
+    result = _run_workspace_resolution(spoke_facts, members, proc_macro_spokes = ["macros-1.0.0"])
 
     # The member build edge stays target-world for activation/labels...
     asserts.true(env, _target_active(result, "codegen-1.0.0", _LINUX))
@@ -1257,7 +1240,7 @@ def _split_member_build_dep_amphibious_without_host_user_impl(ctx):
         ],
         "lock_dependencies": ["codegen"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split")
+    result = _run_workspace_resolution(spoke_facts, members)
 
     asserts.true(env, _target_active(result, "codegen-1.0.0", _LINUX))
     asserts.true(env, _target_active(result, "rkyvdep-1.0.0", _LINUX))
@@ -1307,7 +1290,7 @@ def _split_inactive_triple_renders_legacy_view_impl(ctx):
         ],
         "lock_dependencies": ["fmap", "wrapper"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, "split", triples = triples)
+    result = _run_workspace_resolution(spoke_facts, members, triples = triples)
 
     # Activation flags stay chain-accurate at the cfg-gated edges...
     asserts.true(env, _target_active(result, "fmap-1.0.0", _LINUX))
@@ -1422,7 +1405,6 @@ split_inactive_triple_renders_legacy_view_test = unittest.make(_split_inactive_t
 render_rust_crate_call_world_split_test = unittest.make(_render_rust_crate_call_world_split_impl)
 
 split_sqlx_shape_test = unittest.make(_split_sqlx_shape_impl)
-unified_sqlx_shape_unifies_test = unittest.make(_unified_sqlx_shape_unifies_impl)
 split_build_dep_crossing_and_stickiness_test = unittest.make(_split_build_dep_crossing_and_stickiness_impl)
 split_member_proc_macro_is_world_boundary_test = unittest.make(_split_member_proc_macro_is_world_boundary_impl)
 split_multi_kind_dep_feature_forwarding_test = unittest.make(_split_multi_kind_dep_feature_forwarding_impl)
@@ -1464,6 +1446,5 @@ def cargo_workspace_graph_tests():
         split_optional_weak_features_per_world_test,
         split_sqlx_shape_test,
         split_transitive_label_divergence_test,
-        unified_sqlx_shape_unifies_test,
         workspace_dep_data_member_world_boundary_test,
     )

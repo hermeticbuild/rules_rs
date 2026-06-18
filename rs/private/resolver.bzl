@@ -1,15 +1,14 @@
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs")
 
-# Feature worlds (cargo resolver v2, `resolver_feature_worlds = "split"`):
-# target world = normal-dep state, host world = build-dep + proc-macro state.
-# Split work items are `package_index * 2 + world` (cheap int set); unified
-# mode uses plain package indices, world fixed to target.
+# Feature worlds (cargo resolver v2): target world = normal-dep state, host
+# world = build-dep + proc-macro state. Work items are
+# `package_index * 2 + world` (a cheap int set).
 _WORLD_TARGET = 0
 _WORLD_HOST = 1
 
 def ensure_host_state(feature_resolutions):
     """Lazily materializes host-world state, only for crates the host world
-    reaches (keeps unified mode untouched). Copies in pending feature seeds."""
+    reaches. Copies in pending feature seeds."""
     host = feature_resolutions.host
     state = host["state"]
     if state == None:
@@ -111,7 +110,7 @@ def _dep_world(world, kind, feature_resolutions, dep_feature_resolutions):
     # hand-written `@crates//:x` pins and member-to-member labels, and one
     # action links only ONE instance per crate. So edges into members stay
     # target-world, and member build edges stay target-world too (else E0464) —
-    # their features unify into base instances, as in unified mode.
+    # their features unify into the base instances.
     if dep_feature_resolutions.is_workspace_member:
         return _WORLD_TARGET
     if dep_feature_resolutions.is_proc_macro:
@@ -130,9 +129,9 @@ def _is_amphibious_edge(kind, dep_world, feature_resolutions, dep_feature_resolu
             not dep_feature_resolutions.is_workspace_member)
 
 def _queue_or_dirty(item, new_dirty_items, worklist, queued, processed):
-    # In-round drain (split): unprocessed items append to this round's worklist
-    # (each at most once, bounded by 2 * len(packages)); already-processed
-    # items re-dirty into the next round.
+    # In-round drain: unprocessed items append to this round's worklist (each at
+    # most once, bounded by 2 * len(packages)); already-processed items re-dirty
+    # into the next round.
     if item in processed:
         new_dirty_items.add(item)
     elif item not in queued:
@@ -152,7 +151,7 @@ def _activate(dep_feature_resolutions, world, triple, new_dirty_items, worklist,
 def _dep_world_remaining(dep, world):
     # Per-(edge, world) unprocessed-triple sets: an edge done for one world may
     # still need the other, and `dep["target"]` must stay intact for
-    # `_dep_target_matches_triple` (unified mode mutates it directly instead).
+    # `_dep_target_matches_triple`.
     remaining_by_world = dep.get("_remaining")
     if remaining_by_world == None:
         remaining_by_world = [None, None]
@@ -164,32 +163,23 @@ def _dep_world_remaining(dep, world):
         remaining_by_world[world] = remaining
     return remaining
 
-def _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug, split_mode):
-    # One body, both modes. Unified is the degenerate case: plain package
-    # indices, world fixed to target, no host machinery or activation gating,
-    # and direct `dep["target"]` consumption (split uses _remaining + in-round
-    # worklist draining).
+def _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug):
     new_dirty_items = set()
 
     worklist = list(dirty_items)
-    queued = set(worklist) if split_mode else None
-    processed = set() if split_mode else None
+    queued = set(worklist)
+    processed = set()
 
     # Bounded in-round drain (no `while` in Starlark): activation is monotone
     # and `queued` admits each item once, so worklist <= 2 * len(packages).
-    # Unified mode never appends — a plain iteration over the dirty items.
     for cursor in range(2 * len(packages)):
         if cursor >= len(worklist):
             break
         item = worklist[cursor]
 
-        if split_mode:
-            processed.add(item)
-            package_index = item // 2
-            world = item % 2
-        else:
-            package_index = item
-            world = _WORLD_TARGET
+        processed.add(item)
+        package_index = item // 2
+        world = item % 2
 
         package = packages[package_index]
         package_changed = False
@@ -219,7 +209,6 @@ def _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug, split_
             feature_resolutions,
             cfg_attrs_by_triple,
             debug,
-            split_mode,
         ):
             package_changed = True
 
@@ -229,38 +218,34 @@ def _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug, split_
             if not bazel_target:
                 continue
 
-            if split_mode:
-                remaining = _dep_world_remaining(dep, world)
-                if not remaining:
-                    continue
+            remaining = _dep_world_remaining(dep, world)
+            if not remaining:
+                continue
 
             kind = dep.get("kind", "normal")
 
             dep_feature_resolutions = dep["feature_resolutions"]
-            dep_world = _dep_world(world, kind, feature_resolutions, dep_feature_resolutions) if split_mode else _WORLD_TARGET
+            dep_world = _dep_world(world, kind, feature_resolutions, dep_feature_resolutions)
 
             has_alias = "package" in dep
             dep_name = dep["name"]
             prefixed_dep_alias = "dep:" + dep_name
             optional = dep.get("optional", False)
 
-            # Split: work items exist only for edge-ACTIVATED (package, world)
-            # pairs — the gating that stops a host-only crate leaking features
-            # into its deps' target sets. Within an item, all cfg-matched
-            # triples are processed (as in unified mode), so a crate reachable
-            # only behind cfg(linux) edges still renders a buildable view if
-            # configured on darwin (public hub aliases, hand-written refs).
+            # Work items exist only for edge-ACTIVATED (package, world) pairs —
+            # the gating that stops a host-only crate leaking features into its
+            # deps' target sets. Within an item, all cfg-matched triples are
+            # processed, so a crate reachable only behind cfg(linux) edges still
+            # renders a buildable view if configured on darwin (public hub
+            # aliases, hand-written refs).
             if dep.get("feature_sensitive"):
                 match = set([
                     triple
-                    for triple in (remaining if split_mode else dep["target"])
+                    for triple in remaining
                     if _dep_target_matches_triple(dep, triple, features_enabled[triple], cfg_attrs_by_triple)
                 ])
-            elif split_mode:
-                match = remaining
             else:
-                # NOT a copy: the consumption below mutates dep["target"].
-                match = dep["target"]
+                match = remaining
 
             to_remove = None
             for triple in match:
@@ -277,8 +262,7 @@ def _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug, split_
                 if has_alias:
                     aliases[bazel_target] = dep_name.replace("-", "_")
 
-                if split_mode:
-                    _activate(dep_feature_resolutions, dep_world, triple, new_dirty_items, worklist, queued, processed)
+                _activate(dep_feature_resolutions, dep_world, triple, new_dirty_items, worklist, queued, processed)
 
                 dep_features = dep.get("features")
                 if dep_features:
@@ -286,15 +270,12 @@ def _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug, split_
                     prev_length = len(triple_features)
                     triple_features.update(dep_features)
                     if prev_length != len(triple_features):
-                        if split_mode:
-                            _queue_or_dirty(dep_feature_resolutions.package_index * 2 + dep_world, new_dirty_items, worklist, queued, processed)
-                        else:
-                            new_dirty_items.add(dep_feature_resolutions.package_index)
+                        _queue_or_dirty(dep_feature_resolutions.package_index * 2 + dep_world, new_dirty_items, worklist, queued, processed)
 
                     # Member build edges are feature-AMPHIBIOUS: target-world
                     # for activation/labels, but features also reach the dep's
                     # host instance so shared crates agree across worlds.
-                    if split_mode and _is_amphibious_edge(kind, dep_world, feature_resolutions, dep_feature_resolutions):
+                    if _is_amphibious_edge(kind, dep_world, feature_resolutions, dep_feature_resolutions):
                         if seed_pending_host_features(dep_feature_resolutions, triple, dep_features):
                             _queue_or_dirty(dep_feature_resolutions.package_index * 2 + _WORLD_HOST, new_dirty_items, worklist, queued, processed)
                 if not to_remove:
@@ -302,12 +283,7 @@ def _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug, split_
                 to_remove.add(triple)
 
             if to_remove:
-                if split_mode:
-                    remaining.difference_update(to_remove)
-                elif len(to_remove) == len(match):
-                    dep["bazel_target"] = None
-                else:
-                    match.difference_update(to_remove)
+                remaining.difference_update(to_remove)
 
         if package_changed:
             new_dirty_items.add(item)
@@ -327,8 +303,7 @@ def _propagate_feature_enablement(
         features_enabled,
         feature_resolutions,
         cfg_attrs_by_triple,
-        debug,
-        split_mode):
+        debug):
     package_changed = False
     possible_features = feature_resolutions.possible_features
 
@@ -361,11 +336,9 @@ def _propagate_feature_enablement(
                 found = False
                 any_optional = False
 
-                # Split iterates ALL entries matching the name (a crate often
-                # lists the same package under [dependencies] and
-                # [build-dependencies]); each forwards `dep_feature` into its
-                # own world. Unified keeps the historical first-match `break`
-                # for byte-identical output; fixing it there is a follow-up.
+                # Iterate ALL entries matching the name (a crate often lists the
+                # same package under [dependencies] and [build-dependencies]);
+                # each forwards `dep_feature` into its own world.
                 for dep in feature_resolutions.possible_deps:
                     if dep_name != dep["name"]:
                         continue
@@ -380,23 +353,17 @@ def _propagate_feature_enablement(
                     if not optional_marker or not dep_optional or dep_name in feature_set or ("dep:" + dep_name) in feature_set:
                         dep_feature_resolutions = dep["feature_resolutions"]
                         dep_kind = dep.get("kind", "normal")
-                        dep_world = _dep_world(world, dep_kind, feature_resolutions, dep_feature_resolutions) if split_mode else _WORLD_TARGET
+                        dep_world = _dep_world(world, dep_kind, feature_resolutions, dep_feature_resolutions)
                         triple_features = _world_features_enabled(dep_feature_resolutions, dep_world)[triple]
                         if dep_feature not in triple_features:
                             triple_features.add(dep_feature)
-                            if split_mode:
-                                _queue_or_dirty(dep_feature_resolutions.package_index * 2 + dep_world, new_dirty_items, worklist, queued, processed)
-                            else:
-                                new_dirty_items.add(dep_feature_resolutions.package_index)
+                            _queue_or_dirty(dep_feature_resolutions.package_index * 2 + dep_world, new_dirty_items, worklist, queued, processed)
 
                         # See the edge loop: member build-dep entries forward
                         # into the host world too (feature-amphibious).
-                        if split_mode and _is_amphibious_edge(dep_kind, dep_world, feature_resolutions, dep_feature_resolutions):
+                        if _is_amphibious_edge(dep_kind, dep_world, feature_resolutions, dep_feature_resolutions):
                             if seed_pending_host_features(dep_feature_resolutions, triple, [dep_feature]):
                                 _queue_or_dirty(dep_feature_resolutions.package_index * 2 + _WORLD_HOST, new_dirty_items, worklist, queued, processed)
-
-                    if not split_mode:
-                        break
 
                 # Only optional deps need to be explicitly enabled when a subfeature is toggled.
                 if any_optional and (not optional_marker) and dep_name not in feature_set:
@@ -410,37 +377,33 @@ def _propagate_feature_enablement(
 
 _MAX_ROUNDS = 50
 
-def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple, debug, split = False):
+def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple, debug):
     """Runs the dependency/feature fixpoint. Returns the number of rounds used."""
-    if split:
-        # Edge-activation-driven: only items marked active by member seeding
-        # start dirty; round 0's in-round drain pulls the rest of the reachable
-        # frontier, so round count tracks feature-implication depth, not graph
-        # depth.
-        dirty_items = []
-        for package_index in range(len(packages)):
-            feature_resolutions = packages[package_index]["feature_resolutions"]
-            for is_active in feature_resolutions.target_active.values():
-                if is_active:
-                    dirty_items.append(package_index * 2)
-                    break
 
-            host_state = feature_resolutions.host["state"]
-            if host_state != None:
-                for is_active in host_state["active"].values():
-                    if is_active:
-                        dirty_items.append(package_index * 2 + _WORLD_HOST)
-                        break
-    else:
-        # Do some rounds of mutual resolution; bail when no more changes
-        dirty_items = range(len(packages))
+    # Edge-activation-driven: only items marked active by member seeding start
+    # dirty; round 0's in-round drain pulls the rest of the reachable frontier,
+    # so round count tracks feature-implication depth, not graph depth.
+    dirty_items = []
+    for package_index in range(len(packages)):
+        feature_resolutions = packages[package_index]["feature_resolutions"]
+        for is_active in feature_resolutions.target_active.values():
+            if is_active:
+                dirty_items.append(package_index * 2)
+                break
+
+        host_state = feature_resolutions.host["state"]
+        if host_state != None:
+            for is_active in host_state["active"].values():
+                if is_active:
+                    dirty_items.append(package_index * 2 + _WORLD_HOST)
+                    break
 
     for i in range(_MAX_ROUNDS):
         mctx.report_progress("Running round %s of dependency/feature resolution" % i)
-        if debug and split:
+        if debug:
             print("split-worlds round", i, "work items:", len(dirty_items))
 
-        dirty_items = _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug, split)
+        dirty_items = _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug)
         if not dirty_items:
             if debug:
                 count = _count(feature_resolutions_by_fq_crate)
