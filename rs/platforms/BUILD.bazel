@@ -1,10 +1,10 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load("//rs/platforms:all_triples_build_test.bzl", "all_triples_build_test")
 load("//rs/platforms:declare_platforms.bzl", "declare_platforms")
-load("//rs/platforms:triples_test.bzl", "triples_tests")
 
 declare_platforms()
 
-triples_tests()
+all_triples_build_test()
 
 bzl_library(
     name = "declare_platforms",
@@ -19,14 +19,5 @@ bzl_library(
     visibility = ["//visibility:public"],
     deps = [
         "@rules_rust//rust/platform:bzl_lib",
-    ],
-)
-
-bzl_library(
-    name = "triples_test",
-    srcs = ["triples_test.bzl"],
-    deps = [
-        ":triples",
-        "@bazel_skylib//lib:unittest",
     ],
 )

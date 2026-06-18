@@ -4,32 +4,6 @@ load(
     _triple_to_constraint_set = "triple_to_constraint_set",
 )
 
-def _base_rust_constraint_set(target_triple):
-    """The Rust constraint set for a triple, before collision disambiguators.
-
-    This is everything except the constraints added by
-    `_disambiguator_constraint`. It is computed for both a triple and its
-    candidate sibling so we can tell whether they actually collide.
-    """
-    constraints = _triple_to_constraint_set(target_triple)
-    t = triple(target_triple)
-
-    if t.system in ("linux", "nixos"):
-        if t.abi == "musl" or "musl" in target_triple:
-            constraints.append("@rules_rs//rs/platforms/constraints:musl")
-        else:
-            constraints.append("@rules_rs//rs/platforms/constraints:glibc")
-    elif t.system == "windows":
-        constraints.append("@llvm//constraints/windows/abi:" + t.abi)
-
-        # Rust links MSVCRT for both GNU Windows target specs:
-        # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnullvm.rs#L19
-        # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnu.rs#L44
-        if t.abi in ("gnu", "gnullvm"):
-            constraints.append("@llvm//constraints/windows/crt:msvcrt")
-
-    return constraints
-
 # Disambiguator constraints appended to one (or both) members of a colliding
 # soft/hard-float (or wasm threads on/off) pair.
 _HARDFLOAT = "@rules_rs//rs/platforms/constraints:hardfloat"
@@ -68,28 +42,36 @@ def _sibling_and_constraint(target_triple, targets):
 
     return (None, None)
 
-def _disambiguator_constraint(target_triple, targets):
-    """Return the constraint that distinguishes target_triple from a colliding
-    sibling, or None when there is no genuine collision.
-
-    Scoped to real collisions: we only add a constraint when the sibling is also
-    in `targets` *and* the two project to the same base constraint set without
-    it. Lone targets -- and pairs that already differ (e.g. thumbv7em-none-eabi
-    vs ...eabihf, which rules_rust maps to distinct CPUs) -- are left untouched
-    so existing platforms keep matching them with no annotation.
-    """
-    sibling, constraint = _sibling_and_constraint(target_triple, targets)
-    if not sibling or sibling not in targets:
-        return None
-    if sorted(_base_rust_constraint_set(target_triple)) != sorted(_base_rust_constraint_set(sibling)):
-        return None
-    return constraint
-
 def triple_to_rust_constraint_set(target_triple, targets = None):
-    constraints = _base_rust_constraint_set(target_triple)
+    constraints = _triple_to_constraint_set(target_triple)
+    t = triple(target_triple)
 
-    disambiguator = _disambiguator_constraint(target_triple, targets or ALL_TARGET_TRIPLES)
-    if disambiguator:
+    if t.system in ("linux", "nixos"):
+        if t.abi == "musl" or "musl" in target_triple:
+            constraints.append("@rules_rs//rs/platforms/constraints:musl")
+        else:
+            constraints.append("@rules_rs//rs/platforms/constraints:glibc")
+    elif t.system == "windows":
+        constraints.append("@llvm//constraints/windows/abi:" + t.abi)
+
+        # Rust links MSVCRT for both GNU Windows target specs:
+        # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnullvm.rs#L19
+        # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnu.rs#L44
+        if t.abi in ("gnu", "gnullvm"):
+            constraints.append("@llvm//constraints/windows/crt:msvcrt")
+
+    # Float-ABI (eabi/eabihf, -softfloat) and wasm-threads (-threads) encodings
+    # can collide: a sibling triple that rules_rust maps to the same constraints
+    # makes the per-triple config_setting select ambiguous. Add a marker to
+    # separate them, but only for a genuine collision -- the sibling is in the
+    # target set and rules_rust does not already distinguish the two. Lone
+    # targets, and pairs rules_rust already maps to distinct CPUs (e.g.
+    # thumbv7em-none-eabi vs ...eabihf), are left untouched so existing platforms
+    # keep matching them with no annotation.
+    targets = targets or ALL_TARGET_TRIPLES
+    sibling, disambiguator = _sibling_and_constraint(target_triple, targets)
+    if (sibling and sibling in targets and
+        sorted(_triple_to_constraint_set(target_triple)) == sorted(_triple_to_constraint_set(sibling))):
         constraints.append(disambiguator)
 
     return constraints
