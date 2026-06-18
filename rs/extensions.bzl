@@ -543,8 +543,12 @@ alias(
     actual = "{actual}",
 )""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name + "_host")))
 
-            for binary in annotation.gen_binaries:
-                hub_contents.append("""
+            # An unactivated crate renders only the incompatible stub (no
+            # `<binary>__bin` targets), so skip its gen_binaries aliases — they
+            # would dangle. gen_binaries on an unreached crate is a no-op.
+            if classes_by_fq.get(_fq_crate(name, version)) != "unactivated":
+                for binary in annotation.gen_binaries:
+                    hub_contents.append("""
 alias(
     name = "{name}-{version}__{binary}",
     actual = "{actual}",
