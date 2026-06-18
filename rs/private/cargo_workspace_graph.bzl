@@ -1,6 +1,6 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
-load("//rs/private:resolver.bzl", "ensure_host_state", "resolve", "seed_pending_host_features")
+load("//rs/private:resolver.bzl", "resolve", "seed_pending_host_features")
 load("//rs/private:select_utils.bzl", "compute_select")
 load("//rs/private:semver.bzl", "select_matching_version")
 
@@ -62,7 +62,7 @@ def cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache):
     cfg_match_cache[target] = match_info
     return match_info
 
-def new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples, is_proc_macro = False, is_workspace_member = False):
+def new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples, is_workspace_member = False):
     return struct(
         features_enabled = {triple: set() for triple in platform_triples},
         build_deps = {triple: set() for triple in platform_triples},
@@ -77,7 +77,6 @@ def new_feature_resolutions(package_index, possible_deps, possible_features, pla
         # _dep_world in resolver.bzl).
         target_active = {triple: False for triple in platform_triples},
         host = {"state": None},
-        is_proc_macro = is_proc_macro,
         is_workspace_member = is_workspace_member,
     )
 
@@ -189,14 +188,10 @@ def cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json = None):
     return dependencies
 
 def cargo_toml_fact(cargo_toml_json, workspace_cargo_toml_json = None, strip_prefix = ""):
-    lib = cargo_toml_json.get("lib", {})
     return dict(
         features = cargo_toml_json.get("features", {}),
         dependencies = cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json),
         strip_prefix = strip_prefix,
-        # Resolver needs the proc-macro bit at resolution time to classify
-        # dependency edges.
-        is_proc_macro = bool(lib.get("proc-macro") or lib.get("proc_macro")),
     )
 
 def prepare_possible_deps(dependencies, converter = None, skip_internal_rustc_placeholder_crates = True):
@@ -379,23 +374,6 @@ def split_lockfile_packages(hub_name, cargo_metadata, workspace_cargo_toml, all_
         workspace_members = workspace_members,
     )
 
-def _package_is_proc_macro(package, package_info):
-    # An explicit bit stamped on the package dict wins; else fall back to the
-    # fact's `is_proc_macro` (from `[lib] proc-macro` for path+/git+ manifests
-    # or the sniffed `sparse+` archive) or cargo-metadata `targets[].kind`.
-    is_proc_macro = package.get("is_proc_macro")
-    if is_proc_macro != None:
-        return bool(is_proc_macro)
-
-    if package_info.get("is_proc_macro"):
-        return True
-
-    for target in package_info.get("targets", []):
-        if "proc-macro" in target.get("kind", []):
-            return True
-
-    return False
-
 def _resolve_packages(packages, package_info_by_fq_crate, platform_triples, dep_converter = None, skip_internal_rustc_placeholder_crates = True):
     feature_resolutions_by_fq_crate = {}
     versions_by_name = {}
@@ -419,7 +397,6 @@ def _resolve_packages(packages, package_info_by_fq_crate, platform_triples, dep_
             possible_deps,
             package_info.get("features", {}),
             platform_triples,
-            is_proc_macro = _package_is_proc_macro(package, package_info),
         )
         package["feature_resolutions"] = feature_resolutions
         feature_resolutions_by_fq_crate[fq] = feature_resolutions
@@ -848,19 +825,11 @@ def resolve_cargo_workspace_members(
             "dependencies": lockfile_pkg.get("dependencies", []),
         }
 
-        # Proc-macro members are host-world roots (bit from `cargo metadata`).
-        member_is_proc_macro = False
-        for target in package.get("targets", []):
-            if "proc-macro" in target.get("kind", []):
-                member_is_proc_macro = True
-                break
-
         feature_resolutions = new_feature_resolutions(
             package_index,
             possible_deps,
             possible_features,
             platform_triples,
-            is_proc_macro = member_is_proc_macro,
             is_workspace_member = True,
         )
         resolver_package["feature_resolutions"] = feature_resolutions
@@ -889,8 +858,7 @@ def resolve_cargo_workspace_members(
         package_feature_resolutions = feature_resolutions_by_fq_crate[fq_crate(package["name"], package["version"])]
 
         # Members are world boundaries: always target-world roots (single
-        # gazelle targets must link base instances everywhere). Only edges to
-        # proc-macro SPOKES cross into the host world during seeding.
+        # gazelle targets must link base instances everywhere).
         for triple in platform_triples:
             package_feature_resolutions.target_active[triple] = True
 
@@ -950,28 +918,18 @@ def resolve_cargo_workspace_members(
             target = dep.get("target")
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
 
-            # Member edges cross to host only for proc-macro SPOKES (host-only,
-            # so the base label is world-consistent). Build/dev edges stay
-            # target-world.
-            seed_host = feature_resolutions.is_proc_macro and not feature_resolutions.is_workspace_member
-
             for triple in match_info.matches:
                 if not is_first_party_dep or materialize_workspace_members:
                     workspace_dep_labels_by_triple[triple].add(":" + dep_name)
-                if seed_host:
-                    dep_host_state = ensure_host_state(feature_resolutions)
-                    dep_host_state["features_enabled"][triple].update(features)
-                    dep_host_state["active"][triple] = True
-                else:
-                    feature_resolutions.features_enabled[triple].update(features)
-                    feature_resolutions.target_active[triple] = True
+                feature_resolutions.features_enabled[triple].update(features)
+                feature_resolutions.target_active[triple] = True
 
-                    # Member [build-dependencies] are feature-AMPHIBIOUS:
-                    # edge stays target-world, but features also reach the
-                    # dep's host instance (without activating it) so shared
-                    # crates agree across worlds.
-                    if dep.get("kind") == "build" and not feature_resolutions.is_workspace_member:
-                        seed_pending_host_features(feature_resolutions, triple, features)
+                # Member [build-dependencies] are feature-AMPHIBIOUS:
+                # edge stays target-world, but features also reach the
+                # dep's host instance (without activating it) so shared
+                # crates agree across worlds.
+                if dep.get("kind") == "build" and not feature_resolutions.is_workspace_member:
+                    seed_pending_host_features(feature_resolutions, triple, features)
 
     for crate, annotation_versions in annotations.items():
         for version_key, annotation in annotation_versions.items():
