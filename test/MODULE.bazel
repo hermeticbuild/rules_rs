@@ -165,7 +165,6 @@ TESTS = [
     "non_optional_dep_feature",
     "optional_build_deps",
     "platform_dep_features",
-    "proc_macro_sniff",
     "self_dev_dependency",
     "target_workspace_dep_feature",
     "vendored_crate_override",

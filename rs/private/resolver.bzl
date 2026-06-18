@@ -1,8 +1,8 @@
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs")
 
 # Feature worlds (cargo resolver v2): target world = normal-dep state, host
-# world = build-dep + proc-macro state. Work items are
-# `package_index * 2 + world` (a cheap int set).
+# world = build-dep state. Work items are `package_index * 2 + world` (a cheap
+# int set).
 _WORLD_TARGET = 0
 _WORLD_HOST = 1
 
@@ -33,8 +33,8 @@ def seed_pending_host_features(feature_resolutions, triple, features):
     For feature-amphibious edges (member [build-dependencies]): the edge stays
     target-world for activation/labels (members are world boundaries), but its
     features must also reach the host instance so crates shared by member build
-    scripts and proc-macro/build-dep trees agree across worlds (cargo resolver
-    v2 puts both edges in the host world).
+    scripts and build-dep trees agree across worlds (cargo resolver v2 puts both
+    edges in the host world).
 
     Before host state exists, seeds go to the same pending_features container
     annotations use. Returns True iff the live host feature set grew at a
@@ -103,8 +103,8 @@ def _world_features_enabled(feature_resolutions, world):
 
 def _dep_world(world, kind, feature_resolutions, dep_feature_resolutions):
     # Cargo resolver v2 edge classification, members as world BOUNDARIES:
-    # build-dep edges and edges into proc-macro spokes cross to host; other
-    # edges stay in the originating world (host-ness sticky down normal chains).
+    # build-dep edges cross to host; other edges stay in the originating world
+    # (host-ness sticky down normal chains).
     #
     # Members are gazelle-generated single instances mixing DEP_DATA labels,
     # hand-written `@crates//:x` pins and member-to-member labels, and one
@@ -113,16 +113,13 @@ def _dep_world(world, kind, feature_resolutions, dep_feature_resolutions):
     # their features unify into the base instances.
     if dep_feature_resolutions.is_workspace_member:
         return _WORLD_TARGET
-    if dep_feature_resolutions.is_proc_macro:
-        return _WORLD_HOST
     if kind == "build" and not feature_resolutions.is_workspace_member:
         return _WORLD_HOST
     return world
 
 def _is_amphibious_edge(kind, dep_world, feature_resolutions, dep_feature_resolutions):
-    # Member [build-dependencies] onto a plain spoke: target-world edge (the
-    # dep_world check excludes proc-macro spokes), consumer is a member, dep is
-    # not (members have no host world).
+    # Member [build-dependencies] onto a plain spoke: target-world edge,
+    # consumer is a member, dep is not (members have no host world).
     return (kind == "build" and
             dep_world == _WORLD_TARGET and
             feature_resolutions.is_workspace_member and

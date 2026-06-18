@@ -1,5 +1,5 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "cargo_toml_fact", "classify_worlds", "compute_package_fq_deps", "render_world_views", "resolve_cargo_workspace_members", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages", "workspace_dep_data")
+load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "classify_worlds", "compute_package_fq_deps", "render_world_views", "resolve_cargo_workspace_members", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages", "workspace_dep_data")
 load(":repository_utils.bzl", "render_rust_crate_call")
 
 def _select_package_fq_dep_uses_package_name_impl(ctx):
@@ -284,14 +284,11 @@ def _run_workspace_resolution(
         spoke_facts,
         members,
         triples = [_LINUX],
-        annotations = {},
-        proc_macro_spokes = []):
+        annotations = {}):
     packages = []
     for fq in spoke_facts:
         idx = fq.rfind("-")
         package = {"name": fq[:idx], "version": fq[idx + 1:]}
-        if fq in proc_macro_spokes:
-            package["is_proc_macro"] = True
         packages.append(package)
 
     resolved = resolve_package_facts(packages, spoke_facts, triples)
@@ -340,55 +337,6 @@ def _host_active(result, fq, triple):
     state = result.by_fq[fq].host["state"]
     return state != None and state["active"][triple]
 
-def _sqlx_shape_fixtures():
-    # Minimal sqlx/rustls shape: a runtime root and a proc-macro both depend on
-    # the same tls crate with different features.
-    spoke_facts = {
-        "macros-1.0.0": {
-            "dependencies": [{"name": "tls", "features": ["light"], "default_features": False}],
-            "features": {},
-        },
-        "tls-1.0.0": {
-            "dependencies": [],
-            "features": {"heavy": [], "light": []},
-        },
-    }
-    members = [{
-        "name": "app",
-        "version": "0.1.0",
-        "features": {},
-        "targets": [{"kind": ["lib"]}],
-        "dependencies": [
-            {"name": "macros", "kind": None, "features": [], "uses_default_features": False},
-            {"name": "tls", "kind": None, "features": ["heavy"], "uses_default_features": False},
-        ],
-        "lock_dependencies": ["macros", "tls"],
-    }]
-    return spoke_facts, members
-
-def _sqlx_shape_impl(ctx):
-    env = unittest.begin(ctx)
-
-    spoke_facts, members = _sqlx_shape_fixtures()
-    result = _run_workspace_resolution(spoke_facts, members, proc_macro_spokes = ["macros-1.0.0"])
-
-    # Target world carries only the runtime root's request...
-    asserts.true(env, _target_active(result, "tls-1.0.0", _LINUX))
-    asserts.equals(env, ["heavy"], _target_features(result, "tls-1.0.0", _LINUX))
-
-    # ...and the host world (under the proc-macro) only the macro's request.
-    asserts.true(env, _host_active(result, "tls-1.0.0", _LINUX))
-    asserts.equals(env, ["light"], _host_features(result, "tls-1.0.0", _LINUX))
-
-    # The proc-macro itself is host-only: every edge to it crosses worlds.
-    asserts.true(env, _host_active(result, "macros-1.0.0", _LINUX))
-    asserts.false(env, _target_active(result, "macros-1.0.0", _LINUX))
-
-    classes = classify_worlds(result.packages, [_LINUX])
-    asserts.equals(env, "divergent", classes["tls-1.0.0"])
-    asserts.equals(env, "host_only", classes["macros-1.0.0"])
-    return unittest.end(env)
-
 def _build_dep_crossing_and_stickiness_impl(ctx):
     env = unittest.begin(ctx)
 
@@ -431,48 +379,6 @@ def _build_dep_crossing_and_stickiness_impl(ctx):
     asserts.equals(env, "host_only", classes["gen-1.0.0"])
     asserts.equals(env, "host_only", classes["mid-1.0.0"])
     asserts.equals(env, "divergent", classes["tls-1.0.0"])
-    return unittest.end(env)
-
-def _member_proc_macro_is_world_boundary_impl(ctx):
-    env = unittest.begin(ctx)
-
-    # Proc-macro MEMBERS are world boundaries, NOT host roots: their
-    # gazelle-owned single-instance targets mix DEP_DATA labels with
-    # member-to-member labels and hand-written pins, so all their deps must
-    # resolve in the target world. (Proc-macro SPOKES remain host roots —
-    # covered by the sqlx-shape test.)
-    spoke_facts = {
-        "tls-1.0.0": {"dependencies": [], "features": {"heavy": [], "light": []}},
-        "devdep-1.0.0": {"dependencies": [], "features": {"testing": []}},
-    }
-    members = [{
-        "name": "pm",
-        "version": "0.1.0",
-        "features": {"default": []},
-        "targets": [{"kind": ["proc-macro"]}],
-        "dependencies": [
-            {"name": "tls", "kind": None, "features": ["light"], "uses_default_features": False},
-            {"name": "devdep", "kind": "dev", "features": ["testing"], "uses_default_features": False},
-        ],
-        "lock_dependencies": ["tls", "devdep"],
-    }]
-    result = _run_workspace_resolution(spoke_facts, members)
-
-    # The proc-macro member is a target-world root: activation and the
-    # "default" self-seed stay target-side, no host state is ever allocated.
-    asserts.true(env, _target_active(result, "pm-0.1.0", _LINUX))
-    asserts.equals(env, None, result.by_fq["pm-0.1.0"].host["state"])
-    asserts.equals(env, ["default"], _target_features(result, "pm-0.1.0", _LINUX))
-
-    # Its normal deps resolve in the target world (base instances)...
-    asserts.true(env, _target_active(result, "tls-1.0.0", _LINUX))
-    asserts.equals(env, None, result.by_fq["tls-1.0.0"].host["state"])
-    asserts.equals(env, ["light"], _target_features(result, "tls-1.0.0", _LINUX))
-
-    # ...and so do its dev deps.
-    asserts.true(env, _target_active(result, "devdep-1.0.0", _LINUX))
-    asserts.equals(env, ["testing"], _target_features(result, "devdep-1.0.0", _LINUX))
-    asserts.equals(env, None, result.by_fq["devdep-1.0.0"].host["state"])
     return unittest.end(env)
 
 def _multi_kind_dep_feature_forwarding_impl(ctx):
@@ -728,119 +634,6 @@ def _annotations_seed_without_activation_impl(ctx):
     asserts.equals(env, "host_only", classes["transitive_tool-1.0.0"])
     return unittest.end(env)
 
-def _transitive_label_divergence_impl(ctx):
-    env = unittest.begin(ctx)
-
-    spoke_facts = {
-        "macros-1.0.0": {"dependencies": [{"name": "m", "default_features": False}], "features": {}},
-        "m-1.0.0": {"dependencies": [{"name": "r", "default_features": False}], "features": {}},
-        "r-1.0.0": {"dependencies": [], "features": {"heavy": []}},
-    }
-    members = [{
-        "name": "app",
-        "version": "0.1.0",
-        "features": {},
-        "targets": [{"kind": ["lib"]}],
-        "dependencies": [
-            {"name": "macros", "kind": None, "features": [], "uses_default_features": False},
-            {"name": "m", "kind": None, "features": [], "uses_default_features": False},
-            {"name": "r", "kind": None, "features": ["heavy"], "uses_default_features": False},
-        ],
-        "lock_dependencies": ["m", "macros", "r"],
-    }]
-    result = _run_workspace_resolution(spoke_facts, members, proc_macro_spokes = ["macros-1.0.0"])
-
-    # m's per-world feature views are identical (both empty), and so are its
-    # per-world dep label sets pre-rewrite...
-    asserts.equals(env, [], _target_features(result, "m-1.0.0", _LINUX))
-    asserts.equals(env, [], _host_features(result, "m-1.0.0", _LINUX))
-    asserts.true(env, "//:r-1.0.0" in result.by_fq["m-1.0.0"].host["state"]["deps"][_LINUX])
-
-    # ...but r is divergent (target gained the runtime-only "heavy"), so m's
-    # host instance must become label-divergent: post-rewrite its host dep
-    # labels differ (r_host vs r). The proc-macro stays host-only and does NOT
-    # propagate further (its base target already renders the host view).
-    classes = classify_worlds(result.packages, [_LINUX])
-    asserts.equals(env, "divergent", classes["r-1.0.0"])
-    asserts.equals(env, "label_divergent", classes["m-1.0.0"])
-    asserts.equals(env, "host_only", classes["macros-1.0.0"])
-    return unittest.end(env)
-
-def _proc_macro_bit_plumbing_impl(ctx):
-    env = unittest.begin(ctx)
-
-    # cargo_toml_fact records [lib] proc-macro = true from real manifests.
-    fact = cargo_toml_fact({"package": {"name": "x"}, "lib": {"proc-macro": True}})
-    asserts.true(env, fact["is_proc_macro"])
-    fact = cargo_toml_fact({"package": {"name": "x"}})
-    asserts.false(env, fact["is_proc_macro"])
-
-    # resolve_package_facts: a bit stamped directly on the package dict wins
-    # over the fact's manifest/sniffed bit.
-    packages = [
-        {"name": "a", "version": "1.0.0", "is_proc_macro": True},
-        {"name": "b", "version": "1.0.0"},
-        {"name": "c", "version": "1.0.0", "is_proc_macro": False},
-    ]
-    resolve_package_facts(
-        packages,
-        {
-            "a-1.0.0": {},
-            "b-1.0.0": {"is_proc_macro": True},
-            "c-1.0.0": {"is_proc_macro": True},
-        },
-        [_LINUX],
-    )
-    asserts.true(env, packages[0]["feature_resolutions"].is_proc_macro)
-    asserts.true(env, packages[1]["feature_resolutions"].is_proc_macro)
-    asserts.false(env, packages[2]["feature_resolutions"].is_proc_macro)
-    return unittest.end(env)
-
-def _render_world_views_divergence_impl(ctx):
-    env = unittest.begin(ctx)
-
-    # Same shape as the transitive-label-divergence test: app -> m -> r with
-    # app -> r (heavy) and a proc-macro chain macros -> m -> r.
-    spoke_facts = {
-        "macros-1.0.0": {"dependencies": [{"name": "m", "default_features": False}], "features": {}},
-        "m-1.0.0": {"dependencies": [{"name": "r", "default_features": False}], "features": {}},
-        "r-1.0.0": {"dependencies": [], "features": {"heavy": []}},
-    }
-    members = [{
-        "name": "app",
-        "version": "0.1.0",
-        "features": {},
-        "targets": [{"kind": ["lib"]}],
-        "dependencies": [
-            {"name": "macros", "kind": None, "features": [], "uses_default_features": False},
-            {"name": "m", "kind": None, "features": [], "uses_default_features": False},
-            {"name": "r", "kind": None, "features": ["heavy"], "uses_default_features": False},
-        ],
-        "lock_dependencies": ["m", "macros", "r"],
-    }]
-    result = _run_workspace_resolution(spoke_facts, members, proc_macro_spokes = ["macros-1.0.0"])
-    classes = classify_worlds(result.packages, [_LINUX])
-
-    # Divergent leaf: base view is the target instance, host views rendered.
-    views_r = render_world_views(result.by_fq["r-1.0.0"], classes["r-1.0.0"], classes, [_LINUX])
-    asserts.equals(env, ["heavy"], sorted(views_r.crate_features[_LINUX]))
-    asserts.equals(env, [], sorted(views_r.host_crate_features[_LINUX]))
-    asserts.false(env, views_r.unactivated)
-
-    # Label-divergent middle: identical per-world feature views, but the host
-    # instance's dep labels point at the _host sibling of the divergent dep.
-    views_m = render_world_views(result.by_fq["m-1.0.0"], classes["m-1.0.0"], classes, [_LINUX])
-    asserts.equals(env, ["//:r-1.0.0"], sorted(views_m.deps[_LINUX]))
-    asserts.equals(env, ["//:r-1.0.0_host"], sorted(views_m.host_deps[_LINUX]))
-    asserts.equals(env, [], sorted(views_m.host_crate_features[_LINUX]))
-
-    # Host-only proc-macro: NO _host sibling (base name carries the host view),
-    # but its base deps still link the label-divergent middle's _host variant.
-    views_macros = render_world_views(result.by_fq["macros-1.0.0"], classes["macros-1.0.0"], classes, [_LINUX])
-    asserts.equals(env, None, views_macros.host_crate_features)
-    asserts.equals(env, ["//:m-1.0.0_host"], sorted(views_macros.deps[_LINUX]))
-    return unittest.end(env)
-
 def _render_world_views_target_only_build_dep_rewrite_impl(ctx):
     env = unittest.begin(ctx)
 
@@ -952,7 +745,7 @@ def _workspace_dep_data_member_world_boundary_impl(ctx):
     # tonic-to-json-tests E0464 shape), DEP_DATA must render base labels —
     # never `_host`.
     spoke_facts = {
-        "macros-1.0.0": {"dependencies": [{"name": "tls", "features": ["light"], "default_features": False}], "features": {}},
+        "macros-1.0.0": {"dependencies": [{"name": "tls", "kind": "build", "features": ["light"], "default_features": False}], "features": {}},
         "tls-1.0.0": {"dependencies": [], "features": {"heavy": [], "light": []}},
         "devdep-1.0.0": {"dependencies": [], "features": {}},
     }
@@ -996,9 +789,9 @@ def _workspace_dep_data_member_world_boundary_impl(ctx):
             "lock_dependencies": ["tls", "devdep"],
         },
     ]
-    result = _run_workspace_resolution(spoke_facts, members, proc_macro_spokes = ["macros-1.0.0"])
+    result = _run_workspace_resolution(spoke_facts, members)
 
-    # tls IS divergent (host world via the proc-macro SPOKE only carries
+    # tls IS divergent (host world via the spoke's build-dep only carries
     # "light"); the member build-dep's "light" lands in the TARGET set.
     classes = classify_worlds(result.packages, [_LINUX])
     asserts.equals(env, "divergent", classes["tls-1.0.0"])
@@ -1169,20 +962,19 @@ def _optional_dep_target_enablement_does_not_cross_impl(ctx):
 def _member_build_dep_features_are_amphibious_impl(ctx):
     env = unittest.begin(ctx)
 
-    # cynic shape: the member's build script registers
-    # schemas through the BASE codegen instance ([build-dependencies]
-    # codegen with "rkyv"), while the proc-macro SPOKE tree pulls codegen's
-    # HOST instance without it. Cargo resolves both edges host-side, so both
-    # instances agree; member build edges must therefore be
-    # feature-AMPHIBIOUS: target-world for activation/labels, but their
-    # feature requests reach the host instance too.
+    # cynic shape: the member's build script registers schemas through the BASE
+    # codegen instance ([build-dependencies] codegen with "rkyv"), while a
+    # spoke's [build-dependencies] edge pulls codegen's HOST instance without
+    # it. Cargo resolves both edges host-side, so both instances agree; member
+    # build edges must therefore be feature-AMPHIBIOUS: target-world for
+    # activation/labels, but their feature requests reach the host instance too.
     spoke_facts = {
         "codegen-1.0.0": {
             "dependencies": [{"name": "rkyvdep", "optional": True, "default_features": False}],
             "features": {"rkyv": ["dep:rkyvdep"]},
         },
         "rkyvdep-1.0.0": {"dependencies": [], "features": {}},
-        "macros-1.0.0": {"dependencies": [{"name": "codegen", "default_features": False}], "features": {}},
+        "wrapper-1.0.0": {"dependencies": [{"name": "codegen", "kind": "build", "default_features": False}], "features": {}},
     }
     members = [{
         "name": "app",
@@ -1190,19 +982,19 @@ def _member_build_dep_features_are_amphibious_impl(ctx):
         "features": {},
         "targets": [{"kind": ["lib"]}],
         "dependencies": [
-            {"name": "macros", "kind": None, "features": [], "uses_default_features": False},
+            {"name": "wrapper", "kind": None, "features": [], "uses_default_features": False},
             {"name": "codegen", "kind": "build", "features": ["rkyv"], "uses_default_features": False},
         ],
-        "lock_dependencies": ["macros", "codegen"],
+        "lock_dependencies": ["wrapper", "codegen"],
     }]
-    result = _run_workspace_resolution(spoke_facts, members, proc_macro_spokes = ["macros-1.0.0"])
+    result = _run_workspace_resolution(spoke_facts, members)
 
     # The member build edge stays target-world for activation/labels...
     asserts.true(env, _target_active(result, "codegen-1.0.0", _LINUX))
     asserts.true(env, "rkyv" in result.by_fq["codegen-1.0.0"].features_enabled[_LINUX])
 
     # ...but its "rkyv" request also reaches the host instance (host-activated
-    # by the proc-macro tree), so both worlds agree...
+    # by the spoke build-dep), so both worlds agree...
     asserts.true(env, _host_active(result, "codegen-1.0.0", _LINUX))
     asserts.true(env, "rkyv" in result.by_fq["codegen-1.0.0"].host["state"]["features_enabled"][_LINUX])
     asserts.equals(env, _target_features(result, "codegen-1.0.0", _LINUX), _host_features(result, "codegen-1.0.0", _LINUX))
@@ -1213,7 +1005,7 @@ def _member_build_dep_features_are_amphibious_impl(ctx):
     asserts.true(env, "//:rkyvdep-1.0.0" in result.by_fq["codegen-1.0.0"].host["state"]["deps"][_LINUX])
 
     # With both worlds agreeing, codegen is NOT divergent: one base instance
-    # serves the member build script and the proc-macro tree consistently.
+    # serves the member build script and the spoke build-dep tree consistently.
     classes = classify_worlds(result.packages, [_LINUX])
     asserts.equals(env, "identical", classes["codegen-1.0.0"])
     return unittest.end(env)
@@ -1392,7 +1184,6 @@ def _render_rust_crate_call_host_world_impl(ctx):
     asserts.true(env, "unactivated = True" in rendered)
     return unittest.end(env)
 
-render_world_views_divergence_test = unittest.make(_render_world_views_divergence_impl)
 render_world_views_target_only_build_dep_rewrite_test = unittest.make(_render_world_views_target_only_build_dep_rewrite_impl)
 render_world_views_disjoint_triple_merge_test = unittest.make(_render_world_views_disjoint_triple_merge_impl)
 render_world_views_unactivated_test = unittest.make(_render_world_views_unactivated_impl)
@@ -1404,27 +1195,21 @@ member_build_dep_amphibious_without_host_user_test = unittest.make(_member_build
 inactive_triple_renders_legacy_view_test = unittest.make(_inactive_triple_renders_legacy_view_impl)
 render_rust_crate_call_host_world_test = unittest.make(_render_rust_crate_call_host_world_impl)
 
-sqlx_shape_test = unittest.make(_sqlx_shape_impl)
 build_dep_crossing_and_stickiness_test = unittest.make(_build_dep_crossing_and_stickiness_impl)
-member_proc_macro_is_world_boundary_test = unittest.make(_member_proc_macro_is_world_boundary_impl)
 multi_kind_dep_feature_forwarding_test = unittest.make(_multi_kind_dep_feature_forwarding_impl)
 optional_weak_features_per_world_test = unittest.make(_optional_weak_features_per_world_impl)
 disjoint_triple_activity_test = unittest.make(_disjoint_triple_activity_impl)
 deep_chain_converges_test = unittest.make(_deep_chain_converges_impl)
 build_dep_chain_activation_drain_test = unittest.make(_build_dep_chain_activation_drain_impl)
 annotations_seed_without_activation_test = unittest.make(_annotations_seed_without_activation_impl)
-transitive_label_divergence_test = unittest.make(_transitive_label_divergence_impl)
-proc_macro_bit_plumbing_test = unittest.make(_proc_macro_bit_plumbing_impl)
 
 def cargo_workspace_graph_tests():
     return unittest.suite(
         "cargo_workspace_graph_tests",
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
-        proc_macro_bit_plumbing_test,
         render_rust_crate_call_host_world_test,
         render_world_views_disjoint_triple_merge_test,
-        render_world_views_divergence_test,
         render_world_views_target_only_build_dep_rewrite_test,
         render_world_views_unactivated_test,
         resolve_package_facts_attaches_feature_resolutions_test,
@@ -1440,11 +1225,8 @@ def cargo_workspace_graph_tests():
         split_lockfile_packages_finds_local_package_paths_test,
         member_build_dep_amphibious_without_host_user_test,
         member_build_dep_features_are_amphibious_test,
-        member_proc_macro_is_world_boundary_test,
         multi_kind_dep_feature_forwarding_test,
         optional_dep_target_enablement_does_not_cross_test,
         optional_weak_features_per_world_test,
-        sqlx_shape_test,
-        transitive_label_divergence_test,
         workspace_dep_data_member_world_boundary_test,
     )
