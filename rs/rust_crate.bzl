@@ -94,9 +94,9 @@ def rust_crate(
     build_script_target_tags = crate_tags + build_script_tags
 
     if unactivated:
-        # Pinned in Cargo.lock but unreached by any workspace dep/feature in
-        # split mode (cargo wouldn't build it either). Emit a loud incompatible
-        # stub so hand-written references fail at analysis with a clear message.
+        # Pinned in Cargo.lock but unreached by any workspace dep/feature
+        # (cargo wouldn't build it either). Emit a loud incompatible stub so
+        # hand-written references fail at analysis with a clear message.
         stub_name = name + "_not_activated_by_workspace_resolution"
         native.filegroup(
             name = stub_name,

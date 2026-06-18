@@ -192,7 +192,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    has_lib = {has_lib},
 {indent}    binaries = {binaries},
 {indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
-{world_split_attrs}{skip_deps_verification_attr}{indent})
+{host_world_attrs}{skip_deps_verification_attr}{indent})
 """
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
@@ -213,12 +213,12 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
 
     list_indent = ",\n%s        " % indent
 
-    # Split-mode attrs, rendered only when present so unified output stays
-    # byte-identical; getattr() tolerates old attr structs.
-    world_split_attrs = ""
+    # Host-world attrs, rendered only when present; getattr() tolerates old
+    # attr structs.
+    host_world_attrs = ""
     build_script_aliases = getattr(attr, "build_script_aliases", {})
     if build_script_aliases:
-        world_split_attrs += "{indent}    build_script_aliases = {{\n{indent}        {aliases}\n{indent}    }},\n".format(
+        host_world_attrs += "{indent}    build_script_aliases = {{\n{indent}        {aliases}\n{indent}    }},\n".format(
             indent = indent,
             aliases = list_indent.join(['"%s": "%s"' % kv for kv in build_script_aliases.items()]),
         )
@@ -230,7 +230,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         )
         host_deps, conditional_host_deps = render_select([], getattr(attr, "host_deps_select", {}), use_legacy_rules_rust_platforms)
         host_build_deps, conditional_host_build_deps = render_select([], getattr(attr, "host_build_script_deps_select", {}), use_legacy_rules_rust_platforms)
-        world_split_attrs += """{indent}    host_deps = [
+        host_world_attrs += """{indent}    host_deps = [
 {indent}        {host_deps}
 {indent}    ]{conditional_host_deps},
 {indent}    host_crate_features = {host_crate_features},
@@ -252,7 +252,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
             host_aliases = list_indent.join(['"%s": "%s"' % kv for kv in getattr(attr, "host_aliases", {}).items()]),
         )
     if getattr(attr, "unactivated", False):
-        world_split_attrs += "%s    unactivated = True,\n" % indent
+        host_world_attrs += "%s    unactivated = True,\n" % indent
     extra_deps = " + " + extra_deps if extra_deps else ""
     extra_compile_data = getattr(attr, "extra_compile_data", [])
     extra_compile_data_attr = ""
@@ -306,7 +306,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         has_lib = values["has_lib"],
         binaries = values["binaries"],
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
-        world_split_attrs = world_split_attrs,
+        host_world_attrs = host_world_attrs,
         skip_deps_verification_attr = skip_deps_verification_attr,
     )
 
@@ -351,7 +351,7 @@ rust_crate_attrs = {
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
     "use_legacy_rules_rust_platforms": attr.bool(),
-    # Split-mode attrs, all default-empty (rendered call unchanged when absent).
+    # Host-world attrs, all default-empty (rendered call unchanged when absent).
     "build_script_aliases": attr.string_dict(),
     "host_deps_select": attr.string_list_dict(),
     "host_crate_features_select": attr.string_list_dict(),

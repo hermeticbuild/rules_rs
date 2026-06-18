@@ -289,7 +289,7 @@ def _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug):
             new_dirty_items.add(item)
 
     if len(worklist) > 2 * len(packages):
-        fail("rules_rs internal error: split-mode worklist exceeded the activation bound")
+        fail("rules_rs internal error: worklist exceeded the activation bound")
 
     return new_dirty_items
 
@@ -401,7 +401,7 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple
     for i in range(_MAX_ROUNDS):
         mctx.report_progress("Running round %s of dependency/feature resolution" % i)
         if debug:
-            print("split-worlds round", i, "work items:", len(dirty_items))
+            print("feature-worlds round", i, "work items:", len(dirty_items))
 
         dirty_items = _resolve_one_round(packages, dirty_items, cfg_attrs_by_triple, debug)
         if not dirty_items:

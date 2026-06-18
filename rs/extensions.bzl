@@ -305,7 +305,7 @@ def _generate_hub_and_spokes(
             for fq, crate_class in classes_by_fq.items()
             if is_divergent_class(crate_class)
         ])
-        print("split-worlds: resolved in %d rounds; class counts %s; divergent: %s" % (
+        print("feature-worlds: resolved in %d rounds; class counts %s; divergent: %s" % (
             workspace_resolution.resolution_rounds,
             class_counts,
             divergent_fqs,

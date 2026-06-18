@@ -266,7 +266,7 @@ def _resolve_package_facts_attaches_feature_resolutions_impl(ctx):
 
 resolve_package_facts_attaches_feature_resolutions_test = unittest.make(_resolve_package_facts_attaches_feature_resolutions_impl)
 
-# --- feature-world split resolver tests --------------------------------------
+# --- feature-world resolver tests --------------------------------------------
 #
 # These drive resolve_package_facts + resolve_cargo_workspace_members end to
 # end with small fixtures: `spoke_facts` maps fq crates to facts and `members`
@@ -366,7 +366,7 @@ def _sqlx_shape_fixtures():
     }]
     return spoke_facts, members
 
-def _split_sqlx_shape_impl(ctx):
+def _sqlx_shape_impl(ctx):
     env = unittest.begin(ctx)
 
     spoke_facts, members = _sqlx_shape_fixtures()
@@ -389,7 +389,7 @@ def _split_sqlx_shape_impl(ctx):
     asserts.equals(env, "host_only", classes["macros-1.0.0"])
     return unittest.end(env)
 
-def _split_build_dep_crossing_and_stickiness_impl(ctx):
+def _build_dep_crossing_and_stickiness_impl(ctx):
     env = unittest.begin(ctx)
 
     # The host root is a SPOKE's [build-dependencies] edge (member build edges
@@ -433,7 +433,7 @@ def _split_build_dep_crossing_and_stickiness_impl(ctx):
     asserts.equals(env, "divergent", classes["tls-1.0.0"])
     return unittest.end(env)
 
-def _split_member_proc_macro_is_world_boundary_impl(ctx):
+def _member_proc_macro_is_world_boundary_impl(ctx):
     env = unittest.begin(ctx)
 
     # Proc-macro MEMBERS are world boundaries, NOT host roots: their
@@ -475,7 +475,7 @@ def _split_member_proc_macro_is_world_boundary_impl(ctx):
     asserts.equals(env, None, result.by_fq["devdep-1.0.0"].host["state"])
     return unittest.end(env)
 
-def _split_multi_kind_dep_feature_forwarding_impl(ctx):
+def _multi_kind_dep_feature_forwarding_impl(ctx):
     env = unittest.begin(ctx)
 
     spoke_facts = {
@@ -529,7 +529,7 @@ def _split_multi_kind_dep_feature_forwarding_impl(ctx):
     asserts.equals(env, [], _target_features(result, "qshared-1.0.0", _LINUX))
     return unittest.end(env)
 
-def _split_optional_weak_features_per_world_impl(ctx):
+def _optional_weak_features_per_world_impl(ctx):
     env = unittest.begin(ctx)
 
     spoke_facts = {
@@ -574,7 +574,7 @@ def _split_optional_weak_features_per_world_impl(ctx):
     asserts.equals(env, "host_only", classes["tlsdep-1.0.0"])
     return unittest.end(env)
 
-def _split_disjoint_triple_activity_impl(ctx):
+def _disjoint_triple_activity_impl(ctx):
     env = unittest.begin(ctx)
 
     triples = [_LINUX, _DARWIN]
@@ -613,7 +613,7 @@ def _split_disjoint_triple_activity_impl(ctx):
     asserts.equals(env, "identical", classes["shared-1.0.0"])
     return unittest.end(env)
 
-def _split_deep_chain_converges_impl(ctx):
+def _deep_chain_converges_impl(ctx):
     env = unittest.begin(ctx)
 
     chain_length = 60
@@ -647,7 +647,7 @@ def _split_deep_chain_converges_impl(ctx):
     asserts.true(env, result.resolution.resolution_rounds <= 4)
     return unittest.end(env)
 
-def _split_build_dep_chain_activation_drain_impl(ctx):
+def _build_dep_chain_activation_drain_impl(ctx):
     env = unittest.begin(ctx)
 
     spoke_facts = {
@@ -677,7 +677,7 @@ def _split_build_dep_chain_activation_drain_impl(ctx):
     asserts.true(env, result.resolution.resolution_rounds <= 3)
     return unittest.end(env)
 
-def _split_annotations_seed_without_activation_impl(ctx):
+def _annotations_seed_without_activation_impl(ctx):
     env = unittest.begin(ctx)
 
     spoke_facts = {
@@ -728,7 +728,7 @@ def _split_annotations_seed_without_activation_impl(ctx):
     asserts.equals(env, "host_only", classes["transitive_tool-1.0.0"])
     return unittest.end(env)
 
-def _split_transitive_label_divergence_impl(ctx):
+def _transitive_label_divergence_impl(ctx):
     env = unittest.begin(ctx)
 
     spoke_facts = {
@@ -1042,7 +1042,7 @@ def _workspace_dep_data_member_world_boundary_impl(ctx):
                 asserts.false(env, label.endswith("_host"))
     return unittest.end(env)
 
-def _split_host_deps_view_completeness_impl(ctx):
+def _host_deps_view_completeness_impl(ctx):
     env = unittest.begin(ctx)
 
     # Regression shapes from end-to-end validation on a large Cargo workspace:
@@ -1119,7 +1119,7 @@ def _split_host_deps_view_completeness_impl(ctx):
         asserts.true(env, "core" in views_common.host_crate_features[triple])
     return unittest.end(env)
 
-def _split_optional_dep_target_enablement_does_not_cross_impl(ctx):
+def _optional_dep_target_enablement_does_not_cross_impl(ctx):
     env = unittest.begin(ctx)
 
     # reqwest/hickory-dns shape: crate rq has an optional dep hick behind
@@ -1166,7 +1166,7 @@ def _split_optional_dep_target_enablement_does_not_cross_impl(ctx):
     asserts.equals(env, "divergent", classes["rq-1.0.0"])
     return unittest.end(env)
 
-def _split_member_build_dep_features_are_amphibious_impl(ctx):
+def _member_build_dep_features_are_amphibious_impl(ctx):
     env = unittest.begin(ctx)
 
     # cynic shape: the member's build script registers
@@ -1218,7 +1218,7 @@ def _split_member_build_dep_features_are_amphibious_impl(ctx):
     asserts.equals(env, "identical", classes["codegen-1.0.0"])
     return unittest.end(env)
 
-def _split_member_build_dep_amphibious_without_host_user_impl(ctx):
+def _member_build_dep_amphibious_without_host_user_impl(ctx):
     env = unittest.begin(ctx)
 
     # Without any host-world consumer, the member build edge alone must NOT
@@ -1255,7 +1255,7 @@ def _split_member_build_dep_amphibious_without_host_user_impl(ctx):
     asserts.equals(env, "target_only", classes["rkyvdep-1.0.0"])
     return unittest.end(env)
 
-def _split_inactive_triple_renders_legacy_view_impl(ctx):
+def _inactive_triple_renders_legacy_view_impl(ctx):
     env = unittest.begin(ctx)
 
     # fiemap shape: a crate reachable only behind a cfg(linux)-gated edge is
@@ -1321,7 +1321,7 @@ def _split_inactive_triple_renders_legacy_view_impl(ctx):
     asserts.equals(env, ["//:tbits-1.0.0"], sorted(views_tool.deps[_DARWIN]))
     return unittest.end(env)
 
-def _render_rust_crate_call_world_split_impl(ctx):
+def _render_rust_crate_call_host_world_impl(ctx):
     env = unittest.begin(ctx)
 
     base_attr = dict(
@@ -1361,7 +1361,7 @@ def _render_rust_crate_call_world_split_impl(ctx):
         "links": repr(None),
     }
 
-    # Without host attrs the rendered call carries no world-split params.
+    # Without host attrs the rendered call carries no host-world params.
     rendered = render_rust_crate_call(struct(**base_attr), values)
     asserts.false(env, "host_" in rendered)
     asserts.false(env, "unactivated" in rendered)
@@ -1397,23 +1397,23 @@ render_world_views_target_only_build_dep_rewrite_test = unittest.make(_render_wo
 render_world_views_disjoint_triple_merge_test = unittest.make(_render_world_views_disjoint_triple_merge_impl)
 render_world_views_unactivated_test = unittest.make(_render_world_views_unactivated_impl)
 workspace_dep_data_member_world_boundary_test = unittest.make(_workspace_dep_data_member_world_boundary_impl)
-split_host_deps_view_completeness_test = unittest.make(_split_host_deps_view_completeness_impl)
-split_optional_dep_target_enablement_does_not_cross_test = unittest.make(_split_optional_dep_target_enablement_does_not_cross_impl)
-split_member_build_dep_features_are_amphibious_test = unittest.make(_split_member_build_dep_features_are_amphibious_impl)
-split_member_build_dep_amphibious_without_host_user_test = unittest.make(_split_member_build_dep_amphibious_without_host_user_impl)
-split_inactive_triple_renders_legacy_view_test = unittest.make(_split_inactive_triple_renders_legacy_view_impl)
-render_rust_crate_call_world_split_test = unittest.make(_render_rust_crate_call_world_split_impl)
+host_deps_view_completeness_test = unittest.make(_host_deps_view_completeness_impl)
+optional_dep_target_enablement_does_not_cross_test = unittest.make(_optional_dep_target_enablement_does_not_cross_impl)
+member_build_dep_features_are_amphibious_test = unittest.make(_member_build_dep_features_are_amphibious_impl)
+member_build_dep_amphibious_without_host_user_test = unittest.make(_member_build_dep_amphibious_without_host_user_impl)
+inactive_triple_renders_legacy_view_test = unittest.make(_inactive_triple_renders_legacy_view_impl)
+render_rust_crate_call_host_world_test = unittest.make(_render_rust_crate_call_host_world_impl)
 
-split_sqlx_shape_test = unittest.make(_split_sqlx_shape_impl)
-split_build_dep_crossing_and_stickiness_test = unittest.make(_split_build_dep_crossing_and_stickiness_impl)
-split_member_proc_macro_is_world_boundary_test = unittest.make(_split_member_proc_macro_is_world_boundary_impl)
-split_multi_kind_dep_feature_forwarding_test = unittest.make(_split_multi_kind_dep_feature_forwarding_impl)
-split_optional_weak_features_per_world_test = unittest.make(_split_optional_weak_features_per_world_impl)
-split_disjoint_triple_activity_test = unittest.make(_split_disjoint_triple_activity_impl)
-split_deep_chain_converges_test = unittest.make(_split_deep_chain_converges_impl)
-split_build_dep_chain_activation_drain_test = unittest.make(_split_build_dep_chain_activation_drain_impl)
-split_annotations_seed_without_activation_test = unittest.make(_split_annotations_seed_without_activation_impl)
-split_transitive_label_divergence_test = unittest.make(_split_transitive_label_divergence_impl)
+sqlx_shape_test = unittest.make(_sqlx_shape_impl)
+build_dep_crossing_and_stickiness_test = unittest.make(_build_dep_crossing_and_stickiness_impl)
+member_proc_macro_is_world_boundary_test = unittest.make(_member_proc_macro_is_world_boundary_impl)
+multi_kind_dep_feature_forwarding_test = unittest.make(_multi_kind_dep_feature_forwarding_impl)
+optional_weak_features_per_world_test = unittest.make(_optional_weak_features_per_world_impl)
+disjoint_triple_activity_test = unittest.make(_disjoint_triple_activity_impl)
+deep_chain_converges_test = unittest.make(_deep_chain_converges_impl)
+build_dep_chain_activation_drain_test = unittest.make(_build_dep_chain_activation_drain_impl)
+annotations_seed_without_activation_test = unittest.make(_annotations_seed_without_activation_impl)
+transitive_label_divergence_test = unittest.make(_transitive_label_divergence_impl)
 proc_macro_bit_plumbing_test = unittest.make(_proc_macro_bit_plumbing_impl)
 
 def cargo_workspace_graph_tests():
@@ -1422,7 +1422,7 @@ def cargo_workspace_graph_tests():
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
         proc_macro_bit_plumbing_test,
-        render_rust_crate_call_world_split_test,
+        render_rust_crate_call_host_world_test,
         render_world_views_disjoint_triple_merge_test,
         render_world_views_divergence_test,
         render_world_views_target_only_build_dep_rewrite_test,
@@ -1430,21 +1430,21 @@ def cargo_workspace_graph_tests():
         resolve_package_facts_attaches_feature_resolutions_test,
         select_package_fq_dep_uses_package_name_test,
         select_package_fq_dep_uses_req_for_duplicate_versions_test,
-        split_annotations_seed_without_activation_test,
-        split_build_dep_chain_activation_drain_test,
-        split_build_dep_crossing_and_stickiness_test,
-        split_deep_chain_converges_test,
-        split_disjoint_triple_activity_test,
-        split_host_deps_view_completeness_test,
-        split_inactive_triple_renders_legacy_view_test,
+        annotations_seed_without_activation_test,
+        build_dep_chain_activation_drain_test,
+        build_dep_crossing_and_stickiness_test,
+        deep_chain_converges_test,
+        disjoint_triple_activity_test,
+        host_deps_view_completeness_test,
+        inactive_triple_renders_legacy_view_test,
         split_lockfile_packages_finds_local_package_paths_test,
-        split_member_build_dep_amphibious_without_host_user_test,
-        split_member_build_dep_features_are_amphibious_test,
-        split_member_proc_macro_is_world_boundary_test,
-        split_multi_kind_dep_feature_forwarding_test,
-        split_optional_dep_target_enablement_does_not_cross_test,
-        split_optional_weak_features_per_world_test,
-        split_sqlx_shape_test,
-        split_transitive_label_divergence_test,
+        member_build_dep_amphibious_without_host_user_test,
+        member_build_dep_features_are_amphibious_test,
+        member_proc_macro_is_world_boundary_test,
+        multi_kind_dep_feature_forwarding_test,
+        optional_dep_target_enablement_does_not_cross_test,
+        optional_weak_features_per_world_test,
+        sqlx_shape_test,
+        transitive_label_divergence_test,
         workspace_dep_data_member_world_boundary_test,
     )

@@ -194,8 +194,8 @@ def cargo_toml_fact(cargo_toml_json, workspace_cargo_toml_json = None, strip_pre
         features = cargo_toml_json.get("features", {}),
         dependencies = cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json),
         strip_prefix = strip_prefix,
-        # Resolver needs the proc-macro bit at resolution time (split mode) to
-        # classify dependency edges.
+        # Resolver needs the proc-macro bit at resolution time to classify
+        # dependency edges.
         is_proc_macro = bool(lib.get("proc-macro") or lib.get("proc_macro")),
     )
 
@@ -530,7 +530,7 @@ def _seed_annotation_host_features(feature_resolutions, annotation, platform_tri
 def classify_worlds(packages, platform_triples):
     """Classifies each package's host/target feature-world relationship.
 
-    Call after a split-mode resolve() with the packages to classify. Returns
+    Call after resolve() with the packages to classify. Returns
     {fq_crate: class}:
 
     - "unactivated":     reached by no world/triple (pinned but unused).
@@ -687,7 +687,7 @@ def _with_rewritten_alias_keys(aliases, classes_by_fq):
     return rewritten
 
 def render_world_views(feature_resolutions, crate_class, classes_by_fq, platform_triples):
-    """Computes the rendered views for one spoke crate under split mode.
+    """Computes the rendered views for one spoke crate.
 
     The BASE views are the per-(crate, triple) world merge: target view where
     target-active, else host view where host-active, else the active world's
@@ -847,8 +847,7 @@ def resolve_cargo_workspace_members(
             "dependencies": lockfile_pkg.get("dependencies", []),
         }
 
-        # Proc-macro bit from `cargo metadata`; split treats proc-macro members
-        # as host-world roots.
+        # Proc-macro members are host-world roots (bit from `cargo metadata`).
         member_is_proc_macro = False
         for target in package.get("targets", []):
             if "proc-macro" in target.get("kind", []):
