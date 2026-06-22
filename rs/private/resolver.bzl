@@ -209,11 +209,11 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple
 
     fail("Resolution did not converge! This is likely a bug in rules_rs, please report it to github.com/hermeticbuild/rules_rs")
 
-def seed_exec_build_dependencies(packages, exec_cfg_attrs_by_triple):
+def seed_exec_build_dependencies(packages, exec_packages, exec_cfg_attrs_by_triple):
     """Seeds exec resolution from build dependencies of target-active packages."""
-    for package in packages:
+    for package, exec_package in zip(packages, exec_packages):
         target_resolution = package["feature_resolutions"]
-        exec_resolution = package["exec_feature_resolutions"]
+        exec_resolution = exec_package["feature_resolutions"]
 
         if not target_resolution.active:
             continue

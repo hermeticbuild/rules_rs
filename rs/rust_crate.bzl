@@ -14,17 +14,6 @@ def _platform(triple, use_legacy_rules_rust_platforms):
         return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
     return "@rules_rs//rs/platforms/config:" + triple
 
-def rust_crate_target_exec_alias(name, crate_name, tags):
-    native.alias(
-        name = name,
-        actual = select({
-            "@rules_rust//cargo/settings:use_exec_features_enabled": name + "_exec",
-            "//conditions:default": name + "_target",
-        }),
-        tags = ["crate-name=" + (crate_name or name)] + tags,
-        visibility = ["//visibility:public"],
-    )
-
 def rust_crate(
         name,
         crate_name,
@@ -57,7 +46,8 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False,
-        build_script_name = "_bs"):
+        build_script_name = "_bs",
+        target_exec_alias_name = None):
     if target_compatible_with == None:
         target_compatible_with = select({
             _platform(triple, use_legacy_rules_rust_platforms): []
@@ -69,6 +59,17 @@ def rust_crate(
         purl = purl,
         visibility = ["//visibility:public"],
     )
+
+    if target_exec_alias_name:
+        native.alias(
+            name = target_exec_alias_name,
+            actual = select({
+                "@rules_rust//cargo/settings:use_exec_features_enabled": name,
+                "//conditions:default": target_exec_alias_name + "_target",
+            }),
+            tags = ["crate-name=" + (crate_name or target_exec_alias_name)] + tags,
+            visibility = ["//visibility:public"],
+        )
 
     compile_data = native.glob(
         include = ["**"],

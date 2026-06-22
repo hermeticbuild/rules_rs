@@ -202,7 +202,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    binaries = {binaries},
 {indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
 {indent}    build_script_name = {build_script_name},
-{skip_deps_verification_attr}{indent})
+{target_exec_alias_name_attr}{skip_deps_verification_attr}{indent})
 """
 
 def _render_rust_crate_call(
@@ -249,6 +249,7 @@ def _render_rust_crate_call(
     rustc_env = getattr(attr, "rustc_env", {})
     rustc_env_attr = "%s    rustc_env = %s,\n" % (indent, repr(rustc_env)) if rustc_env else ""
     skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""
+    target_exec_alias_name_attr = "%s    target_exec_alias_name = %s,\n" % (indent, values["name"]) if name_suffix == "_exec" else ""
 
     return _RUST_CRATE_MACRO_CALL.format(
         indent = indent,
@@ -291,6 +292,7 @@ def _render_rust_crate_call(
         binaries = binaries,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         build_script_name = repr("_bs" + name_suffix),
+        target_exec_alias_name_attr = target_exec_alias_name_attr,
         skip_deps_verification_attr = skip_deps_verification_attr,
     )
 
@@ -352,18 +354,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
                 indent,
                 skip_deps_verification,
             )
-            alias_call = """{indent}rust_crate_target_exec_alias(
-{indent}    name = {name},
-{indent}    crate_name = {crate_name},
-{indent}    tags = {tags},
-{indent})
-""".format(
-                crate_name = values["crate_name"],
-                indent = indent,
-                name = values["name"],
-                tags = repr(attr.crate_tags),
-            )
-            return target_call + "\n" + exec_call + "\n" + alias_call
+            return target_call + "\n" + exec_call
 
         aliases = merged_aliases
         crate_features_select = merged_crate_features_select
@@ -395,7 +386,7 @@ def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
     additive_build_file_content += bazel_metadata.get("additive_build_file_content", "")
 
     return """\
-load("@rules_rs//rs:rust_crate.bzl", "rust_crate", "rust_crate_target_exec_alias")
+load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 

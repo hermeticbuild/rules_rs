@@ -251,12 +251,7 @@ def _generate_hub_and_spokes(
 
         facts_by_fq_crate[_fq_crate(name, version)] = fact
 
-    resolved_facts = resolve_package_facts(
-        packages,
-        facts_by_fq_crate,
-        platform_triples,
-        build_dep_triples = SUPPORTED_EXEC_TRIPLES,
-    )
+    resolved_facts = resolve_package_facts(packages, facts_by_fq_crate, platform_triples)
     feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate
     versions_by_name = resolved_facts.versions_by_name
 

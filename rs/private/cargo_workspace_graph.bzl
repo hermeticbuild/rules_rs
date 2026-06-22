@@ -62,12 +62,11 @@ def cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache):
     cfg_match_cache[target] = match_info
     return match_info
 
-def new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples, build_dep_triples = None):
-    build_dep_triples = platform_triples if build_dep_triples == None else build_dep_triples
+def new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples):
     return struct(
         active = set(),
         features_enabled = {triple: set() for triple in platform_triples},
-        build_deps = {triple: set() for triple in build_dep_triples},
+        build_deps = {triple: set() for triple in platform_triples},
         deps = {triple: set() for triple in platform_triples},
         aliases = {},
         deferred_build_dep_features = {},
@@ -370,13 +369,7 @@ def split_lockfile_packages(hub_name, cargo_metadata, workspace_cargo_toml, all_
         workspace_members = workspace_members,
     )
 
-def _resolve_packages(
-        packages,
-        package_info_by_fq_crate,
-        platform_triples,
-        dep_converter = None,
-        build_dep_triples = None,
-        skip_internal_rustc_placeholder_crates = True):
+def _resolve_packages(packages, package_info_by_fq_crate, platform_triples, dep_converter = None, skip_internal_rustc_placeholder_crates = True):
     feature_resolutions_by_fq_crate = {}
     versions_by_name = {}
 
@@ -394,13 +387,7 @@ def _resolve_packages(
             converter = dep_converter,
             skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
         )
-        feature_resolutions = new_feature_resolutions(
-            package_index,
-            possible_deps,
-            package_info.get("features", {}),
-            platform_triples,
-            build_dep_triples = build_dep_triples,
-        )
+        feature_resolutions = new_feature_resolutions(package_index, possible_deps, package_info.get("features", {}), platform_triples)
         package["feature_resolutions"] = feature_resolutions
         feature_resolutions_by_fq_crate[fq] = feature_resolutions
 
@@ -409,12 +396,11 @@ def _resolve_packages(
         versions_by_name = versions_by_name,
     )
 
-def resolve_package_facts(packages, facts_by_fq_crate, platform_triples, build_dep_triples = None, skip_internal_rustc_placeholder_crates = True):
+def resolve_package_facts(packages, facts_by_fq_crate, platform_triples, skip_internal_rustc_placeholder_crates = True):
     return _resolve_packages(
         packages,
         facts_by_fq_crate,
         platform_triples,
-        build_dep_triples = build_dep_triples,
         skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
     )
 
@@ -488,6 +474,11 @@ def _resolve_possible_deps(
             else:
                 dep["target"] = set(match_info.matches)
 
+def _apply_annotation_features(feature_resolutions, annotation):
+    for triple, features in feature_resolutions.features_enabled.items():
+        features.update(annotation.crate_features)
+        features.update(annotation.crate_features_select.get(triple, []))
+
 def resolve_cargo_workspace_members(
         ctx,
         *,
@@ -511,9 +502,7 @@ def resolve_cargo_workspace_members(
 
     cfg_match_cache = {None: struct(matches = platform_triples, uses_feature_cfg = False)}
 
-    exec_platform_cfg_attrs = [triple_to_cfg_attrs(triple) for triple in exec_platform_triples]
-    exec_platform_cfg_attrs_by_triple = {cfg_attr["_triple"]: cfg_attr for cfg_attr in exec_platform_cfg_attrs}
-    exec_cfg_match_cache = {None: struct(matches = exec_platform_triples, uses_feature_cfg = False)}
+    exec_platform_cfg_attrs_by_triple = {triple: triple_to_cfg_attrs(triple) for triple in exec_platform_triples}
 
     workspace_member_keys = {}
     for package in cargo_metadata["packages"]:
@@ -548,13 +537,7 @@ def resolve_cargo_workspace_members(
             "dependencies": lockfile_pkg.get("dependencies", []),
         }
 
-        feature_resolutions = new_feature_resolutions(
-            package_index,
-            possible_deps,
-            possible_features,
-            platform_triples,
-            build_dep_triples = exec_platform_triples or platform_triples,
-        )
+        feature_resolutions = new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
         resolver_package["feature_resolutions"] = feature_resolutions
         feature_resolutions_by_fq_crate[fq_crate(name, version)] = feature_resolutions
 
@@ -565,13 +548,13 @@ def resolve_cargo_workspace_members(
     if exec_platform_triples:
         for package in resolver_packages:
             target_resolution = package["feature_resolutions"]
+            target_resolution.build_deps.update({triple: set() for triple in exec_platform_triples})
             exec_resolution = new_feature_resolutions(
                 target_resolution.package_index,
                 [dict(dep) for dep in target_resolution.possible_deps],
                 target_resolution.possible_features,
                 exec_platform_triples,
             )
-            package["exec_feature_resolutions"] = exec_resolution
             exec_feature_resolutions_by_fq_crate[fq_crate(package["name"], package["version"])] = exec_resolution
             exec_resolver_packages.append(dict(package, feature_resolutions = exec_resolution))
 
@@ -591,8 +574,8 @@ def resolve_cargo_workspace_members(
             resolver_versions_by_name,
             exec_feature_resolutions_by_fq_crate,
             exec_platform_triples,
-            exec_platform_cfg_attrs,
-            exec_cfg_match_cache,
+            exec_platform_cfg_attrs_by_triple.values(),
+            {None: struct(matches = exec_platform_triples, uses_feature_cfg = False)},
             dep_label_prefix,
         )
 
@@ -680,22 +663,11 @@ def resolve_cargo_workspace_members(
             if not annotation.crate_features and not annotation.crate_features_select:
                 continue
             for version in target_versions:
-                features_enabled = feature_resolutions_by_fq_crate[fq_crate(crate, version)].features_enabled
-                if annotation.crate_features:
-                    for triple in platform_triples:
-                        features_enabled[triple].update(annotation.crate_features)
-                for triple, features in annotation.crate_features_select.items():
-                    if triple in features_enabled:
-                        features_enabled[triple].update(features)
+                fq = fq_crate(crate, version)
+                _apply_annotation_features(feature_resolutions_by_fq_crate[fq], annotation)
 
                 if exec_platform_triples:
-                    exec_features_enabled = exec_feature_resolutions_by_fq_crate[fq_crate(crate, version)].features_enabled
-                    if annotation.crate_features:
-                        for triple in exec_platform_triples:
-                            exec_features_enabled[triple].update(annotation.crate_features)
-                    for triple, features in annotation.crate_features_select.items():
-                        if triple in exec_features_enabled:
-                            exec_features_enabled[triple].update(features)
+                    _apply_annotation_features(exec_feature_resolutions_by_fq_crate[fq], annotation)
 
     resolve(
         ctx,
@@ -707,7 +679,7 @@ def resolve_cargo_workspace_members(
     )
 
     if exec_platform_triples:
-        seed_exec_build_dependencies(resolver_packages, exec_platform_cfg_attrs_by_triple)
+        seed_exec_build_dependencies(resolver_packages, exec_resolver_packages, exec_platform_cfg_attrs_by_triple)
         resolve(
             ctx,
             exec_resolver_packages,

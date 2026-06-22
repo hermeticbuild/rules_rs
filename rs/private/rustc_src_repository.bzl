@@ -182,7 +182,7 @@ def _cargo_build_values(rctx, bazel_package, workspace_cargo_toml, target_name):
 
 def _render_crate_build_file(source_root, crate_attr, values, bazel_metadata):
     return """\
-load("@rules_rs//rs:rust_crate.bzl", "rust_crate", "rust_crate_target_exec_alias")
+load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
 load("//{source_root}:defs.bzl", "RESOLVED_PLATFORMS")
 
 {srcs_filegroup}{rust_crate_call}{package_metadata_bazel_additive_build_file_content}""".format(

@@ -256,13 +256,11 @@ def _resolve_package_facts_attaches_feature_resolutions_impl(ctx):
             },
         },
         ["x86_64-unknown-linux-gnu"],
-        build_dep_triples = ["aarch64-apple-darwin"],
     )
 
     asserts.equals(env, {"serde": ["1.0.0"]}, got.versions_by_name)
     asserts.true(env, "feature_resolutions" in packages[0])
     asserts.equals(env, ["serde-1.0.0"], got.feature_resolutions_by_fq_crate.keys())
-    asserts.equals(env, ["aarch64-apple-darwin"], got.feature_resolutions_by_fq_crate["serde-1.0.0"].build_deps.keys())
     return unittest.end(env)
 
 resolve_package_facts_attaches_feature_resolutions_test = unittest.make(_resolve_package_facts_attaches_feature_resolutions_impl)
