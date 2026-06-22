@@ -2,7 +2,7 @@ load(":repository_utils.bzl", "render_rust_crate_call", "rust_crate_attrs")
 
 def _git_crate_metadata_repository_implementation(rctx):
     rctx.file("crate.bzl", """\
-load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+load("@rules_rs//rs:rust_crate.bzl", "rust_crate", "rust_crate_target_exec_alias")
 load("@{hub_name}//:defs.bzl", "RESOLVED_EXEC_PLATFORMS", "RESOLVED_PLATFORMS", "RESOLVED_TARGET_AND_EXEC_PLATFORMS")
 
 def crate(

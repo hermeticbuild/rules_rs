@@ -255,10 +255,9 @@ def _generate_hub_and_spokes(
         packages,
         facts_by_fq_crate,
         platform_triples,
-        exec_platform_triples = SUPPORTED_EXEC_TRIPLES,
+        build_dep_triples = SUPPORTED_EXEC_TRIPLES,
     )
     feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate
-    exec_feature_resolutions_by_fq_crate = resolved_facts.exec_feature_resolutions_by_fq_crate
     versions_by_name = resolved_facts.versions_by_name
 
     # Only files in the current Bazel workspace can/should be watched, so check where our manifests are located.

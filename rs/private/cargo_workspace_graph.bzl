@@ -395,10 +395,9 @@ def _resolve_packages(
         package_info_by_fq_crate,
         platform_triples,
         dep_converter = None,
-        exec_platform_triples = [],
+        build_dep_triples = None,
         skip_internal_rustc_placeholder_crates = True):
     feature_resolutions_by_fq_crate = {}
-    exec_feature_resolutions_by_fq_crate = {}
     versions_by_name = {}
 
     for package_index in range(len(packages)):
@@ -416,34 +415,22 @@ def _resolve_packages(
             platform_triples,
             dep_converter,
             skip_internal_rustc_placeholder_crates,
-            build_dep_triples = exec_platform_triples or platform_triples,
+            build_dep_triples = build_dep_triples,
         )
         package["feature_resolutions"] = feature_resolutions
         feature_resolutions_by_fq_crate[fq] = feature_resolutions
 
-        if exec_platform_triples:
-            exec_feature_resolutions = _new_package_feature_resolution(
-                package_index,
-                package_info,
-                exec_platform_triples,
-                dep_converter,
-                skip_internal_rustc_placeholder_crates,
-            )
-            package["exec_feature_resolutions"] = exec_feature_resolutions
-            exec_feature_resolutions_by_fq_crate[fq] = exec_feature_resolutions
-
     return struct(
-        exec_feature_resolutions_by_fq_crate = exec_feature_resolutions_by_fq_crate,
         feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,
         versions_by_name = versions_by_name,
     )
 
-def resolve_package_facts(packages, facts_by_fq_crate, platform_triples, exec_platform_triples = [], skip_internal_rustc_placeholder_crates = True):
+def resolve_package_facts(packages, facts_by_fq_crate, platform_triples, build_dep_triples = None, skip_internal_rustc_placeholder_crates = True):
     return _resolve_packages(
         packages,
         facts_by_fq_crate,
         platform_triples,
-        exec_platform_triples = exec_platform_triples,
+        build_dep_triples = build_dep_triples,
         skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
     )
 
@@ -556,11 +543,6 @@ def resolve_cargo_workspace_members(
     resolver_versions_by_name = {name: versions[:] for name, versions in versions_by_name.items()}
     workspace_members_by_key = {(package["name"], package["version"]): package for package in workspace_members}
     resolver_packages = packages[:]
-    exec_feature_resolutions_by_fq_crate = {
-        fq_crate(package["name"], package["version"]): package["exec_feature_resolutions"]
-        for package in packages
-        if split_exec_resolution
-    }
     for package in cargo_metadata["packages"]:
         name = package["name"]
         version = package["version"]
@@ -591,18 +573,20 @@ def resolve_cargo_workspace_members(
         resolver_package["feature_resolutions"] = feature_resolutions
         feature_resolutions_by_fq_crate[fq_crate(name, version)] = feature_resolutions
 
-        if split_exec_resolution:
-            exec_feature_resolutions = _new_package_feature_resolution(
-                package_index,
-                package,
-                exec_platform_triples,
-                cargo_metadata_dep_to_dep_dict,
-                skip_internal_rustc_placeholder_crates,
-            )
-            resolver_package["exec_feature_resolutions"] = exec_feature_resolutions
-            exec_feature_resolutions_by_fq_crate[fq_crate(name, version)] = exec_feature_resolutions
-
         resolver_packages.append(resolver_package)
+
+    exec_feature_resolutions_by_fq_crate = {}
+    if split_exec_resolution:
+        for package in resolver_packages:
+            target_resolution = package["feature_resolutions"]
+            exec_resolution = _new_feature_resolution(
+                target_resolution.package_index,
+                [dict(dep) for dep in target_resolution.possible_deps],
+                target_resolution.possible_features,
+                exec_platform_triples,
+            )
+            package["exec_feature_resolutions"] = exec_resolution
+            exec_feature_resolutions_by_fq_crate[fq_crate(package["name"], package["version"])] = exec_resolution
 
     exec_resolver_packages = [
         dict(package, feature_resolutions = package["exec_feature_resolutions"])
