@@ -58,6 +58,12 @@ def rust_crate(
         rustc_env = {},
         skip_deps_verification = False,
         build_script_name = "_bs"):
+    if target_compatible_with == None:
+        target_compatible_with = select({
+            _platform(triple, use_legacy_rules_rust_platforms): []
+            for triple in triples
+        } | {"//conditions:default": ["@platforms//:incompatible"]})
+
     package_metadata(
         name = name + "_package_metadata",
         purl = purl,

@@ -571,17 +571,6 @@ cargo_lints(
         if platform not in resolved_platforms:
             resolved_platforms.append(platform)
 
-    resolved_exec_platforms = []
-    for triple in SUPPORTED_EXEC_TRIPLES:
-        platform = platform_label(triple, use_legacy_rules_rust_platforms)
-        if platform not in resolved_exec_platforms:
-            resolved_exec_platforms.append(platform)
-
-    resolved_target_and_exec_platforms = resolved_platforms[:]
-    for platform in resolved_exec_platforms:
-        if platform not in resolved_target_and_exec_platforms:
-            resolved_target_and_exec_platforms.append(platform)
-
     defs_bzl_contents = \
         """load(":data.bzl", "DEP_DATA")
 load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
@@ -621,21 +610,9 @@ RESOLVED_PLATFORMS = select({{
     {target_compatible_with},
     "//conditions:default": ["@platforms//:incompatible"],
 }})
-
-RESOLVED_EXEC_PLATFORMS = select({{
-    {exec_target_compatible_with},
-    "//conditions:default": ["@platforms//:incompatible"],
-}})
-
-RESOLVED_TARGET_AND_EXEC_PLATFORMS = select({{
-    {target_and_exec_compatible_with},
-    "//conditions:default": ["@platforms//:incompatible"],
-}})
 """.format(
             platforms = render_string_list(resolved_platforms),
             target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_platforms]),
-            exec_target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_exec_platforms]),
-            target_and_exec_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_target_and_exec_platforms]),
             this_repo = repr("@" + hub_name + "//:"),
         )
 

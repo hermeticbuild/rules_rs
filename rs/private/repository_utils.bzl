@@ -302,29 +302,14 @@ def _render_rust_crate_call(
         skip_deps_verification_attr = skip_deps_verification_attr,
     )
 
-def _merge_resolution_selects(target_select, exec_select):
-    merged = dict(target_select)
-    differs = False
-    for triple, exec_items in exec_select.items():
-        target_items = target_select.get(triple)
-        if target_items == None:
-            merged[triple] = exec_items
-        elif sorted(target_items) != sorted(exec_items):
-            differs = True
-    return merged, differs
-
-def _merge_aliases(target_aliases, exec_aliases):
-    merged = dict(target_aliases)
-    differs = False
-    for dependency, exec_alias in exec_aliases.items():
-        target_alias = target_aliases.get(dependency)
-        if target_alias != None and target_alias != exec_alias:
-            differs = True
-        else:
-            merged[dependency] = exec_alias
-    return merged, differs
+def _merge_resolution_values(target_values, exec_values):
+    return target_values | exec_values, any([
+        key in target_values and target_values[key] != exec_value
+        for key, exec_value in exec_values.items()
+    ])
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
+    exec_active = getattr(attr, "exec_active", False)
     aliases = attr.aliases
     crate_features_select = attr.crate_features_select
     deps_select = attr.deps_select
@@ -332,18 +317,18 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     target_compatible_with = "RESOLVED_PLATFORMS"
     binaries = values["binaries"]
 
-    if not attr.target_active and attr.exec_active:
+    if not getattr(attr, "target_active", True) and exec_active:
         aliases = attr.exec_aliases
         crate_features_select = attr.exec_crate_features_select
         deps_select = attr.exec_deps_select
         build_deps_select = attr.exec_build_script_deps_select
-        target_compatible_with = "RESOLVED_EXEC_PLATFORMS"
+        target_compatible_with = "None"
         binaries = "{}"
-    elif attr.exec_active:
-        merged_crate_features_select, crate_features_differ = _merge_resolution_selects(crate_features_select, attr.exec_crate_features_select)
-        merged_deps_select, deps_differ = _merge_resolution_selects(deps_select, attr.exec_deps_select)
-        merged_build_deps_select, build_deps_differ = _merge_resolution_selects(build_deps_select, attr.exec_build_script_deps_select)
-        merged_aliases, aliases_differ = _merge_aliases(aliases, attr.exec_aliases)
+    elif exec_active:
+        merged_crate_features_select, crate_features_differ = _merge_resolution_values(crate_features_select, attr.exec_crate_features_select)
+        merged_deps_select, deps_differ = _merge_resolution_values(deps_select, attr.exec_deps_select)
+        merged_build_deps_select, build_deps_differ = _merge_resolution_values(build_deps_select, attr.exec_build_script_deps_select)
+        merged_aliases, aliases_differ = _merge_resolution_values(aliases, attr.exec_aliases)
         if crate_features_differ or deps_differ or build_deps_differ or aliases_differ:
             target_call = _render_rust_crate_call(
                 attr,
@@ -368,7 +353,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
                 attr.exec_crate_features_select,
                 attr.exec_deps_select,
                 attr.exec_build_script_deps_select,
-                "RESOLVED_EXEC_PLATFORMS",
+                "None",
                 "_exec",
                 "_bs_exec",
                 "{}",
@@ -389,7 +374,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         crate_features_select = merged_crate_features_select
         deps_select = merged_deps_select
         build_deps_select = merged_build_deps_select
-        target_compatible_with = "RESOLVED_TARGET_AND_EXEC_PLATFORMS"
+        target_compatible_with = "None"
 
     return _render_rust_crate_call(
         attr,
@@ -418,7 +403,7 @@ def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
     return """\
 load("@rules_rs//rs:rust_crate.bzl", "rust_crate", "rust_crate_target_exec_alias")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
-load("@{hub_name}//:defs.bzl", "RESOLVED_EXEC_PLATFORMS", "RESOLVED_PLATFORMS", "RESOLVED_TARGET_AND_EXEC_PLATFORMS")
+load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
 {rust_crate_call}""".format(
         hub_name = attr.hub_name,
