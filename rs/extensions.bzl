@@ -2,6 +2,7 @@ load("@aspect_tools_telemetry_report//:defs.bzl", "TELEMETRY")  # buildifier: di
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL")
+load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
 load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(
@@ -250,8 +251,14 @@ def _generate_hub_and_spokes(
 
         facts_by_fq_crate[_fq_crate(name, version)] = fact
 
-    resolved_facts = resolve_package_facts(packages, facts_by_fq_crate, platform_triples)
+    resolved_facts = resolve_package_facts(
+        packages,
+        facts_by_fq_crate,
+        platform_triples,
+        exec_platform_triples = SUPPORTED_EXEC_TRIPLES,
+    )
     feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate
+    exec_feature_resolutions_by_fq_crate = resolved_facts.exec_feature_resolutions_by_fq_crate
     versions_by_name = resolved_facts.versions_by_name
 
     # Only files in the current Bazel workspace can/should be watched, so check where our manifests are located.
@@ -267,6 +274,7 @@ def _generate_hub_and_spokes(
         annotations = annotations,
         platform_triples = platform_triples,
         materialize_workspace_members = False,
+        exec_platform_triples = SUPPORTED_EXEC_TRIPLES,
         validate_lockfile = validate_lockfile,
         debug = debug,
         dep_label_prefix = "@%s//:" % hub_name,
@@ -277,6 +285,7 @@ def _generate_hub_and_spokes(
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
     workspace_dep_labels_by_triple = workspace_resolution.workspace_dep_labels_by_triple
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
+    exec_feature_resolutions_by_fq_crate = workspace_resolution.exec_feature_resolutions_by_fq_crate
 
     _date(mctx, "set up initial deps!")
 
@@ -290,6 +299,7 @@ def _generate_hub_and_spokes(
         source = package["source"]
 
         feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
+        exec_feature_resolutions = exec_feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
         annotation = annotation_for(annotations, crate_name, version, hub_name)
         suggested_annotation = None
@@ -323,6 +333,7 @@ crate.annotation(
             gen_build_script = annotation.gen_build_script,
             build_script_deps = [],
             build_script_deps_select = _select(feature_resolutions.build_deps),
+            exec_build_script_deps_select = _select(exec_feature_resolutions.build_deps),
             build_script_data = annotation.build_script_data,
             build_script_data_select = annotation.build_script_data_select,
             build_script_env = annotation.build_script_env,
@@ -338,9 +349,14 @@ crate.annotation(
             deps = annotation.deps,
             crate_tags = annotation.tags,
             deps_select = _select(feature_resolutions.deps),
+            exec_deps_select = _select(exec_feature_resolutions.deps),
             aliases = feature_resolutions.aliases,
+            exec_aliases = exec_feature_resolutions.aliases,
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
+            exec_crate_features_select = _select(exec_feature_resolutions.features_enabled),
+            target_active = any(feature_resolutions.active.values()),
+            exec_active = any(exec_feature_resolutions.active.values()),
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
 
@@ -556,6 +572,17 @@ cargo_lints(
         if platform not in resolved_platforms:
             resolved_platforms.append(platform)
 
+    resolved_exec_platforms = []
+    for triple in SUPPORTED_EXEC_TRIPLES:
+        platform = platform_label(triple, use_legacy_rules_rust_platforms)
+        if platform not in resolved_exec_platforms:
+            resolved_exec_platforms.append(platform)
+
+    resolved_target_and_exec_platforms = resolved_platforms[:]
+    for platform in resolved_exec_platforms:
+        if platform not in resolved_target_and_exec_platforms:
+            resolved_target_and_exec_platforms.append(platform)
+
     defs_bzl_contents = \
         """load(":data.bzl", "DEP_DATA")
 load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
@@ -595,9 +622,21 @@ RESOLVED_PLATFORMS = select({{
     {target_compatible_with},
     "//conditions:default": ["@platforms//:incompatible"],
 }})
+
+RESOLVED_EXEC_PLATFORMS = select({{
+    {exec_target_compatible_with},
+    "//conditions:default": ["@platforms//:incompatible"],
+}})
+
+RESOLVED_TARGET_AND_EXEC_PLATFORMS = select({{
+    {target_and_exec_compatible_with},
+    "//conditions:default": ["@platforms//:incompatible"],
+}})
 """.format(
             platforms = render_string_list(resolved_platforms),
             target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_platforms]),
+            exec_target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_exec_platforms]),
+            target_and_exec_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_target_and_exec_platforms]),
             this_repo = repr("@" + hub_name + "//:"),
         )
 

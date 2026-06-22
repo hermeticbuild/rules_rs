@@ -1,0 +1,14 @@
+[package]
+name = "build-exec-feature-split"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+resolver = "2"
+exclude = ["vendor/consumer", "vendor/shared"]
+
+[dependencies]
+feature-split-consumer = { path = "vendor/consumer" }
+
+[patch.crates-io]
+feature-split-shared = { path = "vendor/shared" }

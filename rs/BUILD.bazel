@@ -44,6 +44,7 @@ bzl_library(
     srcs = ["extensions.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        "//rs/platforms:triples",
         "//rs/private:annotations",
         "//rs/private:cargo_credentials",
         "//rs/private:cargo_workspace_graph",

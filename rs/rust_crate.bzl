@@ -14,10 +14,9 @@ def _platform(triple, use_legacy_rules_rust_platforms):
         return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
     return "@rules_rs//rs/platforms/config:" + triple
 
-def rust_crate(
+def _rust_crate_impl(
         name,
         crate_name,
-        purl,
         version,
         aliases,
         deps,
@@ -30,8 +29,10 @@ def rust_crate(
         rustc_flags,
         tags,
         target_compatible_with,
+        package_metadata_name,
         links,
         build_script,
+        build_script_name,
         build_script_data,
         build_deps,
         build_script_env,
@@ -46,12 +47,6 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False):
-    package_metadata(
-        name = name + "_package_metadata",
-        purl = purl,
-        visibility = ["//visibility:public"],
-    )
-
     compile_data = native.glob(
         include = ["**"],
         exclude = [
@@ -74,7 +69,7 @@ def rust_crate(
     )
 
     default_tags = [
-        "crate-name=" + name,
+        "crate-name=" + crate_name,
         "manual",
         "noclippy",
         "norustfmt",
@@ -114,29 +109,29 @@ def rust_crate(
             # The build script is cfg-exec, but the features must be selected according to the target.
             # Only stamp out one target per triple when there are per-platform feature deltas.
             for triple in triples:
-                build_script_name = "_bs_" + triple
-                branches[_platform(triple, use_legacy_rules_rust_platforms)] = build_script_name
+                triple_build_script_name = build_script_name + "_" + triple
+                branches[_platform(triple, use_legacy_rules_rust_platforms)] = triple_build_script_name
 
                 cargo_build_script(
-                    name = build_script_name,
+                    name = triple_build_script_name,
                     crate_features = crate_features + conditional_crate_features.get(triple, []),
                     **build_script_kwargs
                 )
 
             native.alias(
-                name = "_bs",
+                name = build_script_name,
                 actual = select(branches),
                 tags = build_script_target_tags,
             )
 
         else:
             cargo_build_script(
-                name = "_bs",
+                name = build_script_name,
                 crate_features = crate_features,
                 **build_script_kwargs
             )
 
-        maybe_build_script = ["_bs"]
+        maybe_build_script = [build_script_name]
     else:
         maybe_build_script = []
 
@@ -186,7 +181,7 @@ def rust_crate(
             rustc_flags = rustc_flags + ["--cap-lints=allow"],
             tags = crate_tags,
             target_compatible_with = target_compatible_with,
-            package_metadata = [name + "_package_metadata"],
+            package_metadata = [package_metadata_name],
             skip_deps_verification = skip_deps_verification,
             visibility = ["//visibility:public"],
             skip_per_crate_rustc_flags = True,
@@ -217,3 +212,139 @@ def rust_crate(
             version = version,
             visibility = ["//visibility:public"],
         )
+
+def rust_crate(
+        name,
+        crate_name,
+        purl,
+        version,
+        aliases,
+        exec_aliases,
+        deps,
+        exec_deps,
+        data,
+        crate_features,
+        triples,
+        conditional_crate_features,
+        exec_crate_features,
+        exec_triples,
+        exec_conditional_crate_features,
+        crate_root,
+        edition,
+        rustc_flags,
+        tags,
+        target_compatible_with,
+        exec_target_compatible_with,
+        target_and_exec_compatible_with,
+        links,
+        build_script,
+        build_script_data,
+        build_deps,
+        exec_build_deps,
+        build_script_env,
+        allow_build_script_to_detect_nonhermetic_paths,
+        build_script_toolchains,
+        build_script_tools,
+        build_script_tags,
+        is_proc_macro,
+        has_lib,
+        binaries,
+        use_legacy_rules_rust_platforms,
+        resolution_kind,
+        extra_compile_data = [],
+        rustc_env = {},
+        skip_deps_verification = False):
+    package_metadata_name = name + "_package_metadata"
+    package_metadata(
+        name = package_metadata_name,
+        purl = purl,
+        visibility = ["//visibility:public"],
+    )
+
+    crate_name = crate_name or name.replace("-", "_")
+    common = dict(
+        crate_name = crate_name,
+        version = version,
+        data = data,
+        crate_root = crate_root,
+        edition = edition,
+        rustc_flags = rustc_flags,
+        tags = tags,
+        package_metadata_name = package_metadata_name,
+        links = links,
+        build_script = build_script,
+        build_script_data = build_script_data,
+        build_script_env = build_script_env,
+        allow_build_script_to_detect_nonhermetic_paths = allow_build_script_to_detect_nonhermetic_paths,
+        build_script_toolchains = build_script_toolchains,
+        build_script_tools = build_script_tools,
+        build_script_tags = build_script_tags,
+        is_proc_macro = is_proc_macro,
+        has_lib = has_lib,
+        use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        extra_compile_data = extra_compile_data,
+        rustc_env = rustc_env,
+        skip_deps_verification = skip_deps_verification,
+    )
+
+    if resolution_kind == "split":
+        crate_variants = [
+            dict(
+                name = name + "_target",
+                aliases = aliases,
+                deps = deps,
+                crate_features = crate_features,
+                triples = triples,
+                conditional_crate_features = conditional_crate_features,
+                target_compatible_with = target_compatible_with,
+                build_script_name = "_bs_target",
+                build_deps = build_deps,
+                binaries = binaries,
+            ),
+            dict(
+                name = name + "_exec",
+                aliases = exec_aliases,
+                deps = exec_deps,
+                crate_features = exec_crate_features,
+                triples = exec_triples,
+                conditional_crate_features = exec_conditional_crate_features,
+                target_compatible_with = exec_target_compatible_with,
+                build_script_name = "_bs_exec",
+                build_deps = exec_build_deps,
+                binaries = {},
+            ),
+        ]
+    else:
+        compatibility = {
+            "target": target_compatible_with,
+            "exec": exec_target_compatible_with,
+            "target_and_exec": target_and_exec_compatible_with,
+        }[resolution_kind]
+        crate_variants = [dict(
+            name = name,
+            aliases = aliases,
+            deps = deps,
+            crate_features = crate_features,
+            triples = triples,
+            conditional_crate_features = conditional_crate_features,
+            target_compatible_with = compatibility,
+            build_script_name = "_bs",
+            build_deps = build_deps,
+            binaries = {} if resolution_kind == "exec" else binaries,
+        )]
+
+    for crate_variant in crate_variants:
+        _rust_crate_impl(**(common | crate_variant))
+
+    if resolution_kind != "split":
+        return
+
+    native.alias(
+        name = name,
+        actual = select({
+            "@rules_rust//cargo/settings:use_exec_features_enabled": name + "_exec",
+            "//conditions:default": name + "_target",
+        }),
+        tags = ["crate-name=" + crate_name] + tags,
+        visibility = ["//visibility:public"],
+    )
