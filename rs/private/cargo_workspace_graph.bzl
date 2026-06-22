@@ -576,6 +576,7 @@ def resolve_cargo_workspace_members(
         resolver_packages.append(resolver_package)
 
     exec_feature_resolutions_by_fq_crate = {}
+    exec_resolver_packages = []
     if split_exec_resolution:
         for package in resolver_packages:
             target_resolution = package["feature_resolutions"]
@@ -587,11 +588,7 @@ def resolve_cargo_workspace_members(
             )
             package["exec_feature_resolutions"] = exec_resolution
             exec_feature_resolutions_by_fq_crate[fq_crate(package["name"], package["version"])] = exec_resolution
-
-    exec_resolver_packages = [
-        dict(package, feature_resolutions = package["exec_feature_resolutions"])
-        for package in resolver_packages
-    ] if split_exec_resolution else []
+            exec_resolver_packages.append(dict(package, feature_resolutions = exec_resolution))
 
     _resolve_possible_deps(
         resolver_packages,
@@ -752,8 +749,6 @@ def resolve_cargo_workspace_members(
     return struct(
         cfg_match_cache = cfg_match_cache,
         exec_feature_resolutions_by_fq_crate = exec_feature_resolutions_by_fq_crate,
-        exec_platform_cfg_attrs = exec_platform_cfg_attrs,
-        exec_platform_cfg_attrs_by_triple = exec_platform_cfg_attrs_by_triple,
         feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,
         platform_cfg_attrs = platform_cfg_attrs,
         platform_cfg_attrs_by_triple = platform_cfg_attrs_by_triple,

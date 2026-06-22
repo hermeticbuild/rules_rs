@@ -168,11 +168,7 @@ def _propagate_feature_enablement(
 
                     if defer_build_dependency:
                         deferred = feature_resolutions.deferred_build_dep_features[triple]
-                        deferred_features = deferred.get(dep_name)
-                        if deferred_features == None:
-                            deferred_features = set()
-                            deferred[dep_name] = deferred_features
-                        deferred_features.add(dep_feature)
+                        deferred.setdefault(dep_name, set()).add(dep_feature)
                     else:
                         dep_feature_resolutions = dep["feature_resolutions"]
                         triple_features = dep_feature_resolutions.features_enabled[triple]
@@ -222,33 +218,23 @@ def seed_exec_build_dependencies(packages, exec_cfg_attrs_by_triple):
 
         target_features = set()
         deferred_build_dep_features = {}
-        target_active = False
+        if not any(target_resolution.active.values()):
+            continue
+
         for triple, active in target_resolution.active.items():
             if not active:
                 continue
-            target_active = True
             target_features.update(target_resolution.features_enabled[triple])
             for dep_name, features in target_resolution.deferred_build_dep_features[triple].items():
-                existing = deferred_build_dep_features.get(dep_name)
-                if existing == None:
-                    existing = set()
-                    deferred_build_dep_features[dep_name] = existing
-                existing.update(features)
-
-        if not target_active:
-            continue
+                deferred_build_dep_features.setdefault(dep_name, set()).update(features)
 
         for dep in exec_resolution.possible_deps:
-            if dep.get("kind", "normal") != "build":
+            if dep.get("kind", "normal") != "build" or not dep.get("bazel_target"):
                 continue
 
-            bazel_target = dep.get("bazel_target")
-            if not bazel_target:
-                continue
-
+            bazel_target = dep["bazel_target"]
             dep_name = dep["name"]
-            prefixed_dep_alias = "dep:" + dep_name
-            if dep.get("optional", False) and dep_name not in target_features and prefixed_dep_alias not in target_features:
+            if dep.get("optional", False) and dep_name not in target_features and ("dep:" + dep_name) not in target_features:
                 continue
 
             dep_resolution = dep["feature_resolutions"]
@@ -260,9 +246,6 @@ def seed_exec_build_dependencies(packages, exec_cfg_attrs_by_triple):
                 if "package" in dep:
                     target_resolution.aliases[bazel_target] = dep_name.replace("-", "_")
 
-                if not dep_resolution.active[exec_triple]:
-                    dep_resolution.active[exec_triple] = True
-
-                dep_features = dep.get("features", [])
-                dep_resolution.features_enabled[exec_triple].update(dep_features)
+                dep_resolution.active[exec_triple] = True
+                dep_resolution.features_enabled[exec_triple].update(dep.get("features", []))
                 dep_resolution.features_enabled[exec_triple].update(deferred_build_dep_features.get(dep_name, []))
