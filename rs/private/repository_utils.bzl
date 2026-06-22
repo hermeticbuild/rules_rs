@@ -205,13 +205,6 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {skip_deps_verification_attr}{indent})
 """
 
-_RUST_CRATE_TARGET_EXEC_ALIAS = """{indent}rust_crate_target_exec_alias(
-{indent}    name = {name},
-{indent}    crate_name = {crate_name},
-{indent}    tags = {tags},
-{indent})
-"""
-
 def _render_rust_crate_call(
         attr,
         values,
@@ -221,7 +214,6 @@ def _render_rust_crate_call(
         build_deps_select,
         target_compatible_with,
         name_suffix,
-        build_script_name,
         binaries,
         bazel_metadata,
         extra_deps,
@@ -298,15 +290,15 @@ def _render_rust_crate_call(
         has_lib = values["has_lib"],
         binaries = binaries,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
-        build_script_name = repr(build_script_name),
+        build_script_name = repr("_bs" + name_suffix),
         skip_deps_verification_attr = skip_deps_verification_attr,
     )
 
-def _merge_resolution_values(target_values, exec_values):
-    return target_values | exec_values, any([
-        key in target_values and target_values[key] != exec_value
+def _merge_target_and_exec(target_values, exec_values):
+    return target_values | exec_values if all([
+        key not in target_values or target_values[key] == exec_value
         for key, exec_value in exec_values.items()
-    ])
+    ]) else None
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     exec_active = getattr(attr, "exec_active", False)
@@ -325,11 +317,11 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         target_compatible_with = "None"
         binaries = "{}"
     elif exec_active:
-        merged_crate_features_select, crate_features_differ = _merge_resolution_values(crate_features_select, attr.exec_crate_features_select)
-        merged_deps_select, deps_differ = _merge_resolution_values(deps_select, attr.exec_deps_select)
-        merged_build_deps_select, build_deps_differ = _merge_resolution_values(build_deps_select, attr.exec_build_script_deps_select)
-        merged_aliases, aliases_differ = _merge_resolution_values(aliases, attr.exec_aliases)
-        if crate_features_differ or deps_differ or build_deps_differ or aliases_differ:
+        merged_crate_features_select = _merge_target_and_exec(crate_features_select, attr.exec_crate_features_select)
+        merged_deps_select = _merge_target_and_exec(deps_select, attr.exec_deps_select)
+        merged_build_deps_select = _merge_target_and_exec(build_deps_select, attr.exec_build_script_deps_select)
+        merged_aliases = _merge_target_and_exec(aliases, attr.exec_aliases)
+        if None in [merged_crate_features_select, merged_deps_select, merged_build_deps_select, merged_aliases]:
             target_call = _render_rust_crate_call(
                 attr,
                 values,
@@ -339,7 +331,6 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
                 build_deps_select,
                 "RESOLVED_PLATFORMS",
                 "_target",
-                "_bs_target",
                 binaries,
                 bazel_metadata,
                 extra_deps,
@@ -355,14 +346,18 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
                 attr.exec_build_script_deps_select,
                 "None",
                 "_exec",
-                "_bs_exec",
                 "{}",
                 bazel_metadata,
                 extra_deps,
                 indent,
                 skip_deps_verification,
             )
-            alias_call = _RUST_CRATE_TARGET_EXEC_ALIAS.format(
+            alias_call = """{indent}rust_crate_target_exec_alias(
+{indent}    name = {name},
+{indent}    crate_name = {crate_name},
+{indent}    tags = {tags},
+{indent})
+""".format(
                 crate_name = values["crate_name"],
                 indent = indent,
                 name = values["name"],
@@ -385,7 +380,6 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         build_deps_select,
         target_compatible_with,
         "",
-        "_bs",
         binaries,
         bazel_metadata,
         extra_deps,

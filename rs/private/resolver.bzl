@@ -79,7 +79,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
                 match = dep["target"]
 
             for triple in match:
-                if not feature_resolutions.active[triple]:
+                if triple not in feature_resolutions.active:
                     continue
 
                 if optional:
@@ -97,8 +97,8 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
 
                 triple_features = dep_feature_resolutions.features_enabled[triple]
 
-                if not dep_feature_resolutions.active[triple]:
-                    dep_feature_resolutions.active[triple] = True
+                if triple not in dep_feature_resolutions.active:
+                    dep_feature_resolutions.active.add(triple)
                     new_dirty_package_indices.add(dep_feature_resolutions.package_index)
 
                 dep_features = dep.get("features")
@@ -125,7 +125,7 @@ def _propagate_feature_enablement(
     possible_features = feature_resolutions.possible_features
 
     for triple, feature_set in features_enabled.items():
-        if not feature_resolutions.active[triple] or not feature_set:
+        if triple not in feature_resolutions.active or not feature_set:
             continue
 
         # Enable any features that are implied by previously-enabled features.
@@ -167,8 +167,7 @@ def _propagate_feature_enablement(
                         continue
 
                     if defer_build_dependency:
-                        deferred = feature_resolutions.deferred_build_dep_features[triple]
-                        deferred.setdefault(dep_name, set()).add(dep_feature)
+                        feature_resolutions.deferred_build_dep_features.setdefault(dep_name, set()).add(dep_feature)
                     else:
                         dep_feature_resolutions = dep["feature_resolutions"]
                         triple_features = dep_feature_resolutions.features_enabled[triple]
@@ -216,17 +215,12 @@ def seed_exec_build_dependencies(packages, exec_cfg_attrs_by_triple):
         target_resolution = package["feature_resolutions"]
         exec_resolution = package["exec_feature_resolutions"]
 
-        target_features = set()
-        deferred_build_dep_features = {}
-        if not any(target_resolution.active.values()):
+        if not target_resolution.active:
             continue
 
-        for triple, active in target_resolution.active.items():
-            if not active:
-                continue
+        target_features = set()
+        for triple in target_resolution.active:
             target_features.update(target_resolution.features_enabled[triple])
-            for dep_name, features in target_resolution.deferred_build_dep_features[triple].items():
-                deferred_build_dep_features.setdefault(dep_name, set()).update(features)
 
         for dep in exec_resolution.possible_deps:
             if dep.get("kind", "normal") != "build" or not dep.get("bazel_target"):
@@ -246,6 +240,6 @@ def seed_exec_build_dependencies(packages, exec_cfg_attrs_by_triple):
                 if "package" in dep:
                     target_resolution.aliases[bazel_target] = dep_name.replace("-", "_")
 
-                dep_resolution.active[exec_triple] = True
+                dep_resolution.active.add(exec_triple)
                 dep_resolution.features_enabled[exec_triple].update(dep.get("features", []))
-                dep_resolution.features_enabled[exec_triple].update(deferred_build_dep_features.get(dep_name, []))
+                dep_resolution.features_enabled[exec_triple].update(target_resolution.deferred_build_dep_features.get(dep_name, []))

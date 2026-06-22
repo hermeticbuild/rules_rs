@@ -354,8 +354,8 @@ crate.annotation(
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
             exec_crate_features_select = _select(exec_feature_resolutions.features_enabled),
-            target_active = any(feature_resolutions.active.values()),
-            exec_active = any(exec_feature_resolutions.active.values()),
+            target_active = bool(feature_resolutions.active),
+            exec_active = bool(exec_feature_resolutions.active),
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
 
