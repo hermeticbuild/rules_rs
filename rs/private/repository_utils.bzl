@@ -201,8 +201,8 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    has_lib = {has_lib},
 {indent}    binaries = {binaries},
 {indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
-{indent}    build_script_name = {build_script_name},
-{target_exec_alias_name_attr}{skip_deps_verification_attr}{indent})
+{indent}    name_suffix = {crate_name_suffix},
+{skip_deps_verification_attr}{indent})
 """
 
 def _render_rust_crate_call(
@@ -212,13 +212,16 @@ def _render_rust_crate_call(
         crate_features_select,
         deps_select,
         build_deps_select,
-        target_compatible_with,
         name_suffix,
         binaries,
         bazel_metadata,
         extra_deps,
         indent,
         skip_deps_verification):
+    target_compatible_with = "RESOLVED_PLATFORMS"
+    if name_suffix == "_exec" or not getattr(attr, "target_active", True) or crate_features_select.keys() != attr.crate_features_select.keys():
+        target_compatible_with = "None"
+
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
     # See `rust_crate.bzl` for details.
     crate_features, conditional_crate_features = compute_select(
@@ -249,7 +252,6 @@ def _render_rust_crate_call(
     rustc_env = getattr(attr, "rustc_env", {})
     rustc_env_attr = "%s    rustc_env = %s,\n" % (indent, repr(rustc_env)) if rustc_env else ""
     skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""
-    target_exec_alias_name_attr = "%s    target_exec_alias_name = %s,\n" % (indent, values["name"]) if name_suffix == "_exec" else ""
 
     return _RUST_CRATE_MACRO_CALL.format(
         indent = indent,
@@ -291,8 +293,7 @@ def _render_rust_crate_call(
         has_lib = values["has_lib"],
         binaries = binaries,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
-        build_script_name = repr("_bs" + name_suffix),
-        target_exec_alias_name_attr = target_exec_alias_name_attr,
+        crate_name_suffix = repr(name_suffix),
         skip_deps_verification_attr = skip_deps_verification_attr,
     )
 
@@ -308,7 +309,6 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     crate_features_select = attr.crate_features_select
     deps_select = attr.deps_select
     build_deps_select = attr.build_script_deps_select
-    target_compatible_with = "RESOLVED_PLATFORMS"
     binaries = values["binaries"]
 
     if not getattr(attr, "target_active", True) and exec_active:
@@ -316,7 +316,6 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         crate_features_select = attr.exec_crate_features_select
         deps_select = attr.exec_deps_select
         build_deps_select = attr.exec_build_script_deps_select
-        target_compatible_with = "None"
         binaries = "{}"
     elif exec_active:
         merged_crate_features_select = _merge_target_and_exec(crate_features_select, attr.exec_crate_features_select)
@@ -331,7 +330,6 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
                 crate_features_select,
                 deps_select,
                 build_deps_select,
-                "RESOLVED_PLATFORMS",
                 "_target",
                 binaries,
                 bazel_metadata,
@@ -346,7 +344,6 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
                 attr.exec_crate_features_select,
                 attr.exec_deps_select,
                 attr.exec_build_script_deps_select,
-                "None",
                 "_exec",
                 "{}",
                 bazel_metadata,
@@ -360,7 +357,6 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         crate_features_select = merged_crate_features_select
         deps_select = merged_deps_select
         build_deps_select = merged_build_deps_select
-        target_compatible_with = "None"
 
     return _render_rust_crate_call(
         attr,
@@ -369,7 +365,6 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         crate_features_select,
         deps_select,
         build_deps_select,
-        target_compatible_with,
         "",
         binaries,
         bazel_metadata,

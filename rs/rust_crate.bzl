@@ -46,8 +46,8 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False,
-        build_script_name = "_bs",
-        target_exec_alias_name = None):
+        name_suffix = ""):
+    build_script_name = "_bs" + name_suffix
     if target_compatible_with == None:
         target_compatible_with = select({
             _platform(triple, use_legacy_rules_rust_platforms): []
@@ -60,7 +60,8 @@ def rust_crate(
         visibility = ["//visibility:public"],
     )
 
-    if target_exec_alias_name:
+    if name_suffix == "_exec":
+        target_exec_alias_name = name.removesuffix(name_suffix)
         native.alias(
             name = target_exec_alias_name,
             actual = select({
