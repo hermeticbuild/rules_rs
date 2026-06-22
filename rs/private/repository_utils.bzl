@@ -298,10 +298,10 @@ def _render_rust_crate_call(
     )
 
 def _merge_target_and_exec(target_values, exec_values):
-    return target_values | exec_values if all([
-        key not in target_values or target_values[key] == exec_value
-        for key, exec_value in exec_values.items()
-    ]) else None
+    for key, exec_value in exec_values.items():
+        if key in target_values and target_values[key] != exec_value:
+            return None
+    return target_values | exec_values
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     exec_active = getattr(attr, "exec_active", False)
@@ -324,32 +324,32 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         merged_aliases = _merge_target_and_exec(aliases, attr.exec_aliases)
         if None in [merged_crate_features_select, merged_deps_select, merged_build_deps_select, merged_aliases]:
             target_call = _render_rust_crate_call(
-                attr,
-                values,
-                aliases,
-                crate_features_select,
-                deps_select,
-                build_deps_select,
-                "_target",
-                binaries,
-                bazel_metadata,
-                extra_deps,
-                indent,
-                skip_deps_verification,
+                attr = attr,
+                values = values,
+                aliases = aliases,
+                crate_features_select = crate_features_select,
+                deps_select = deps_select,
+                build_deps_select = build_deps_select,
+                name_suffix = "_target",
+                binaries = binaries,
+                bazel_metadata = bazel_metadata,
+                extra_deps = extra_deps,
+                indent = indent,
+                skip_deps_verification = skip_deps_verification,
             )
             exec_call = _render_rust_crate_call(
-                attr,
-                values,
-                attr.exec_aliases,
-                attr.exec_crate_features_select,
-                attr.exec_deps_select,
-                attr.exec_build_script_deps_select,
-                "_exec",
-                "{}",
-                bazel_metadata,
-                extra_deps,
-                indent,
-                skip_deps_verification,
+                attr = attr,
+                values = values,
+                aliases = attr.exec_aliases,
+                crate_features_select = attr.exec_crate_features_select,
+                deps_select = attr.exec_deps_select,
+                build_deps_select = attr.exec_build_script_deps_select,
+                name_suffix = "_exec",
+                binaries = "{}",
+                bazel_metadata = bazel_metadata,
+                extra_deps = extra_deps,
+                indent = indent,
+                skip_deps_verification = skip_deps_verification,
             )
             return target_call + "\n" + exec_call
 
@@ -359,18 +359,18 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         build_deps_select = merged_build_deps_select
 
     return _render_rust_crate_call(
-        attr,
-        values,
-        aliases,
-        crate_features_select,
-        deps_select,
-        build_deps_select,
-        "",
-        binaries,
-        bazel_metadata,
-        extra_deps,
-        indent,
-        skip_deps_verification,
+        attr = attr,
+        values = values,
+        aliases = aliases,
+        crate_features_select = crate_features_select,
+        deps_select = deps_select,
+        build_deps_select = build_deps_select,
+        name_suffix = "",
+        binaries = binaries,
+        bazel_metadata = bazel_metadata,
+        extra_deps = extra_deps,
+        indent = indent,
+        skip_deps_verification = skip_deps_verification,
     )
 
 def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
