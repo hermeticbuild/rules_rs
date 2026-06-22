@@ -62,7 +62,7 @@ def cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache):
     cfg_match_cache[target] = match_info
     return match_info
 
-def _new_feature_resolution(package_index, possible_deps, possible_features, platform_triples, build_dep_triples = None):
+def new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples, build_dep_triples = None):
     if build_dep_triples == None:
         build_dep_triples = platform_triples
     return struct(
@@ -75,25 +75,6 @@ def _new_feature_resolution(package_index, possible_deps, possible_features, pla
         package_index = package_index,
         possible_deps = possible_deps,
         possible_features = possible_features,
-    )
-
-def _new_package_feature_resolution(
-        package_index,
-        package_info,
-        platform_triples,
-        dep_converter,
-        skip_internal_rustc_placeholder_crates,
-        build_dep_triples = None):
-    return _new_feature_resolution(
-        package_index,
-        prepare_possible_deps(
-            package_info.get("dependencies", []),
-            converter = dep_converter,
-            skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
-        ),
-        package_info.get("features", {}),
-        platform_triples,
-        build_dep_triples = build_dep_triples,
     )
 
 _INTERNAL_RUSTC_PLACEHOLDER_CRATES = [
@@ -409,12 +390,16 @@ def _resolve_packages(
         add_to_dict(versions_by_name, name, version)
 
         package_info = package_info_by_fq_crate[fq]
-        feature_resolutions = _new_package_feature_resolution(
+        possible_deps = prepare_possible_deps(
+            package_info.get("dependencies", []),
+            converter = dep_converter,
+            skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
+        )
+        feature_resolutions = new_feature_resolutions(
             package_index,
-            package_info,
+            possible_deps,
+            package_info.get("features", {}),
             platform_triples,
-            dep_converter,
-            skip_internal_rustc_placeholder_crates,
             build_dep_triples = build_dep_triples,
         )
         package["feature_resolutions"] = feature_resolutions
@@ -554,6 +539,13 @@ def resolve_cargo_workspace_members(
             else:
                 resolver_versions_by_name[name] = [version]
 
+        possible_features = package.get("features", {})
+        possible_deps = prepare_possible_deps(
+            package.get("dependencies", []),
+            converter = cargo_metadata_dep_to_dep_dict,
+            skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
+        )
+
         package_index = len(resolver_packages)
         lockfile_pkg = workspace_members_by_key.get((name, version), {})
         resolver_package = {
@@ -562,12 +554,11 @@ def resolve_cargo_workspace_members(
             "dependencies": lockfile_pkg.get("dependencies", []),
         }
 
-        feature_resolutions = _new_package_feature_resolution(
+        feature_resolutions = new_feature_resolutions(
             package_index,
-            package,
+            possible_deps,
+            possible_features,
             platform_triples,
-            cargo_metadata_dep_to_dep_dict,
-            skip_internal_rustc_placeholder_crates,
             build_dep_triples = exec_platform_triples or platform_triples,
         )
         resolver_package["feature_resolutions"] = feature_resolutions
@@ -580,7 +571,7 @@ def resolve_cargo_workspace_members(
     if split_exec_resolution:
         for package in resolver_packages:
             target_resolution = package["feature_resolutions"]
-            exec_resolution = _new_feature_resolution(
+            exec_resolution = new_feature_resolutions(
                 target_resolution.package_index,
                 [dict(dep) for dep in target_resolution.possible_deps],
                 target_resolution.possible_features,
