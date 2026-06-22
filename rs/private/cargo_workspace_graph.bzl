@@ -69,7 +69,6 @@ def new_feature_resolutions(package_index, possible_deps, possible_features, pla
         build_deps = {triple: set() for triple in platform_triples},
         deps = {triple: set() for triple in platform_triples},
         aliases = {},
-        deferred_build_dep_features = {},
         package_index = package_index,
         possible_deps = possible_deps,
         possible_features = possible_features,
@@ -669,24 +668,11 @@ def resolve_cargo_workspace_members(
                 if exec_platform_triples:
                     _apply_annotation_features(exec_feature_resolutions_by_fq_crate[fq], annotation)
 
-    resolve(
-        ctx,
-        resolver_packages,
-        feature_resolutions_by_fq_crate,
-        platform_cfg_attrs_by_triple,
-        debug,
-        include_build_dependencies = not exec_platform_triples,
-    )
+    resolve(ctx, resolver_packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug, include_build_dependencies = not exec_platform_triples)
 
     if exec_platform_triples:
         seed_exec_build_dependencies(resolver_packages, exec_resolver_packages, exec_platform_cfg_attrs_by_triple)
-        resolve(
-            ctx,
-            exec_resolver_packages,
-            exec_feature_resolutions_by_fq_crate,
-            exec_platform_cfg_attrs_by_triple,
-            debug,
-        )
+        resolve(ctx, exec_resolver_packages, exec_feature_resolutions_by_fq_crate, exec_platform_cfg_attrs_by_triple, debug)
 
     for package in packages:
         feature_resolutions = package["feature_resolutions"]

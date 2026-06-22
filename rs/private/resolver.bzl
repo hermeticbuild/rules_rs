@@ -167,7 +167,7 @@ def _propagate_feature_enablement(
                         continue
 
                     if defer_build_dependency:
-                        feature_resolutions.deferred_build_dep_features.setdefault(dep_name, set()).add(dep_feature)
+                        dep.setdefault("deferred_features", set()).add(dep_feature)
                     else:
                         dep_feature_resolutions = dep["feature_resolutions"]
                         triple_features = dep_feature_resolutions.features_enabled[triple]
@@ -193,13 +193,7 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple
     for i in range(_MAX_ROUNDS):
         mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
-        dirty_package_indices = _resolve_one_round(
-            packages,
-            dirty_package_indices,
-            cfg_attrs_by_triple,
-            debug,
-            include_build_dependencies,
-        )
+        dirty_package_indices = _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, debug, include_build_dependencies)
         if not dirty_package_indices:
             if debug:
                 count = _count(feature_resolutions_by_fq_crate)
@@ -222,11 +216,11 @@ def seed_exec_build_dependencies(packages, exec_packages, exec_cfg_attrs_by_trip
         for triple in target_resolution.active:
             target_features.update(target_resolution.features_enabled[triple])
 
-        for dep in exec_resolution.possible_deps:
-            if dep.get("kind", "normal") != "build" or not dep.get("bazel_target"):
+        for target_dep, dep in zip(target_resolution.possible_deps, exec_resolution.possible_deps):
+            bazel_target = dep.get("bazel_target")
+            if dep.get("kind", "normal") != "build" or not bazel_target:
                 continue
 
-            bazel_target = dep["bazel_target"]
             dep_name = dep["name"]
             if dep.get("optional", False) and dep_name not in target_features and ("dep:" + dep_name) not in target_features:
                 continue
@@ -242,4 +236,4 @@ def seed_exec_build_dependencies(packages, exec_packages, exec_cfg_attrs_by_trip
 
                 dep_resolution.active.add(exec_triple)
                 dep_resolution.features_enabled[exec_triple].update(dep.get("features", []))
-                dep_resolution.features_enabled[exec_triple].update(target_resolution.deferred_build_dep_features.get(dep_name, []))
+                dep_resolution.features_enabled[exec_triple].update(target_dep.get("deferred_features", []))

@@ -1,3 +1,1 @@
-pub fn run() {
-    feature_split_consumer::run();
-}
+pub use feature_split_consumer::*;
