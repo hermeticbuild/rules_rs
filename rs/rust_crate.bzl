@@ -45,12 +45,32 @@ def rust_crate(
         use_legacy_rules_rust_platforms,
         extra_compile_data = [],
         rustc_env = {},
-        skip_deps_verification = False):
+        skip_deps_verification = False,
+        name_suffix = ""):
+    build_script_name = "_bs" + name_suffix
+    if target_compatible_with == None:
+        target_compatible_with = select({
+            _platform(triple, use_legacy_rules_rust_platforms): []
+            for triple in triples
+        } | {"//conditions:default": ["@platforms//:incompatible"]})
+
     package_metadata(
         name = name + "_package_metadata",
         purl = purl,
         visibility = ["//visibility:public"],
     )
+
+    if name_suffix == "_exec":
+        target_exec_alias_name = name.removesuffix(name_suffix)
+        native.alias(
+            name = target_exec_alias_name,
+            actual = select({
+                "@rules_rust//cargo/settings:use_exec_features_enabled": name,
+                "//conditions:default": target_exec_alias_name + "_target",
+            }),
+            tags = ["crate-name=" + (crate_name or target_exec_alias_name)] + tags,
+            visibility = ["//visibility:public"],
+        )
 
     compile_data = native.glob(
         include = ["**"],
@@ -74,7 +94,7 @@ def rust_crate(
     )
 
     default_tags = [
-        "crate-name=" + name,
+        "crate-name=" + (crate_name or name),
         "manual",
         "noclippy",
         "norustfmt",
@@ -114,8 +134,8 @@ def rust_crate(
             # The build script is cfg-exec, but the features must be selected according to the target.
             # Only stamp out one target per triple when there are per-platform feature deltas.
             for triple in triples:
-                build_script_name = "_bs_" + triple
-                branches[_platform(triple, use_legacy_rules_rust_platforms)] = build_script_name
+                triple_build_script_name = build_script_name + "_" + triple
+                branches[_platform(triple, use_legacy_rules_rust_platforms)] = triple_build_script_name
 
                 build_script_kwargs_for_triple = dict(build_script_kwargs)
                 build_script_kwargs_for_triple["rustc_flags"] = build_script_kwargs["rustc_flags"] + [
@@ -129,25 +149,25 @@ def rust_crate(
                 ]
 
                 cargo_build_script(
-                    name = build_script_name,
+                    name = triple_build_script_name,
                     crate_features = crate_features + conditional_crate_features.get(triple, []),
                     **build_script_kwargs_for_triple
                 )
 
             native.alias(
-                name = "_bs",
+                name = build_script_name,
                 actual = select(branches),
                 tags = build_script_target_tags,
             )
 
         else:
             cargo_build_script(
-                name = "_bs",
+                name = build_script_name,
                 crate_features = crate_features,
                 **build_script_kwargs
             )
 
-        maybe_build_script = ["_bs"]
+        maybe_build_script = [build_script_name]
     else:
         maybe_build_script = []
 

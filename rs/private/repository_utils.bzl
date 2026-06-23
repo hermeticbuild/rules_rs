@@ -165,8 +165,8 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
     )
 
 _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
-{indent}    name = {name},
-{indent}    crate_name = {crate_name},
+{indent}    name = {name}{name_suffix},
+{indent}    crate_name = {crate_name} or {name}.replace("-", "_"),
 {indent}    purl = {purl},
 {indent}    version = {version},
 {indent}    aliases = {{
@@ -185,7 +185,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    edition = {edition},
 {rustc_env_attr}{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
 {indent}    tags = {tags},
-{indent}    target_compatible_with = RESOLVED_PLATFORMS,
+{indent}    target_compatible_with = {target_compatible_with},
 {indent}    links = {links},
 {indent}    build_script = {build_script},
 {indent}    build_script_data = {build_script_data}{conditional_build_script_data},
@@ -201,22 +201,39 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    has_lib = {has_lib},
 {indent}    binaries = {binaries},
 {indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
+{indent}    name_suffix = {crate_name_suffix},
 {skip_deps_verification_attr}{indent})
 """
 
-def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
+def _render_rust_crate_call(
+        attr,
+        values,
+        aliases,
+        crate_features_select,
+        deps_select,
+        build_deps_select,
+        name_suffix,
+        binaries,
+        bazel_metadata,
+        extra_deps,
+        indent,
+        skip_deps_verification):
+    target_compatible_with = "RESOLVED_PLATFORMS"
+    if name_suffix == "_exec" or not getattr(attr, "target_active", True) or crate_features_select.keys() != attr.crate_features_select.keys():
+        target_compatible_with = "None"
+
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
     # See `rust_crate.bzl` for details.
     crate_features, conditional_crate_features = compute_select(
         _exclude_deps_from_features(attr.crate_features),
-        {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
+        {platform: _exclude_deps_from_features(features) for platform, features in crate_features_select.items()},
     )
     use_legacy_rules_rust_platforms = attr.use_legacy_rules_rust_platforms
-    build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select, use_legacy_rules_rust_platforms)
+    build_deps, conditional_build_deps = render_select(attr.build_script_deps, build_deps_select, use_legacy_rules_rust_platforms)
     build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select, use_legacy_rules_rust_platforms)
     build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_legacy_rules_rust_platforms)
     rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_legacy_rules_rust_platforms)
-    deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_legacy_rules_rust_platforms)
+    deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), deps_select, use_legacy_rules_rust_platforms)
 
     conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_legacy_rules_rust_platforms)
 
@@ -239,17 +256,18 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     return _RUST_CRATE_MACRO_CALL.format(
         indent = indent,
         name = values["name"],
+        name_suffix = " + " + repr(name_suffix) if name_suffix else "",
         crate_name = values["crate_name"],
         purl = values["purl"],
         version = values["version"],
-        aliases = list_indent.join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
+        aliases = list_indent.join(['"%s": "%s"' % kv for kv in aliases.items()]),
         deps = list_indent.join(['"%s"' % d for d in sorted(deps)]),
         extra_deps = extra_deps,
         conditional_deps = " + " + conditional_deps if conditional_deps else "",
         data = list_indent.join(['"%s"' % str(d) for d in attr.data]),
         extra_compile_data_attr = extra_compile_data_attr,
         crate_features = repr(sorted(crate_features)),
-        triples = repr(attr.crate_features_select.keys()),
+        triples = repr(crate_features_select.keys()),
         conditional_crate_features = repr(conditional_crate_features),
         crate_root = values["crate_root"],
         edition = values["edition"],
@@ -257,6 +275,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         rustc_flags = repr(rustc_flags),
         conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),
+        target_compatible_with = target_compatible_with,
         links = values["links"],
         build_script = values["build_script"],
         build_script_data = repr(build_script_data),
@@ -272,9 +291,86 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         build_script_tags = repr(attr.build_script_tags),
         is_proc_macro = values["is_proc_macro"],
         has_lib = values["has_lib"],
-        binaries = values["binaries"],
+        binaries = binaries,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        crate_name_suffix = repr(name_suffix),
         skip_deps_verification_attr = skip_deps_verification_attr,
+    )
+
+def _merge_target_and_exec(target_values, exec_values):
+    for key, exec_value in exec_values.items():
+        if key in target_values and target_values[key] != exec_value:
+            return None
+    return target_values | exec_values
+
+def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
+    exec_active = getattr(attr, "exec_active", False)
+    aliases = attr.aliases
+    crate_features_select = attr.crate_features_select
+    deps_select = attr.deps_select
+    build_deps_select = attr.build_script_deps_select
+    binaries = values["binaries"]
+
+    if not getattr(attr, "target_active", True) and exec_active:
+        aliases = attr.exec_aliases
+        crate_features_select = attr.exec_crate_features_select
+        deps_select = attr.exec_deps_select
+        build_deps_select = attr.exec_build_script_deps_select
+        binaries = "{}"
+    elif exec_active:
+        merged_crate_features_select = _merge_target_and_exec(crate_features_select, attr.exec_crate_features_select)
+        merged_deps_select = _merge_target_and_exec(deps_select, attr.exec_deps_select)
+        merged_build_deps_select = _merge_target_and_exec(build_deps_select, attr.exec_build_script_deps_select)
+        merged_aliases = _merge_target_and_exec(aliases, attr.exec_aliases)
+        if None in [merged_crate_features_select, merged_deps_select, merged_build_deps_select, merged_aliases]:
+            target_call = _render_rust_crate_call(
+                attr = attr,
+                values = values,
+                aliases = aliases,
+                crate_features_select = crate_features_select,
+                deps_select = deps_select,
+                build_deps_select = build_deps_select,
+                name_suffix = "_target",
+                binaries = binaries,
+                bazel_metadata = bazel_metadata,
+                extra_deps = extra_deps,
+                indent = indent,
+                skip_deps_verification = skip_deps_verification,
+            )
+            exec_call = _render_rust_crate_call(
+                attr = attr,
+                values = values,
+                aliases = attr.exec_aliases,
+                crate_features_select = attr.exec_crate_features_select,
+                deps_select = attr.exec_deps_select,
+                build_deps_select = attr.exec_build_script_deps_select,
+                name_suffix = "_exec",
+                binaries = "{}",
+                bazel_metadata = bazel_metadata,
+                extra_deps = extra_deps,
+                indent = indent,
+                skip_deps_verification = skip_deps_verification,
+            )
+            return target_call + "\n" + exec_call
+
+        aliases = merged_aliases
+        crate_features_select = merged_crate_features_select
+        deps_select = merged_deps_select
+        build_deps_select = merged_build_deps_select
+
+    return _render_rust_crate_call(
+        attr = attr,
+        values = values,
+        aliases = aliases,
+        crate_features_select = crate_features_select,
+        deps_select = deps_select,
+        build_deps_select = build_deps_select,
+        name_suffix = "",
+        binaries = binaries,
+        bazel_metadata = bazel_metadata,
+        extra_deps = extra_deps,
+        indent = indent,
+        skip_deps_verification = skip_deps_verification,
     )
 
 def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
@@ -299,6 +395,7 @@ rust_crate_attrs = {
     "gen_build_script": attr.string(),
     "build_script_deps": attr.label_list(),
     "build_script_deps_select": _label_list_dict(),
+    "exec_build_script_deps_select": _label_list_dict(),
     "build_script_data": attr.label_list(),
     "build_script_data_select": _label_list_dict(),
     "build_script_env": attr.string_dict(),
@@ -314,9 +411,14 @@ rust_crate_attrs = {
     "data": attr.label_list(),
     "deps": attr.label_list(),
     "deps_select": _label_list_dict(),
+    "exec_deps_select": _label_list_dict(),
     "aliases": attr.string_dict(),
+    "exec_aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
+    "exec_crate_features_select": attr.string_list_dict(),
+    "target_active": attr.bool(),
+    "exec_active": attr.bool(),
     "use_legacy_rules_rust_platforms": attr.bool(),
 }
 
