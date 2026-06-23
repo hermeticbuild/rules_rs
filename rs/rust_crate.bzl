@@ -117,10 +117,21 @@ def rust_crate(
                 build_script_name = "_bs_" + triple
                 branches[_platform(triple, use_legacy_rules_rust_platforms)] = build_script_name
 
+                build_script_kwargs_for_triple = dict(build_script_kwargs)
+                build_script_kwargs_for_triple["rustc_flags"] = build_script_kwargs["rustc_flags"] + [
+                    # Avoid metadata generation to clash under the same directory when cross-compiling to multiple targets
+                    # concurrently, see https://github.com/hermeticbuild/rules_rs/issues/161
+                    #
+                    # Alternatively, we could also tweak the `crate_name`, but that would drift away from Cargo's
+                    # convention to compile `build.rs` as `build_script_build`, which could lead to unpredictable
+                    # failures for any buildscript relying on it.
+                    "--codegen=metadata=-" + triple.replace("-", "_"),
+                ]
+
                 cargo_build_script(
                     name = build_script_name,
                     crate_features = crate_features + conditional_crate_features.get(triple, []),
-                    **build_script_kwargs
+                    **build_script_kwargs_for_triple
                 )
 
             native.alias(
