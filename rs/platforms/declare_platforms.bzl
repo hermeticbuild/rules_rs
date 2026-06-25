@@ -6,6 +6,6 @@ def declare_platforms(targets = ALL_TARGET_TRIPLES):
     for target_triple in targets:
         native.platform(
             name = target_triple,
-            constraint_values = triple_to_constraint_set(target_triple, targets),
+            constraint_values = triple_to_constraint_set(target_triple),
             visibility = ["//visibility:public"],
         )
