@@ -4,23 +4,6 @@ load(
     _triple_to_constraint_set = "triple_to_constraint_set",
 )
 
-ADDITIONAL_TARGET_TRIPLE_CONSTRAINTS = {
-    "aarch64-unknown-none": "@rules_rs//rs/platforms/constraints:hardfloat",
-    "aarch64-unknown-none-softfloat": "@rules_rs//rs/platforms/constraints:softfloat",
-    "arm-unknown-linux-gnueabi": "@rules_rs//rs/platforms/constraints:softfloat",
-    "arm-unknown-linux-gnueabihf": "@rules_rs//rs/platforms/constraints:hardfloat",
-    "arm-unknown-linux-musleabi": "@rules_rs//rs/platforms/constraints:softfloat",
-    "arm-unknown-linux-musleabihf": "@rules_rs//rs/platforms/constraints:hardfloat",
-    "armv7-unknown-linux-gnueabi": "@rules_rs//rs/platforms/constraints:softfloat",
-    "armv7-unknown-linux-gnueabihf": "@rules_rs//rs/platforms/constraints:hardfloat",
-    "armv7-unknown-linux-musleabi": "@rules_rs//rs/platforms/constraints:softfloat",
-    "armv7-unknown-linux-musleabihf": "@rules_rs//rs/platforms/constraints:hardfloat",
-    "thumbv8m.main-none-eabi": "@rules_rs//rs/platforms/constraints:softfloat",
-    "thumbv8m.main-none-eabihf": "@rules_rs//rs/platforms/constraints:hardfloat",
-    "wasm32-wasip1": "@rules_rs//rs/platforms/constraints:wasm_threads_off",
-    "wasm32-wasip1-threads": "@rules_rs//rs/platforms/constraints:wasm_threads_on",
-}
-
 def triple_to_rust_constraint_set(target_triple):
     constraints = _triple_to_constraint_set(target_triple)
     t = triple(target_triple)
@@ -39,9 +22,14 @@ def triple_to_rust_constraint_set(target_triple):
         if t.abi in ("gnu", "gnullvm"):
             constraints.append("@llvm//constraints/windows/crt:msvcrt")
 
-    additional_constraint = ADDITIONAL_TARGET_TRIPLE_CONSTRAINTS.get(target_triple)
-    if additional_constraint:
-        constraints.append(additional_constraint)
+    if target_triple.endswith("eabihf") or target_triple == "aarch64-unknown-none":
+        constraints.append("@rules_rs//rs/platforms/constraints:hardfloat")
+    elif target_triple.endswith("eabi") or target_triple == "aarch64-unknown-none-softfloat":
+        constraints.append("@rules_rs//rs/platforms/constraints:softfloat")
+    elif target_triple == "wasm32-wasip1-threads":
+        constraints.append("@rules_rs//rs/platforms/constraints:wasm_threads_on")
+    elif target_triple == "wasm32-wasip1":
+        constraints.append("@rules_rs//rs/platforms/constraints:wasm_threads_off")
 
     return constraints
 

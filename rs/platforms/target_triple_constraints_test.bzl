@@ -1,18 +1,20 @@
-"""Analyzes a Rust library for every target triple with an additional constraint."""
+"""Analyzes a Rust library for every supported target triple."""
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load(":triples.bzl", "ADDITIONAL_TARGET_TRIPLE_CONSTRAINTS")
+load(":triples.bzl", "ALL_TARGET_TRIPLES")
 
 _DEFAULT_ALLOCATOR_LIBRARY = "@rules_rust//rust/settings:default_allocator_library"
+_SOURCE_STDLIB_BUILDING = "//rs/private:source_stdlib_building"
 
 def _target_triples_transition_impl(_settings, _attr):
     return {
         target_triple: {
             _DEFAULT_ALLOCATOR_LIBRARY: "@rules_rust//rust/private/cc:empty",
+            _SOURCE_STDLIB_BUILDING: True,
             "//command_line_option:platforms": [str(Label("//rs/platforms:" + target_triple))],
         }
-        for target_triple in ADDITIONAL_TARGET_TRIPLE_CONSTRAINTS
+        for target_triple in ALL_TARGET_TRIPLES
     }
 
 _target_triples_transition = transition(
@@ -20,6 +22,7 @@ _target_triples_transition = transition(
     inputs = [],
     outputs = [
         _DEFAULT_ALLOCATOR_LIBRARY,
+        _SOURCE_STDLIB_BUILDING,
         "//command_line_option:platforms",
     ],
 )

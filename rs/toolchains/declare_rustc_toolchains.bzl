@@ -105,6 +105,7 @@ def declare_rustc_toolchains(
             allocator_library = None,
             global_allocator_library = None,
             binary_ext = select({
+                "@rules_rs//rs/platforms/config:wasm32-unknown-emscripten": ".js",
                 "@platforms//cpu:wasm32": ".wasm",
                 "@platforms//cpu:wasm64": ".wasm",
                 "@platforms//os:emscripten": ".js",
@@ -122,6 +123,7 @@ def declare_rustc_toolchains(
                 "//conditions:default": ".a",
             }),
             dylib_ext = select({
+                "@rules_rs//rs/platforms/config:wasm32-unknown-emscripten": ".js",
                 "@platforms//cpu:wasm32": ".wasm",
                 "@platforms//cpu:wasm64": ".wasm",
                 "@platforms//os:android": ".so",
