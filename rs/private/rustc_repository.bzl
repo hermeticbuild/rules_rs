@@ -54,17 +54,62 @@ def _symlink_rust_objcopy_shared_libraries(rctx, exec_triple):
         if entry.basename.startswith("libLLVM"):
             rctx.symlink(entry, "{}/{}".format(rustlib_lib, entry.basename))
 
+_MACOS_RUST_LLD_BUILD = """\
+genrule(
+    name = "sanitize-rust-lld",
+    srcs = ["lib/rustlib/{target_triple}/bin/rust-lld{binary_ext}"],
+    outs = ["sanitized/rust-lld{binary_ext}"],
+    tools = [
+        "@llvm//tools:llvm-install-name-tool",
+        "@llvm//tools:llvm-otool",
+    ],
+    cmd = '''
+set -euo pipefail
+cp -p "$<" "$@"
+chmod u+w "$@"
+leaked_rpath="/Users/runner/work/rust/rust/build/{target_triple}/llvm/lib"
+if "$(location @llvm//tools:llvm-otool)" -l "$@" | grep -Fq "path $${{leaked_rpath}} "; then
+    "$(location @llvm//tools:llvm-install-name-tool)" -delete_rpath "$${{leaked_rpath}}" "$@"
+fi
+chmod +x "$@"
+''',
+    executable = True,
+)
+
+filegroup(
+    name = "rust-lld",
+    srcs = [":sanitize-rust-lld"],
+    data = glob(
+        include = [
+            "lib/rustlib/{target_triple}/bin/*-ld{binary_ext}",
+            "lib/rustlib/{target_triple}/bin/gcc-ld/*",
+        ],
+        exclude = [
+            "lib/rustlib/{target_triple}/bin/rust-lld{binary_ext}",
+        ],
+        allow_empty = True,
+    ),
+    visibility = ["//visibility:public"],
+)
+"""
+
 def _rustc_repository_impl(rctx):
     exec_triple = triple(rctx.attr.triple)
     download_and_extract(rctx, "rustc", "rustc", exec_triple)
+
     # Upstream Linux rustc bundles libLLVM, which dynamically links against libz.so.1.
     _add_linux_zlib(rctx, exec_triple)
     _symlink_rust_objcopy_shared_libraries(rctx, exec_triple)
     build_content = [BUILD_for_compiler(
         exec_triple,
-        include_linker = True,
+        include_linker = exec_triple.system != "macos",
         include_objcopy = True,
     )]
+    if exec_triple.system == "macos":
+        build_content.append(_MACOS_RUST_LLD_BUILD.format(
+            binary_ext = "",
+            target_triple = exec_triple.str,
+        ))
     if includes_rust_analyzer_proc_macro_srv(rctx.attr.version, rctx.attr.iso_date):
         build_content.append(BUILD_for_rust_analyzer_proc_macro_srv(exec_triple))
     rctx.file("BUILD.bazel", "\n".join(build_content))
