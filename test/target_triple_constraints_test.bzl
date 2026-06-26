@@ -1,18 +1,19 @@
 """Analyzes a Rust library for every supported target triple."""
 
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@rules_rs//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES")
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load(":triples.bzl", "ALL_TARGET_TRIPLES")
 
 _DEFAULT_ALLOCATOR_LIBRARY = "@rules_rust//rust/settings:default_allocator_library"
-_SOURCE_STDLIB_BUILDING = "//rs/private:source_stdlib_building"
+_SOURCE_STDLIB_BUILDING = "@rules_rs//rs/private:source_stdlib_building"
 
 def _target_triples_transition_impl(_settings, _attr):
+    # Analyze every ALL_TARGET_TRIPLES entry to ensure all target triples are properly disambiguated.
     return {
         target_triple: {
             _DEFAULT_ALLOCATOR_LIBRARY: "@rules_rust//rust/private/cc:empty",
             _SOURCE_STDLIB_BUILDING: True,
-            "//command_line_option:platforms": [str(Label("//rs/platforms:" + target_triple))],
+            "//command_line_option:platforms": [str(Label("@rules_rs//rs/platforms:" + target_triple))],
         }
         for target_triple in ALL_TARGET_TRIPLES
     }
@@ -38,9 +39,6 @@ _analyze_target_triples = rule(
         "target": attr.label(
             cfg = _target_triples_transition,
             mandatory = True,
-        ),
-        "_allowlist_function_transition": attr.label(
-            default = Label("@bazel_tools//tools/allowlists/function_transition_allowlist"),
         ),
     },
 )
