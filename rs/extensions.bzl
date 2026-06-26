@@ -7,9 +7,12 @@ load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
     "cargo_toml_fact",
+    "classify_worlds",
+    "is_divergent_class",
     "platform_label",
     "render_dep_data",
     "render_string_list",
+    "render_world_views",
     "resolve_cargo_workspace_members",
     "resolve_package_facts",
     "split_lockfile_packages",
@@ -88,6 +91,12 @@ def _additive_build_file_content(mctx, annotation):
         content += mctx.read(annotation.additive_build_file)
     content += annotation.additive_build_file_content
     return content
+
+def _class_counts(classes_by_fq):
+    counts = {}
+    for crate_class in classes_by_fq.values():
+        counts[crate_class] = counts.get(crate_class, 0) + 1
+    return counts
 
 def _generate_hub_and_spokes(
         mctx,
@@ -278,6 +287,22 @@ def _generate_hub_and_spokes(
     workspace_dep_labels_by_triple = workspace_resolution.workspace_dep_labels_by_triple
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
 
+    # Classify each spoke's world relationship; classes drive _host emission,
+    # label rewriting, the report and unactivated stubs.
+    classes_by_fq = classify_worlds(packages, platform_triples)
+    if debug:
+        class_counts = _class_counts(classes_by_fq)
+        divergent_fqs = sorted([
+            fq
+            for fq, crate_class in classes_by_fq.items()
+            if is_divergent_class(crate_class)
+        ])
+        print("feature-worlds: resolved in %d rounds; class counts %s; divergent: %s" % (
+            workspace_resolution.resolution_rounds,
+            class_counts,
+            divergent_fqs,
+        ))
+
     _date(mctx, "set up initial deps!")
 
     mctx.report_progress("Initializing spokes")
@@ -288,8 +313,9 @@ def _generate_hub_and_spokes(
         crate_name = package["name"]
         version = package["version"]
         source = package["source"]
+        fq = _fq_crate(crate_name, version)
 
-        feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
+        feature_resolutions = feature_resolutions_by_fq_crate[fq]
 
         annotation = annotation_for(annotations, crate_name, version, hub_name)
         suggested_annotation = None
@@ -343,6 +369,23 @@ crate.annotation(
             crate_features_select = _select(feature_resolutions.features_enabled),
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
+
+        # Swap in the world-merged base views (+ host views for divergent
+        # crates). Annotation kwargs above apply to both worlds.
+        views = render_world_views(feature_resolutions, classes_by_fq[fq], classes_by_fq, platform_triples)
+        kwargs["build_script_deps_select"] = _select(views.build_deps)
+        kwargs["deps_select"] = _select(views.deps)
+        kwargs["aliases"] = views.aliases
+        kwargs["crate_features_select"] = _select(views.crate_features)
+        if views.build_script_aliases != None:
+            kwargs["build_script_aliases"] = views.build_script_aliases
+        if views.host_crate_features != None:
+            kwargs["host_deps_select"] = _select(views.host_deps)
+            kwargs["host_crate_features_select"] = _select(views.host_crate_features)
+            kwargs["host_build_script_deps_select"] = _select(views.host_build_deps)
+            kwargs["host_aliases"] = views.host_aliases
+        if views.unactivated:
+            kwargs["unactivated"] = True
 
         repo_name = _spoke_repo(hub_name, crate_name, version)
         package["target_repo_name"] = repo_name
@@ -438,8 +481,21 @@ alias(
     actual = "{actual}",
 )""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
 
-            for binary in annotation.gen_binaries:
+            if is_divergent_class(classes_by_fq.get(_fq_crate(name, version))):
+                # Host-world edges are always version-qualified, so only the fq
+                # `_host` alias is needed (no bare-name variant).
                 hub_contents.append("""
+alias(
+    name = "{name}-{version}_host",
+    actual = "{actual}",
+)""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name + "_host")))
+
+            # An unactivated crate renders only the incompatible stub (no
+            # `<binary>__bin` targets), so skip its gen_binaries aliases — they
+            # would dangle. gen_binaries on an unreached crate is a no-op.
+            if classes_by_fq.get(_fq_crate(name, version)) != "unactivated":
+                for binary in annotation.gen_binaries:
+                    hub_contents.append("""
 alias(
     name = "{name}-{version}__{binary}",
     actual = "{actual}",
