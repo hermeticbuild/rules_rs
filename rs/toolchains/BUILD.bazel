@@ -2,6 +2,36 @@ load("@bazel_lib//:bzl_library.bzl", "bzl_library")
 
 package(default_visibility = ["//visibility:public"])
 
+alias(
+    name = "all_targets",
+    actual = select({
+        "@rules_rust//rust/private:bootstrapped": "@rules_rust//rust/private:bootstrapped",
+        "//conditions:default": "@rules_rust//rust/private:bootstrapping",
+    }),
+    visibility = ["//visibility:private"],
+)
+
+alias(
+    name = "bpf_targets",
+    actual = select({
+        "//rs/platforms/config:bpfeb-unknown-none": "//rs/platforms/config:bpfeb-unknown-none",
+        "//rs/platforms/config:bpfel-unknown-none": "//rs/platforms/config:bpfel-unknown-none",
+        # Select bpfeb-unknown-none so bpf_targets does not match any other target.
+        "//conditions:default": "//rs/platforms/config:bpfeb-unknown-none",
+    }),
+)
+
+alias(
+    name = "non_bpf_targets",
+    actual = select({
+        # Select the opposite BPF config setting so non_bpf_targets does not
+        # match either BPF target.
+        "//rs/platforms/config:bpfeb-unknown-none": "//rs/platforms/config:bpfel-unknown-none",
+        "//rs/platforms/config:bpfel-unknown-none": "//rs/platforms/config:bpfeb-unknown-none",
+        "//conditions:default": ":all_targets",
+    }),
+)
+
 bzl_library(
     name = "declare_rustc_toolchains",
     srcs = ["declare_rustc_toolchains.bzl"],
