@@ -571,6 +571,20 @@ def aliases(package_name = None):
 
     return dep_data["aliases"]
 
+def crate_name(package_name = None):
+    dep_data = DEP_DATA.get(package_name or native.package_name())
+    if not dep_data:
+        return None
+
+    return dep_data["crate_name"]
+
+def edition(package_name = None):
+    dep_data = DEP_DATA.get(package_name or native.package_name())
+    if not dep_data:
+        return None
+
+    return dep_data["edition"]
+
 def all_crate_deps(
         normal = False,
         normal_dev = False,
