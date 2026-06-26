@@ -6,6 +6,6 @@ def declare_config_settings(targets = ALL_TARGET_TRIPLES):
     for target_triple in targets:
         native.config_setting(
             name = target_triple,
-            constraint_values = triple_to_rust_constraint_set(target_triple),
+            constraint_values = triple_to_rust_constraint_set(target_triple, targets),
             visibility = ["//visibility:public"],
         )

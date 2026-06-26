@@ -44,7 +44,7 @@ def declare_rustc_toolchains(
         config_setting = "source_stdlib_building_" + target_key
         native.config_setting(
             name = config_setting,
-            constraint_values = triple_to_rust_constraint_set(target_triple),
+            constraint_values = triple_to_rust_constraint_set(target_triple, targets),
             flag_values = {
                 "@rules_rs//rs/private:source_stdlib_building": "true",
             },
@@ -199,7 +199,7 @@ def declare_rustc_toolchains(
                     "@platforms//os:" + exec_triple.system,
                     "@platforms//cpu:" + exec_triple.arch,
                 ],
-                target_compatible_with = triple_to_rust_constraint_set(target_triple),
+                target_compatible_with = triple_to_rust_constraint_set(target_triple, targets),
                 target_settings = [
                     "@rules_rust//rust/private:bootstrapped",
                     "@rules_rust//rust/toolchain/channel:" + channel,
@@ -218,7 +218,7 @@ def declare_rustc_toolchains(
                     "@platforms//os:" + exec_triple.system,
                     "@platforms//cpu:" + exec_triple.arch,
                 ],
-                target_compatible_with = triple_to_rust_constraint_set(target_triple),
+                target_compatible_with = triple_to_rust_constraint_set(target_triple, targets),
                 target_settings = [
                     "@rules_rust//rust/private:bootstrapping",
                     "@rules_rust//rust/toolchain/channel:" + channel,

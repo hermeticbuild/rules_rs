@@ -19,6 +19,47 @@ constraint_value(
     constraint_setting = "linux_libc",
 )
 
+constraint_setting(
+    # Disambiguates ARM soft-float vs hard-float target triples that otherwise
+    # project to identical constraint sets (e.g. arm-unknown-linux-gnueabi vs
+    # ...gnueabihf, or aarch64-unknown-none vs ...none-softfloat). Defaults to
+    # hardfloat -- the conventional Linux ARM ABI (armhf) and the bare-metal
+    # default -- so existing platforms keep resolving with no changes. Soft-float
+    # platforms opt in explicitly with :softfloat.
+    name = "float_abi",
+    default_constraint_value = "hardfloat",
+)
+
+constraint_value(
+    name = "hardfloat",
+    constraint_setting = "float_abi",
+)
+
+constraint_value(
+    name = "softfloat",
+    constraint_setting = "float_abi",
+)
+
+constraint_setting(
+    # Disambiguates the WebAssembly threads variants that otherwise project to
+    # identical constraint sets (wasm32-wasip1 vs wasm32-wasip1-threads).
+    # Defaults to threads-off (the plain wasm32-wasip1 triple) so existing
+    # platforms keep resolving with no changes. The threaded variant opts in
+    # explicitly with :wasm_threads_on.
+    name = "wasm_threads",
+    default_constraint_value = "wasm_threads_off",
+)
+
+constraint_value(
+    name = "wasm_threads_off",
+    constraint_setting = "wasm_threads",
+)
+
+constraint_value(
+    name = "wasm_threads_on",
+    constraint_setting = "wasm_threads",
+)
+
 alias(
     name = "windows_abi",
     actual = "@llvm//constraints/windows/abi:abi",

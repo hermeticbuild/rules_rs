@@ -194,6 +194,10 @@ The default Windows exec toolchain is MSVC-flavored. The upstream GNULVM toolcha
 
 The Linux exec toolchains are GNU-flavored. When targeting musl, also include the corresponding GNU triple for build scripts and proc macros.
 
+ARM soft-float (`*eabi`) and hard-float (`*eabihf`) triples — and the `aarch64-unknown-none` / `aarch64-unknown-none-softfloat` pair — share the same CPU and OS constraints, so they are disambiguated by an explicit float-ABI constraint. Bare ARM platforms default to **hard-float** (`@rules_rs//rs/platforms/constraints:hardfloat`), the conventional Linux ARM ABI (armhf) and bare-metal default. To target a soft-float triple from a custom platform, add `@rules_rs//rs/platforms/constraints:softfloat` to its `constraint_values`. The `rules_rs`-published platforms (e.g. `@rules_rs//rs/platforms:arm-unknown-linux-musleabi`) already carry the correct value.
+
+Similarly, `wasm32-wasip1` and `wasm32-wasip1-threads` are disambiguated by a WebAssembly threads constraint that defaults to threads-off (`@rules_rs//rs/platforms/constraints:wasm_threads_off`); the threaded variant opts in with `@rules_rs//rs/platforms/constraints:wasm_threads_on`.
+
 </details>
 
 <details>

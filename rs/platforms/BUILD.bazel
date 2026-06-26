@@ -1,7 +1,10 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load("//rs/platforms:all_triples_build_test.bzl", "all_triples_build_test")
 load("//rs/platforms:declare_platforms.bzl", "declare_platforms")
 
 declare_platforms()
+
+all_triples_build_test()
 
 bzl_library(
     name = "declare_platforms",
