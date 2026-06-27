@@ -488,8 +488,12 @@ def resolve_cargo_workspace_members(
         dep_label_prefix = "//:",
         skip_internal_rustc_placeholder_crates = True,
         watch_manifests = False,
-        use_legacy_rules_rust_platforms = False):
-    platform_cfg_attrs = [triple_to_cfg_attrs(triple) for triple in platform_triples]
+        use_legacy_rules_rust_platforms = False,
+        platform_cfg_attrs = None):
+    # Preserve the original target_os/target_arch/target_env resolution when
+    # callers do not provide rustc-derived cfg attributes.
+    if platform_cfg_attrs == None:
+        platform_cfg_attrs = [triple_to_cfg_attrs(triple) for triple in platform_triples]
     platform_cfg_attrs_by_triple = {}
     for cfg_attr in platform_cfg_attrs:
         platform_cfg_attrs_by_triple[cfg_attr["_triple"]] = cfg_attr
