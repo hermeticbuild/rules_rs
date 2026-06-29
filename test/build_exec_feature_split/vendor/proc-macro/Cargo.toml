@@ -1,0 +1,13 @@
+[package]
+name = "feature-split-proc-macro"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[features]
+exec_feature = ["feature-split-shared/exec_feature"]
+
+[dependencies]
+feature-split-shared = { path = "../shared" }

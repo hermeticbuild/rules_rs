@@ -1,0 +1,10 @@
+[package]
+name = "feature-split-unannotated-proc-macro"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+feature-split-shared = { path = "../shared", features = ["unannotated_proc_macro_feature"] }

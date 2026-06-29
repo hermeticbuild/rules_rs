@@ -6,3 +6,4 @@ edition = "2024"
 [features]
 exec_feature = []
 target_feature = []
+unannotated_proc_macro_feature = []

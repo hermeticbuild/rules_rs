@@ -13,9 +13,25 @@ dependencies = [
 name = "feature-split-consumer"
 version = "0.1.0"
 dependencies = [
+ "feature-split-proc-macro",
+ "feature-split-shared",
+ "feature-split-unannotated-proc-macro",
+]
+
+[[package]]
+name = "feature-split-proc-macro"
+version = "0.1.0"
+dependencies = [
  "feature-split-shared",
 ]
 
 [[package]]
 name = "feature-split-shared"
 version = "0.1.0"
+
+[[package]]
+name = "feature-split-unannotated-proc-macro"
+version = "0.1.0"
+dependencies = [
+ "feature-split-shared",
+]

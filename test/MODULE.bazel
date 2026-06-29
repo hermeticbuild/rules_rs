@@ -203,6 +203,12 @@ TESTS = [
 
 [use_repo(crate, test) for test in TESTS]
 
+crate.annotation(
+    crate = "feature-split-proc-macro",
+    is_proc_macro = True,
+    repositories = ["build_exec_feature_split"],
+)
+
 # Workspace member whose Cargo.toml lives at the bazel workspace root.
 crate.from_cargo(
     name = "root_package",

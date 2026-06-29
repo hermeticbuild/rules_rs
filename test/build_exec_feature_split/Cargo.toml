@@ -4,10 +4,12 @@ version = "0.1.0"
 
 [workspace]
 resolver = "2"
-exclude = ["vendor/consumer", "vendor/shared"]
+exclude = ["vendor/consumer", "vendor/proc-macro", "vendor/shared", "vendor/unannotated-proc-macro"]
 
 [dependencies]
 feature-split-consumer = { path = "vendor/consumer" }
 
 [patch.crates-io]
+feature-split-proc-macro = { path = "vendor/proc-macro" }
 feature-split-shared = { path = "vendor/shared" }
+feature-split-unannotated-proc-macro = { path = "vendor/unannotated-proc-macro" }

@@ -421,10 +421,12 @@ def _resolve_possible_deps(
         packages,
         resolver_versions_by_name,
         feature_resolutions_by_fq_crate,
+        proc_macro_fq_crates,
         platform_triples,
         platform_cfg_attrs,
         cfg_match_cache,
-        dep_label_prefix):
+        dep_label_prefix,
+        dep_label_suffix = ""):
     for package in packages:
         name = package["name"]
         deps_by_name = {}
@@ -461,8 +463,10 @@ def _resolve_possible_deps(
             dep_fq = fq_crate(dep_package, resolved_version)
             if dep_fq not in feature_resolutions_by_fq_crate:
                 fail("Resolved %s dependency %s but no crate metadata was available" % (name, dep_fq))
-            dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
+            dep["bazel_target"] = "%s%s%s" % (dep_label_prefix, dep_fq, dep_label_suffix)
             dep["feature_resolutions"] = feature_resolutions_by_fq_crate[dep_fq]
+            if dep_fq in proc_macro_fq_crates:
+                dep["is_proc_macro"] = True
 
             target = dep.get("target")
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
@@ -557,10 +561,22 @@ def resolve_cargo_workspace_members(
             exec_feature_resolutions_by_fq_crate[fq_crate(package["name"], package["version"])] = exec_resolution
             exec_resolver_packages.append(dict(package, feature_resolutions = exec_resolution))
 
+    proc_macro_fq_crates = set()
+    for crate, annotation_versions in annotations.items():
+        for version_key, annotation in annotation_versions.items():
+            if not getattr(annotation, "is_proc_macro", False):
+                continue
+            versions = resolver_versions_by_name.get(crate, [])
+            if version_key != "*":
+                versions = [version_key] if version_key in versions else []
+            for version in versions:
+                proc_macro_fq_crates.add(fq_crate(crate, version))
+
     _resolve_possible_deps(
         resolver_packages,
         resolver_versions_by_name,
         feature_resolutions_by_fq_crate,
+        proc_macro_fq_crates,
         platform_triples,
         platform_cfg_attrs,
         cfg_match_cache,
@@ -572,10 +588,12 @@ def resolve_cargo_workspace_members(
             exec_resolver_packages,
             resolver_versions_by_name,
             exec_feature_resolutions_by_fq_crate,
+            proc_macro_fq_crates,
             exec_platform_triples,
             exec_platform_cfg_attrs_by_triple.values(),
             {None: struct(matches = exec_platform_triples, uses_feature_cfg = False)},
             dep_label_prefix,
+            dep_label_suffix = "_exec",
         )
 
     workspace_fq_deps = compute_workspace_fq_deps(workspace_members, resolver_versions_by_name)
@@ -649,6 +667,8 @@ def resolve_cargo_workspace_members(
                     continue
                 if not is_first_party_dep or materialize_workspace_members:
                     workspace_dep_labels_by_triple[triple].add(":" + dep_name)
+                if dep_fq in proc_macro_fq_crates:
+                    continue
                 feature_resolutions.active.add(triple)
                 feature_resolutions.features_enabled[triple].update(features)
 
@@ -663,10 +683,12 @@ def resolve_cargo_workspace_members(
                 continue
             for version in target_versions:
                 fq = fq_crate(crate, version)
-                _apply_annotation_features(feature_resolutions_by_fq_crate[fq], annotation)
-
-                if exec_platform_triples:
+                if exec_platform_triples and getattr(annotation, "is_proc_macro", False):
                     _apply_annotation_features(exec_feature_resolutions_by_fq_crate[fq], annotation)
+                else:
+                    _apply_annotation_features(feature_resolutions_by_fq_crate[fq], annotation)
+                    if exec_platform_triples:
+                        _apply_annotation_features(exec_feature_resolutions_by_fq_crate[fq], annotation)
 
     resolve(ctx, resolver_packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug, include_build_dependencies = not exec_platform_triples)
 

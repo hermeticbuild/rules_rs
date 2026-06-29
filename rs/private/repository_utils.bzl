@@ -303,6 +303,21 @@ def _merge_target_and_exec(target_values, exec_values):
             return None
     return target_values | exec_values
 
+def _target_and_exec_are_mergeable(attr):
+    return None not in [
+        _merge_target_and_exec(attr.crate_features_select, attr.exec_crate_features_select),
+        _merge_target_and_exec(attr.deps_select, attr.exec_deps_select),
+        _merge_target_and_exec(attr.build_script_deps_select, attr.exec_build_script_deps_select),
+        _merge_target_and_exec(attr.aliases, attr.exec_aliases),
+    ]
+
+def exec_target_name(attr, name):
+    if not getattr(attr, "exec_active", False):
+        return None
+    if not getattr(attr, "target_active", True) or _target_and_exec_are_mergeable(attr):
+        return name
+    return name + "_exec"
+
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     exec_active = getattr(attr, "exec_active", False)
     aliases = attr.aliases

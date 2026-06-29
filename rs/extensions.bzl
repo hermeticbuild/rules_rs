@@ -27,7 +27,7 @@ load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repos
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name")
-load("//rs/private:repository_utils.bzl", "render_select")
+load("//rs/private:repository_utils.bzl", "exec_target_name", "render_select")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
 # Bazel 8 does not define attr.label_list_dict.
@@ -353,6 +353,7 @@ crate.annotation(
             exec_active = bool(exec_feature_resolutions.active),
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
+        package["exec_target_name"] = exec_target_name(struct(**kwargs), crate_name)
 
         repo_name = _spoke_repo(hub_name, crate_name, version)
         package["target_repo_name"] = repo_name
@@ -447,6 +448,14 @@ alias(
     name = "{name}-{version}",
     actual = "{actual}",
 )""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
+
+            exec_target = package["exec_target_name"]
+            if exec_target:
+                hub_contents.append("""
+alias(
+    name = "{name}-{version}_exec",
+    actual = "{actual}",
+)""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, exec_target)))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""
@@ -936,6 +945,9 @@ _annotation = tag_class(
         ),
         "crate_features_select": attr.string_list_dict(
             doc = "A list of strings to add to a crate's `rust_library::crate_features` attribute. Keys should be the platform triplet. Value should be a list of features.",
+        ),
+        "is_proc_macro": attr.bool(
+            doc = "Resolve this proc-macro crate and its dependencies in the exec universe.",
         ),
         "data": attr.label_list(
             doc = "A list of labels to add to a crate's `rust_library::data` attribute.",

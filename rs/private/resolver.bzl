@@ -62,6 +62,8 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
             if kind == "build" and not include_build_dependencies:
                 continue
 
+            defer_proc_macro = dep.get("is_proc_macro", False) and not include_build_dependencies
+
             dep_feature_resolutions = dep["feature_resolutions"]
 
             has_alias = "package" in dep
@@ -94,6 +96,9 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
 
                 if has_alias:
                     feature_resolutions.aliases[bazel_target] = dep_name.replace("-", "_")
+
+                if defer_proc_macro:
+                    continue
 
                 triple_features = dep_feature_resolutions.features_enabled[triple]
 
@@ -156,8 +161,8 @@ def _propagate_feature_enablement(
                     if dep_name != dep["name"]:
                         continue
 
-                    defer_build_dependency = dep.get("kind", "normal") == "build" and not include_build_dependencies
-                    if not defer_build_dependency and not _dep_target_matches_triple(dep, triple, feature_set, cfg_attrs_by_triple):
+                    defer_dependency = not include_build_dependencies and (dep.get("kind", "normal") == "build" or dep.get("is_proc_macro", False))
+                    if not defer_dependency and not _dep_target_matches_triple(dep, triple, feature_set, cfg_attrs_by_triple):
                         continue
 
                     found = True
@@ -166,7 +171,7 @@ def _propagate_feature_enablement(
                     if optional_marker and dep_optional and dep_name not in feature_set and ("dep:" + dep_name) not in feature_set:
                         continue
 
-                    if defer_build_dependency:
+                    if defer_dependency:
                         dep.setdefault("deferred_features", set()).add(dep_feature)
                     else:
                         dep_feature_resolutions = dep["feature_resolutions"]
@@ -204,7 +209,7 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple
     fail("Resolution did not converge! This is likely a bug in rules_rs, please report it to github.com/hermeticbuild/rules_rs")
 
 def seed_exec_build_dependencies(packages, exec_packages, exec_cfg_attrs_by_triple):
-    """Seeds exec resolution from build dependencies of target-active packages."""
+    """Seeds exec resolution from build dependencies and annotated proc macros."""
     for package, exec_package in zip(packages, exec_packages):
         target_resolution = package["feature_resolutions"]
         exec_resolution = exec_package["feature_resolutions"]
@@ -218,22 +223,28 @@ def seed_exec_build_dependencies(packages, exec_packages, exec_cfg_attrs_by_trip
 
         for target_dep, dep in zip(target_resolution.possible_deps, exec_resolution.possible_deps):
             bazel_target = dep.get("bazel_target")
-            if dep.get("kind", "normal") != "build" or not bazel_target:
+            is_build_dependency = dep.get("kind", "normal") == "build"
+            is_proc_macro = dep.get("is_proc_macro", False)
+            if not bazel_target or not (is_build_dependency or is_proc_macro):
                 continue
 
             dep_name = dep["name"]
             if dep.get("optional", False) and dep_name not in target_features and ("dep:" + dep_name) not in target_features:
                 continue
 
+            target_bazel_target = target_dep.get("bazel_target")
+            if is_proc_macro and not any([target_bazel_target in deps for deps in target_resolution.deps.values()]):
+                continue
+
             dep_resolution = dep["feature_resolutions"]
-            for exec_triple in dep["target"]:
-                if not _dep_target_matches_triple(dep, exec_triple, target_features, exec_cfg_attrs_by_triple):
-                    continue
-
-                target_resolution.build_deps[exec_triple].add(bazel_target)
-                if "package" in dep:
-                    target_resolution.aliases[bazel_target] = dep_name.replace("-", "_")
-
+            exec_triples = dep_resolution.features_enabled.keys() if is_proc_macro else dep["target"]
+            for exec_triple in exec_triples:
+                if is_build_dependency:
+                    if not _dep_target_matches_triple(dep, exec_triple, target_features, exec_cfg_attrs_by_triple):
+                        continue
+                    target_resolution.build_deps[exec_triple].add(bazel_target)
+                    if "package" in dep:
+                        target_resolution.aliases[bazel_target] = dep_name.replace("-", "_")
                 dep_resolution.active.add(exec_triple)
                 dep_resolution.features_enabled[exec_triple].update(dep.get("features", []))
                 dep_resolution.features_enabled[exec_triple].update(target_dep.get("deferred_features", []))

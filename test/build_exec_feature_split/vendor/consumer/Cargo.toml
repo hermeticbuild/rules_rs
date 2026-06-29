@@ -3,9 +3,15 @@ name = "feature-split-consumer"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["macros"]
+macros = ["dep:feature-split-proc-macro", "feature-split-proc-macro?/exec_feature"]
+
 [dependencies]
 # The target crate must not receive exec_feature from build-dependencies.
 feature-split-shared = { path = "../shared", features = ["target_feature"] }
+feature-split-proc-macro = { path = "../proc-macro", optional = true }
+feature-split-unannotated-proc-macro = { path = "../unannotated-proc-macro" }
 
 [build-dependencies]
 # The build script must not receive target_feature from dependencies.
