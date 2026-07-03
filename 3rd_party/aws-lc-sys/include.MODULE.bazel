@@ -1,0 +1,18 @@
+bazel_dep(name = "aws-lc", version = "5.1.0")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "aws-lc-sys",
+    build_script_data = [
+        "@aws-lc//:system_dir",
+    ],
+    build_script_env = {
+        "AWS_LC_SYS_SYSTEM_DIR": "$(execpath @aws-lc//:system_dir)",
+    },
+    deps = [
+        "@aws-lc//:crypto",
+        "@aws-lc//:ssl",
+    ],
+)
+
+inject_repo(crate, "aws-lc")
