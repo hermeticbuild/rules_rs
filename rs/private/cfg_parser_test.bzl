@@ -13,6 +13,7 @@ def _cfg_parser_smoke_test_impl(ctx):
     win = "x86_64-pc-windows-msvc"
     win_gnu = "x86_64-pc-windows-gnu"
     win_gnullvm = "aarch64-pc-windows-gnullvm"
+    wasm = "wasm32-unknown-unknown"
 
     # MacOS facts facts
     asserts.true(env, cfg_matches(_cfg("unix"), mac))
@@ -37,6 +38,15 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg('target_env = "gnu"'), win_gnu))
     asserts.true(env, cfg_matches(_cfg('target_env = "gnullvm"'), win_gnullvm))
 
+    # Wasm facts
+    asserts.true(env, cfg_matches(_cfg("wasm"), wasm))
+    asserts.false(env, cfg_matches(_cfg("unix"), wasm))
+    asserts.false(env, cfg_matches(_cfg("windows"), wasm))
+    asserts.true(env, cfg_matches(_cfg('target_arch = "wasm32"'), wasm))
+    asserts.true(env, cfg_matches(_cfg('target_os = "unknown"'), wasm))
+    asserts.true(env, cfg_matches(_cfg('target_family = "wasm"'), wasm))
+    asserts.true(env, cfg_matches(_cfg('target_pointer_width = "32"'), wasm))
+
     # Combinators
     asserts.false(env, cfg_matches(_cfg("any()"), mac))
     asserts.true(env, cfg_matches(_cfg("not(any())"), mac))
@@ -53,7 +63,7 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg('target_feature = "sse2"'), linux_gnu))
     asserts.false(env, cfg_matches(_cfg('target_feature = "sse2"'), mac))
 
-    triples = [mac, linux_gnu, linux_musl, win, win_gnu, win_gnullvm]
+    triples = [mac, linux_gnu, linux_musl, win, win_gnu, win_gnullvm, wasm]
 
     results = cfg_matches_expr_for_triples(_cfg('all(unix, any(target_env = "gnu", target_env = "musl"))'), triples)
     asserts.equals(env, results.matches, [linux_gnu, linux_musl])
@@ -61,7 +71,7 @@ def _cfg_parser_smoke_test_impl(ctx):
     results = cfg_matches_expr_for_triples(
         _cfg('any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "x86")'),
         triples)
-    asserts.equals(env, results.matches, triples)
+    asserts.equals(env, results.matches, triples[:-1])
 
     # Cargo dependencies can target a specific triple instead of a cfg expression.
     results = cfg_matches_expr_for_triples(win_gnullvm, triples)

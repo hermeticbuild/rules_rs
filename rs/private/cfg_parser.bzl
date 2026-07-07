@@ -160,6 +160,11 @@ def _family_for_os(os_name):
         return "unix"
     return ""
 
+def _family_for_arch_and_os(arch, os_name):
+    if arch.startswith("wasm"):
+        return "wasm"
+    return _family_for_os(os_name)
+
 def _pointer_width_for_arch(arch):
     # Common targets
     arch64 = ["s390x","bpfel","bpfeb"]
@@ -211,7 +216,7 @@ def triple_to_cfg_attrs(triple):
     os_raw_part = _get(parts, 2, "none")
     env_part = "-".join(parts[3:])
     os_norm = _normalize_os(os_raw_part)
-    fam = _family_for_os(os_norm)
+    fam = _family_for_arch_and_os(arch_part, os_norm)
     width = _pointer_width_for_arch(arch_part)
     endian = _endian_for_arch(arch_part)
     abi_guess = _abi_from_env(env_part)
@@ -233,6 +238,7 @@ def triple_to_cfg_attrs(triple):
         "false": False,
         "unix": fam == "unix",
         "windows": fam == "windows",
+        "wasm": fam == "wasm",
     }
 
 ############################################
