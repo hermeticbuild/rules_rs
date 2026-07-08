@@ -1,0 +1,7 @@
+load("@rules_rs//3rd_party/aws-lc-sys:defs.bzl", "aws_lc_sys")
+
+aws_lc_sys(
+    name = "aws_lc_sys_build_info",
+    crypto = "@aws-lc//:crypto",
+    ssl = "@aws-lc//:ssl",
+)

@@ -1,5 +1,5 @@
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "llvm", version = "0.8.9")
+bazel_dep(name = "llvm", version = "0.8.11")
 bazel_dep(name = "apple_support", version = "1.24.2")
 
 # SBOM
@@ -64,21 +64,14 @@ use_repo(osx, "macos_sdk")
 
 register_toolchains("@llvm//toolchain:all")
 
-bazel_dep(name = "rules_python", version = "1.7.0")
+bazel_dep(name = "rules_python", version = "2.0.1")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "bazel_lib", version = "3.2.2")
 bazel_dep(name = "protobuf", version = "34.0.bcr.1", repo_name = "com_google_protobuf")
-bazel_dep(name = "rules_cc", version = "0.2.18")
-single_version_override(
-    module_name = "rules_cc",
-    patch_strip = 1,
-    # Remove after a rules_cc release contains c622263994ed44b549f563d50e767132baa35953.
-    patches = ["//:rules_cc-external-include-paths.patch"],
-)
-
+bazel_dep(name = "rules_cc", version = "0.2.20")
 bazel_dep(name = "nasm", version = "2.16.03.bcr.2")
 single_version_override(
     module_name = "nasm",
@@ -127,7 +120,7 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
 toolchains.toolchain(
     edition = "2024",
-    version = "1.92.0",
+    version = "1.96.1",
 )
 toolchains.experimental_miri(version = "nightly/2026-04-20")
 use_repo(toolchains, "default_rust_toolchains", "miri_toolchains")
@@ -299,6 +292,7 @@ crate.annotation(
 ]
 
 ### Fix -sys crates
+include("//:3rd_party/aws-lc-sys/include.MODULE.bazel")
 include("//:3rd_party/bzip2-sys/include.MODULE.bazel")
 include("//:3rd_party/glib-sys/include.MODULE.bazel")
 include("//:3rd_party/libssh2-sys/include.MODULE.bazel")
@@ -328,28 +322,6 @@ crate.annotation(
     strip_prefix = "ring-0.16.20",
     version = "0.16.20",
 )
-
-bazel_dep(name = "aws-lc", version = "1.67.0")
-
-crate.annotation(
-    build_script_data = [
-        "@aws-lc//:crypto",
-        "@aws-lc//:ssl",
-    ],
-    build_script_env = {
-        "AWS_LC_SYS_PREBUILT_CRYPTO": "$(rootpaths @aws-lc//:crypto)",
-        "AWS_LC_SYS_PREBUILT_SSL": "$(rootpaths @aws-lc//:ssl)",
-    },
-    crate = "aws-lc-sys",
-    patch_args = ["-p1"],
-    patches = ["//:aws-lc-sys-prebuilt.patch"],
-    deps = [
-        "@aws-lc//:crypto",
-        "@aws-lc//:ssl",
-    ],
-)
-
-inject_repo(crate, "aws-lc")
 
 include("//:3rd_party/tikv-jemalloc-sys/include.MODULE.bazel")
 

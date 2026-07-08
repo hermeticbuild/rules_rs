@@ -30,6 +30,24 @@ bzl_library(
 )
 
 bzl_library(
+    name = "rules_rust_bindgen",
+    srcs = ["rules_rust_bindgen.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//rs/toolchains:declare_bindgen_toolchains",
+        "@bazel_tools//tools/build_defs/cc:action_names.bzl",
+        "@bazel_tools//tools/build_defs/repo:http.bzl",
+        "@rules_cc//cc:find_cc_toolchain_bzl",
+        "@rules_cc//cc/common",
+    ],
+)
+
+toolchain_type(
+    name = "bindgen_toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
+bzl_library(
     name = "rules_rust_reexported_extensions",
     srcs = ["rules_rust_reexported_extensions.bzl"],
     visibility = ["//visibility:public"],

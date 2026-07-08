@@ -33,6 +33,11 @@ alias(
 )
 
 bzl_library(
+    name = "declare_bindgen_toolchains",
+    srcs = ["declare_bindgen_toolchains.bzl"],
+)
+
+bzl_library(
     name = "declare_rustc_toolchains",
     srcs = ["declare_rustc_toolchains.bzl"],
     deps = [

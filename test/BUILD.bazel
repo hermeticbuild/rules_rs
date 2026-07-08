@@ -86,8 +86,8 @@ rust_binary(
     srcs = ["main.rs"],
     deps = [
         "@many_workspace_deps//:actix-web",
-        "@many_workspace_deps//:apriltag",
         "@many_workspace_deps//:apple-codesign",
+        "@many_workspace_deps//:apriltag",
         "@many_workspace_deps//:axum",
         "@many_workspace_deps//:ballista",
         "@many_workspace_deps//:cssparser",
@@ -111,6 +111,22 @@ rust_binary(
         "@many_workspace_deps//:wgpu",
         "@many_workspace_deps//:yew",
     ],
+)
+
+rust_binary(
+    name = "aws_lc_sys_test_binary",
+    srcs = ["aws_lc_sys_test.rs"],
+    deps = [
+        "@many_workspace_deps//:aws-lc-rs-1.17.1",
+        "@many_workspace_deps//:aws-lc-sys-0.42.0",
+    ],
+)
+
+sh_test(
+    name = "aws_lc_sys_test",
+    srcs = ["run_binary.sh"],
+    args = ["$(rootpath :aws_lc_sys_test_binary)"],
+    data = [":aws_lc_sys_test_binary"],
 )
 
 genquery(
@@ -320,6 +336,7 @@ genrule(
 filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
+        ":aws_lc_sys_test_binary",
         ":rust_binary",
         ":verify_self_dev_dependency_feature_present",
         ":verify_self_dev_dependency_no_self_alias",
@@ -369,7 +386,10 @@ LINUX_GNU_PLATFORMS = {
     platform_transition_filegroup(
         name = "all_builds_" + platform,
         srcs = ["all_builds"],
-        target_platform = LINUX_GNU_PLATFORMS.get(platform, "@rules_rs//rs/platforms:" + platform),
+        target_platform = LINUX_GNU_PLATFORMS.get(
+            platform,
+            "@rules_rs//rs/platforms:" + platform,
+        ),
     )
     for platform in ALL_PLATFORMS
 ]
