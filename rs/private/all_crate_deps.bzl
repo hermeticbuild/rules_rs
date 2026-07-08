@@ -1,4 +1,4 @@
-load(":select_utils.bzl", "compute_select")
+load(":select_utils.bzl", "compute_select_list")
 
 def _filter_by_prefix(deps, prefix):
     return [dep for dep in deps if dep.startswith(prefix)]
@@ -33,7 +33,7 @@ def merge_structured_dep_specs(specs, platforms, filter_prefix):
 
             existing.update(filtered)
 
-    deps, per_platform = compute_select(merged_deps, merged_by_platform)
+    deps, per_platform = compute_select_list(merged_deps, merged_by_platform)
     return sorted(deps), per_platform
 
 def all_crate_deps(
