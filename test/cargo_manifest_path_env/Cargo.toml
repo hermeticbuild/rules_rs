@@ -1,0 +1,10 @@
+[package]
+name = "cargo_manifest_path_env"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+manifest_path_probe = { path = "manifest_path_probe" }

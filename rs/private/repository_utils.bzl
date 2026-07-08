@@ -232,7 +232,8 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
             indent = indent,
             extra_compile_data = list_indent.join(['"%s"' % d for d in extra_compile_data]),
         )
-    rustc_env = getattr(attr, "rustc_env", {})
+    cargo_manifest_env = {"CARGO_MANIFEST_PATH": "$(execpath :Cargo.toml)"}
+    rustc_env = cargo_manifest_env | getattr(attr, "rustc_env", {})
     rustc_env_attr = "%s    rustc_env = %s,\n" % (indent, repr(rustc_env)) if rustc_env else ""
     skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""
 
@@ -263,7 +264,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         conditional_build_script_data = " + " + conditional_build_script_data if conditional_build_script_data else "",
         build_deps = list_indent.join(['"%s"' % d for d in sorted(build_deps)]),
         conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
-        build_script_env = repr(attr.build_script_env),
+        build_script_env = repr(cargo_manifest_env | attr.build_script_env),
         conditional_build_script_env = " | " + conditional_build_script_env if conditional_build_script_env else "",
         allow_build_script_to_detect_nonhermetic_paths = repr(attr.allow_build_script_to_detect_nonhermetic_paths),
         build_script_toolchains = repr([str(t) for t in attr.build_script_toolchains]),
