@@ -85,11 +85,15 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
     version = package["version"]
     parsed_version = parse_full_version(version)
 
+    cargo_manifest_root = "${pwd}/external/%s/%s" % (rctx.name, package_path) if package_path else "${pwd}/external/%s" % rctx.name
+    cargo_manifest_path = "%s/Cargo.toml" % cargo_manifest_root
+
     readme = package.get("readme", "")
     if (not readme or readme == True) and package_dir.get_child("README.md").exists:
         readme = "README.md"
 
     cargo_toml_env_vars = {
+        "CARGO_MANIFEST_PATH": cargo_manifest_path,
         "CARGO_PKG_VERSION": version,
         "CARGO_PKG_VERSION_MAJOR": str(parsed_version[0]),
         "CARGO_PKG_VERSION_MINOR": str(parsed_version[1]),
