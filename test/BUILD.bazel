@@ -341,7 +341,6 @@ filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         ":aws_lc_openssl",
-        ":aws_lc_sys_test",
         ":rust_binary",
         ":verify_self_dev_dependency_feature_present",
         ":verify_self_dev_dependency_no_self_alias",
