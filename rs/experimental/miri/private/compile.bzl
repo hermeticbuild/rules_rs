@@ -312,8 +312,6 @@ def _miri_host_crate_info_dict(crate, output, deps, proc_macro_deps):
 
 def _miri_host_compile_action(ctx, crate, toolchain, rust_toolchain, deps, proc_macro_deps):
     output = _host_output(ctx, crate)
-    rust_flags = ctx.actions.args()
-    rust_flags.add_all([toolchain.host_miri_sysroot], format_each = "--sysroot=%s", expand_directories = False)
 
     result = rustc_compile(
         ctx = ctx,
@@ -338,7 +336,7 @@ def _miri_host_compile_action(ctx, crate, toolchain, rust_toolchain, deps, proc_
         mnemonic = "MiriHostRustc",
         output_hash = _host_output_hash(ctx, crate),
         progress_message = "Compiling Rust host dependency for Miri %{label}",
-        rust_flags = rust_flags,
+        rust_flags = [("--sysroot=%s", toolchain.host_miri_sysroot)],
         skip_expanding_rustc_env = True,
     )
 
