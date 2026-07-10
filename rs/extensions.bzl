@@ -475,14 +475,17 @@ alias(
     actual = ":{fq}__{binary}",
 )""".format(name = name, fq = fq, binary = binary))
 
+        if len(versions) == 1:
+            version = versions[0]
+            annotation = annotation_for(annotations, name, version, hub_name)
             for alias_name in sorted(annotation.extra_aliased_targets.keys()):
                 hub_contents.append("""
 alias(
     name = "{alias_name}",
-    actual = ":{alias_name}-{default_version}",
+    actual = ":{alias_name}-{version}",
 )""".format(
                     alias_name = alias_name,
-                    default_version = default_version,
+                    version = version,
                 ))
 
     for package in cargo_metadata["packages"]:

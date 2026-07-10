@@ -2,6 +2,7 @@ load("@bazel_lib//:bzl_library.bzl", "bzl_library")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_setting")
 load("@rules_rust//rust:defs.bzl", "rust_stdlib_filegroup")
 load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
+load(":bindgen_test.bzl", "bindgen_tests")
 load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
@@ -22,6 +23,8 @@ rust_stdlib_filegroup(
 
 all_crate_deps_tests()
 
+bindgen_tests()
+
 bpf_linker_repository_tests()
 
 cargo_workspace_graph_tests()
@@ -37,6 +40,21 @@ bzl_library(
     srcs = ["all_crate_deps.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [":select_utils"],
+)
+
+bzl_library(
+    name = "bindgen",
+    srcs = ["bindgen.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "bindgen_test",
+    srcs = ["bindgen_test.bzl"],
+    deps = [
+        ":bindgen",
+        "@bazel_skylib//lib:unittest",
+    ],
 )
 
 bzl_library(
