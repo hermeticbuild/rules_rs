@@ -34,9 +34,12 @@ bzl_library(
     srcs = ["rules_rust_bindgen.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        "//rs/private:bindgen",
         "//rs/toolchains:declare_bindgen_toolchains",
         "@bazel_tools//tools/build_defs/cc:action_names.bzl",
+        "@bazel_tools//tools/build_defs/repo:cache.bzl",
         "@bazel_tools//tools/build_defs/repo:http.bzl",
+        "@bazel_tools//tools/build_defs/repo:utils.bzl",
         "@rules_cc//cc:find_cc_toolchain_bzl",
         "@rules_cc//cc/common",
     ],

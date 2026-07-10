@@ -10,9 +10,9 @@ bzl_library(
     srcs = ["defs.bzl"],
     visibility = ["//visibility:public"],
     deps = [
-        "//rs:rules_rust_bindgen",
         "@bazel_lib//lib:copy_to_directory",
         "@rules_cc//cc:defs_bzl",
+        "@rules_rs//rs:rules_rust_bindgen",
         "@rules_rust//rust:bzl_lib",
     ],
 )

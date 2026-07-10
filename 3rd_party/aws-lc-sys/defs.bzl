@@ -1,3 +1,5 @@
+"""aws-lc-sys build-script replacement."""
+
 load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@rules_cc//cc:defs.bzl", "CcInfo", "cc_library")
 load("@rules_rs//rs:rules_rust_bindgen.bzl", "rust_bindgen")
@@ -18,19 +20,25 @@ def _aws_lc_sys_build_info_impl(ctx):
             out_dir = out_dir,
             rustc_env = None,
         ),
-        ctx.attr.native[CcInfo],
+        ctx.attr.cc_lib[CcInfo],
     ]
 
 _aws_lc_sys_build_info = rule(
     implementation = _aws_lc_sys_build_info_impl,
     attrs = {
-        "native": attr.label(mandatory = True, providers = [CcInfo]),
+        "cc_lib": attr.label(mandatory = True, providers = [CcInfo]),
         "out_dir": attr.label(allow_single_file = True, mandatory = True),
     },
 )
 
 def aws_lc_sys(name, crypto, ssl):
-    """Injects generated bindings and native AWS-LC dependencies into aws-lc-sys."""
+    """Injects generated bindings and native AWS-LC dependencies into aws-lc-sys.
+
+    Args:
+      name: Name of the generated build-info target.
+      crypto: Label of the AWS-LC crypto library.
+      ssl: Label of the AWS-LC SSL library.
+    """
     wrapper = name + "_wrapper"
     out_dir = name + "_out_dir"
 
@@ -72,7 +80,7 @@ def aws_lc_sys(name, crypto, ssl):
 
     _aws_lc_sys_build_info(
         name = name,
-        native = wrapper,
+        cc_lib = wrapper,
         out_dir = out_dir,
         visibility = ["//visibility:public"],
     )

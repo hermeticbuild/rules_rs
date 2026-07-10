@@ -14,72 +14,19 @@
 
 """Hermetic bindgen rule and prebuilt toolchains."""
 
-load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "CPP_COMPILE_ACTION_NAME")
+load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "C_COMPILE_ACTION_NAME")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
+load("//rs/private:bindgen.bzl", "CLANG_PARAMETER_FLAGS", "normalize_msvc_compile_flags")
 load("//rs/toolchains:declare_bindgen_toolchains.bzl", "BINDGEN_PREBUILTS", "bindgen_binary_name")
 
 _BINDGEN_TOOLCHAIN_TYPE = Label("//rs:bindgen_toolchain_type")
 
-def _resource_dir(cc_toolchain):
-    files = cc_toolchain.all_files.to_list()
-
-    # Clang toolchains can expose the resource headers as one directory artifact.
-    for file in files:
-        parts = file.path.split("/")
-        if len(parts) >= 4 and parts[-4] == "lib" and parts[-3] == "clang" and parts[-1] == "include":
-            return "/".join(parts[:-1])
-
-    # Other Clang toolchains expose the resource headers as individual files.
-    # Do not use a C library's stdbool.h: its parent is not a Clang resource dir.
-    for file in files:
-        if file.basename != "stdbool.h":
-            continue
-
-        parts = file.path.split("/")
-        if len(parts) >= 5 and parts[-5] == "lib" and parts[-4] == "clang" and parts[-2] == "include":
-            return "/".join(parts[:-2])
-
-    return None
-
-def _normalize_msvc_compile_flags(compile_flags):
-    """Converts clang-cl preprocessing flags to Clang driver flags."""
-    prefixes = (
-        ("/external:I", "-isystem"),
-        ("/imsvc", "-isystem"),
-        ("/FI", "-include"),
-        ("/D", "-D"),
-        ("/U", "-U"),
-        ("/I", "-I"),
-    )
-
-    result = []
-    for original_flag in compile_flags:
-        flag = original_flag
-        if flag.startswith("/clang:"):
-            flag = flag[len("/clang:"):]
-
-        normalized = False
-        for prefix, replacement in prefixes:
-            if flag == prefix:
-                result.append(replacement)
-                normalized = True
-                break
-            if flag.startswith(prefix):
-                result.extend([replacement, flag[len(prefix):]])
-                normalized = True
-                break
-
-        if not normalized:
-            result.append(flag)
-
-    return result
-
 def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
     compilation_context = ctx.attr.cc_lib[CcInfo].compilation_context
-    clang_flags = _normalize_msvc_compile_flags(ctx.attr.clang_flags)
+    clang_flags = normalize_msvc_compile_flags(ctx.attr.clang_flags)
     compile_variables = cc_common.create_compile_variables(
         cc_toolchain = cc_toolchain,
         feature_configuration = feature_configuration,
@@ -96,40 +43,25 @@ def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
     )
     compile_flags = cc_common.get_memory_inefficient_command_line(
         feature_configuration = feature_configuration,
-        action_name = CPP_COMPILE_ACTION_NAME,
+        action_name = C_COMPILE_ACTION_NAME,
         variables = compile_variables,
     )
-    compile_flags = _normalize_msvc_compile_flags(compile_flags)
+    compile_flags = normalize_msvc_compile_flags(compile_flags)
 
-    parameter_flags = (
-        "-D",
-        "-F",
-        "-I",
-        "-U",
-        "-Xclang",
-        "-idirafter",
-        "-iframework",
-        "-imacros",
-        "-include",
-        "-iquote",
-        "-isystem",
-        "-isysroot",
-        "-target",
-        "--gcc-toolchain",
-        "--no-system-header-prefix",
-        "--sysroot",
-        "--system-header-prefix",
-        "--target",
-    )
-    parameterless_flags = (
+    allowed_flag_prefixes = (
+        "-fms-runtime-lib=",
         "-no-canonical-prefixes",
         "-nostdinc",
         "-nostdinc++",
         "-nostdlibinc",
+        "-resource-dir=",
+        "-std=",
         "--no-standard-includes",
     )
     xclang_flags_to_strip = (
+        "-fno-cxx-modules",
         "-fexperimental-optimized-noescape",
+        "-fmodule-map-file-home-is-cwd",
     )
 
     result = []
@@ -145,23 +77,19 @@ def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
             continue
         if flag in clang_flags:
             result.append(flag)
-            copy_next = flag in parameter_flags
+            copy_next = flag in CLANG_PARAMETER_FLAGS
             continue
-        if not flag.startswith(parameter_flags) and flag not in parameterless_flags:
+        if not flag.startswith(CLANG_PARAMETER_FLAGS + allowed_flag_prefixes):
             continue
         if flag == "-Xclang" and index + 1 < len(compile_flags) and compile_flags[index + 1] in xclang_flags_to_strip:
             skip_next = True
             continue
 
         result.append(flag)
-        copy_next = flag in parameter_flags
+        copy_next = flag in CLANG_PARAMETER_FLAGS
 
     for define in compilation_context.defines.to_list():
         result.append("-D" + define)
-
-    resource_dir = _resource_dir(cc_toolchain)
-    if resource_dir:
-        result.append("-resource-dir=" + resource_dir)
 
     return result
 
@@ -206,13 +134,13 @@ def _rust_bindgen_impl(ctx):
 
 rust_bindgen = rule(
     implementation = _rust_bindgen_impl,
-    doc = "Generates Rust bindings for a C/C++ header with a hermetic bindgen executable.",
+    doc = "Generates Rust bindings for a C header with a hermetic bindgen executable.",
     attrs = {
         "bindgen_flags": attr.string_list(
             doc = "Arguments passed to bindgen before the input header.",
         ),
         "cc_lib": attr.label(
-            doc = "C/C++ library that provides the header and its transitive includes.",
+            doc = "C library that provides the header and its transitive includes.",
             mandatory = True,
             providers = [CcInfo],
         ),

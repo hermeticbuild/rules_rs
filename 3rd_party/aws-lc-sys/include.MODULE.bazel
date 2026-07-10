@@ -16,7 +16,7 @@ crate.annotation(
     extra_aliased_targets = {"aws_lc_sys_build_info": "aws_lc_sys_build_info"},
     gen_build_script = "off",
     rustc_flags = ["--cfg=use_bindgen_pregenerated"],
-    # Versioned aliases such as aws_lc_sys_build_info-0.42.0 are available when multiple versions are resolved.
+    # Use aws_lc_sys_build_info-<version> when multiple versions are resolved.
     deps = ["@many_workspace_deps//:aws_lc_sys_build_info"],
 )
 
