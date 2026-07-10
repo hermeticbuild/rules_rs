@@ -339,10 +339,8 @@ genrule(
 
 filegroup(
     name = "all_builds",
-    testonly = True,
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         ":aws_lc_openssl",
-        ":aws_lc_sys_test",
         ":rust_binary",
         ":verify_self_dev_dependency_feature_present",
         ":verify_self_dev_dependency_no_self_alias",
@@ -391,7 +389,6 @@ LINUX_GNU_PLATFORMS = {
 [
     platform_transition_filegroup(
         name = "all_builds_" + platform,
-        testonly = True,
         srcs = ["all_builds"],
         target_platform = LINUX_GNU_PLATFORMS.get(
             platform,
