@@ -173,6 +173,12 @@ _rules_rust_bindgen_repo = repository_rule(
     implementation = _rules_rust_bindgen_repo_impl,
 )
 
+_toolchain = tag_class(
+    attrs = {
+        "name": attr.string(mandatory = True),
+    },
+)
+
 def _rules_rust_bindgen_impl(mctx):
     for prebuilt in BINDGEN_PREBUILTS:
         http_archive(
@@ -182,14 +188,23 @@ def _rules_rust_bindgen_impl(mctx):
             url = "https://github.com/hermeticbuild/bindgen/releases/download/v0.0.2/bindgen_{}.tar.zst".format(prebuilt.name),
         )
 
-    _rules_rust_bindgen_repo(name = "rules_rust_bindgen")
+    toolchain_repositories = {"rules_rust_bindgen": True}
+    for module in mctx.modules:
+        for toolchain in module.tags.toolchain:
+            if toolchain.name in toolchain_repositories:
+                fail("duplicate bindgen toolchain repository: {}".format(toolchain.name))
+            toolchain_repositories[toolchain.name] = True
+
+    for name in sorted(toolchain_repositories):
+        _rules_rust_bindgen_repo(name = name)
 
     return mctx.extension_metadata(
-        root_module_direct_deps = ["rules_rust_bindgen"],
+        root_module_direct_deps = sorted(toolchain_repositories),
         root_module_direct_dev_deps = [],
         reproducible = True,
     )
 
 rules_rust_bindgen = module_extension(
     implementation = _rules_rust_bindgen_impl,
+    tag_classes = {"toolchain": _toolchain},
 )
