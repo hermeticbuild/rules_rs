@@ -1,0 +1,11 @@
+load("@rules_rs//rs:rust_test.bzl", "rust_test")
+
+rust_test(
+    name = "coreaudio_sys_test",
+    srcs = ["coreaudio_sys_test.rs"],
+    deps = ["@bindgen//:coreaudio-sys-0.2.17"],
+    target_compatible_with = select({
+        "@platforms//os:macos": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)

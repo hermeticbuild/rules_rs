@@ -1,0 +1,19 @@
+load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+
+exports_files([
+    "additive.BUILD.bazel",
+    "coreaudio.h",
+    "include.MODULE.bazel",
+])
+
+bzl_library(
+    name = "defs",
+    srcs = ["defs.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@bazel_lib//lib:copy_to_directory",
+        "@rules_cc//cc:defs_bzl",
+        "@rules_rs//rs:rules_rust_bindgen",
+        "@rules_rust//rust:bzl_lib",
+    ],
+)
