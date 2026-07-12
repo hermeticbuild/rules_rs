@@ -203,18 +203,17 @@ def _generate_hub_and_spokes(
                     # Nest a serialized JSON since max path depth is 5.
                     facts[key] = json.encode(fact)
         elif source.startswith("path+"):
-            # Always re-read path-dep Cargo.toml instead of using cached facts.
-            # Path deps are local (fast to read), and their Cargo.toml can change
-            # features/deps without changing the facts key, causing stale resolution.
-            # Also watch the file so Bazel re-runs the extension when it changes.
-            key = source + "_" + name
+            # Always re-read a path dependency's Cargo.toml instead of using cached facts.
+            # Path dependencies are local, and Cargo.toml can change features or
+            # dependencies without changing Cargo.lock, causing stale resolution.
+            # Do not return path dependency facts for storage in MODULE.bazel.lock.
+            # Watch Cargo.toml so Bazel re-runs the extension when Cargo.toml changes.
             cargo_toml_path = paths.join(package["local_path"], "Cargo.toml")
             mctx.watch(mctx.path(cargo_toml_path))
             annotation = annotation_for(annotations, name, package["version"], hub_name)
             cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
             fact = cargo_toml_fact(cargo_toml_json, {})
 
-            facts[key] = json.encode(fact)
             package["strip_prefix"] = fact.get("strip_prefix", "")
         elif source.startswith("git+"):
             key = source + "_" + name
