@@ -1,3 +1,5 @@
+"""Definitions for declaring Rust compiler toolchains."""
+
 load("@rules_rust//rust:toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES", "triple_to_rust_constraint_set")
@@ -17,6 +19,7 @@ def _rustc_flags_to_select(rustc_flags_by_triple):
         {"//conditions:default": []},
     )
 
+# buildifier: disable=unnamed-macro
 def declare_rustc_toolchains(
         *,
         version,
@@ -25,7 +28,16 @@ def declare_rustc_toolchains(
         extra_exec_rustc_flags = {},
         execs = SUPPORTED_EXEC_TRIPLES,
         targets = ALL_TARGET_TRIPLES):
-    """Declare toolchains for all supported target platforms."""
+    """Declares Rust compiler toolchains for all supported target platforms.
+
+    Args:
+      version: The Rust compiler version.
+      edition: The default Rust edition.
+      extra_rustc_flags: Additional target Rust compiler flags keyed by triple.
+      extra_exec_rustc_flags: Additional execution Rust compiler flags keyed by triple.
+      execs: Execution platform triples for which to declare toolchains.
+      targets: Target platform triples supported by the declared toolchains.
+    """
 
     version_key = sanitize_version(version)
     channel = _channel(version)
@@ -112,7 +124,6 @@ def declare_rustc_toolchains(
                 "@llvm//constraints/windows/abi:gnu": ".a",
                 "@llvm//constraints/windows/abi:gnullvm": ".a",
                 "@llvm//constraints/windows/abi:msvc": ".lib",
-                "@platforms//os:none": "",
                 "@platforms//os:emscripten": ".js",
                 "@platforms//os:uefi": ".lib",
                 "//conditions:default": ".a",
