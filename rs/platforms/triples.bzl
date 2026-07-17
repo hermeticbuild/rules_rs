@@ -4,6 +4,11 @@ load(
     _triple_to_constraint_set = "triple_to_constraint_set",
 )
 
+_RISCV_ISA_CONSTRAINTS = {
+    "riscv32imac-unknown-none-elf": "@rules_rs//rs/platforms/constraints:rv32imac",
+    "riscv32imc-unknown-none-elf": "@rules_rs//rs/platforms/constraints:rv32imc",
+}
+
 def triple_to_rust_constraint_set(target_triple):
     constraints = _triple_to_constraint_set(target_triple)
     t = triple(target_triple)
@@ -21,6 +26,10 @@ def triple_to_rust_constraint_set(target_triple):
         # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnu.rs#L44
         if t.abi in ("gnu", "gnullvm"):
             constraints.append("@llvm//constraints/windows/crt:msvcrt")
+
+    riscv_isa_constraint = _RISCV_ISA_CONSTRAINTS.get(target_triple)
+    if riscv_isa_constraint:
+        constraints.append(riscv_isa_constraint)
 
     if target_triple.endswith("eabihf") or target_triple == "aarch64-unknown-none":
         constraints.append("@rules_rs//rs/platforms/constraints:hardfloat")
@@ -134,7 +143,7 @@ SUPPORTED_TIER_1_AND_2_TRIPLES = [
     #"nvptx64-nvidia-cuda",             # * –emit=asm generates PTX code that runs on NVIDIA GPUs
     # "riscv32i-unknown-none-elf",       # * Bare RISC-V (RV32I ISA)
     # "riscv32im-unknown-none-elf",      # * Bare RISC-V (RV32IM ISA)
-    # "riscv32imac-unknown-none-elf",    # * Bare RISC-V (RV32IMAC ISA)
+    "riscv32imac-unknown-none-elf",  # * Bare RISC-V (RV32IMAC ISA)
     # "riscv32imafc-unknown-none-elf",   # * Bare RISC-V (RV32IMAFC ISA)
     "riscv32imc-unknown-none-elf",  # * Bare RISC-V (RV32IMC ISA)
     "riscv64gc-unknown-linux-musl",  # ✓ RISC-V Linux (kernel 4.20+, musl 1.2.5)
