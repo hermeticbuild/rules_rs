@@ -150,6 +150,15 @@ def _normalize_os(os_raw):
         return "macos"
     return os_raw
 
+def _normalize_arch(arch_raw):
+    # RISC-V target triples encode the enabled ISA extensions in their first
+    # component, while Rust's cfg(target_arch) exposes only the register width.
+    if arch_raw.startswith("riscv32"):
+        return "riscv32"
+    if arch_raw.startswith("riscv64"):
+        return "riscv64"
+    return arch_raw
+
 def _family_for_os(os_name):
     if os_name == "windows":
         return "windows"
@@ -211,7 +220,7 @@ def _target_has_feature(ctx, feature):
 
 def triple_to_cfg_attrs(triple):
     parts = triple.split("-")
-    arch_part = _get(parts, 0, "")
+    arch_part = _normalize_arch(_get(parts, 0, ""))
     vendor_part = _get(parts, 1, "unknown")
     os_raw_part = _get(parts, 2, "none")
     env_part = "-".join(parts[3:])

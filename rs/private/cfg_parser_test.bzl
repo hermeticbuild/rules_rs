@@ -1,5 +1,5 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cfg_parser.bzl", "cfg_matches", "cfg_matches_expr_for_triples", "triple_to_cfg_attrs", "cfg_matches_expr_for_cfg_attrs")
+load(":cfg_parser.bzl", "cfg_matches", "cfg_matches_expr_for_cfg_attrs", "cfg_matches_expr_for_triples", "triple_to_cfg_attrs")
 
 def _cfg(expr):
     return "cfg(%s)" % expr
@@ -14,6 +14,8 @@ def _cfg_parser_smoke_test_impl(ctx):
     win_gnu = "x86_64-pc-windows-gnu"
     win_gnullvm = "aarch64-pc-windows-gnullvm"
     wasm = "wasm32-unknown-unknown"
+    riscv32imac = "riscv32imac-unknown-none-elf"
+    riscv64gc = "riscv64gc-unknown-linux-musl"
 
     # MacOS facts facts
     asserts.true(env, cfg_matches(_cfg("unix"), mac))
@@ -47,6 +49,15 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg('target_family = "wasm"'), wasm))
     asserts.true(env, cfg_matches(_cfg('target_pointer_width = "32"'), wasm))
 
+    # RISC-V triples include ISA extensions in the architecture component, but
+    # Rust exposes the register width through cfg(target_arch).
+    asserts.true(env, cfg_matches(_cfg('target_arch = "riscv32"'), riscv32imac))
+    asserts.true(env, cfg_matches(_cfg('target_pointer_width = "32"'), riscv32imac))
+    asserts.false(env, cfg_matches(_cfg('target_arch = "riscv32imac"'), riscv32imac))
+    asserts.true(env, cfg_matches(_cfg('target_arch = "riscv64"'), riscv64gc))
+    asserts.true(env, cfg_matches(_cfg('target_pointer_width = "64"'), riscv64gc))
+    asserts.false(env, cfg_matches(_cfg('target_arch = "riscv64gc"'), riscv64gc))
+
     # Combinators
     asserts.false(env, cfg_matches(_cfg("any()"), mac))
     asserts.true(env, cfg_matches(_cfg("not(any())"), mac))
@@ -63,15 +74,16 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg('target_feature = "sse2"'), linux_gnu))
     asserts.false(env, cfg_matches(_cfg('target_feature = "sse2"'), mac))
 
-    triples = [mac, linux_gnu, linux_musl, win, win_gnu, win_gnullvm, wasm]
+    triples = [mac, linux_gnu, linux_musl, win, win_gnu, win_gnullvm, wasm, riscv32imac, riscv64gc]
 
     results = cfg_matches_expr_for_triples(_cfg('all(unix, any(target_env = "gnu", target_env = "musl"))'), triples)
-    asserts.equals(env, results.matches, [linux_gnu, linux_musl])
+    asserts.equals(env, results.matches, [linux_gnu, linux_musl, riscv64gc])
 
     results = cfg_matches_expr_for_triples(
         _cfg('any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "x86")'),
-        triples)
-    asserts.equals(env, results.matches, triples[:-1])
+        triples,
+    )
+    asserts.equals(env, results.matches, [mac, linux_gnu, linux_musl, win, win_gnu, win_gnullvm])
 
     # Cargo dependencies can target a specific triple instead of a cfg expression.
     results = cfg_matches_expr_for_triples(win_gnullvm, triples)
