@@ -4,6 +4,7 @@ load("@rules_rust//rust:defs.bzl", "rust_stdlib_filegroup")
 load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
 load(":bindgen_test.bzl", "bindgen_tests")
 load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
+load(":cargo_toml_utils_test.bzl", "cargo_toml_utils_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
@@ -26,6 +27,8 @@ all_crate_deps_tests()
 bindgen_tests()
 
 bpf_linker_repository_tests()
+
+cargo_toml_utils_tests()
 
 cargo_workspace_graph_tests()
 
@@ -79,6 +82,21 @@ bzl_library(
     deps = [
         ":toml2json",
         "@bazel_lib//lib:repo_utils",
+    ],
+)
+
+bzl_library(
+    name = "cargo_toml_utils",
+    srcs = ["cargo_toml_utils.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "cargo_toml_utils_test",
+    srcs = ["cargo_toml_utils_test.bzl"],
+    deps = [
+        ":cargo_toml_utils",
+        "@bazel_skylib//lib:unittest",
     ],
 )
 
@@ -149,6 +167,7 @@ bzl_library(
     srcs = ["repository_utils.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
+        ":cargo_toml_utils",
         ":select_utils",
         ":semver",
     ],
