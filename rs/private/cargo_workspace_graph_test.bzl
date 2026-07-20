@@ -1,5 +1,5 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_fq_deps", "new_feature_resolutions", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages")
+load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "cargo_toml_fact", "compute_package_fq_deps", "new_feature_resolutions", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages")
 load(":resolver.bzl", "resolve")
 
 def _select_package_fq_dep_uses_package_name_impl(ctx):
@@ -266,6 +266,27 @@ def _resolve_package_facts_attaches_feature_resolutions_impl(ctx):
 
 resolve_package_facts_attaches_feature_resolutions_test = unittest.make(_resolve_package_facts_attaches_feature_resolutions_impl)
 
+def _cargo_toml_fact_detects_proc_macro_impl(ctx):
+    env = unittest.begin(ctx)
+
+    fact = cargo_toml_fact({
+        "dependencies": {},
+        "features": {},
+        "lib": {"proc-macro": True},
+        "package": {"name": "derive-helper"},
+    })
+
+    asserts.true(env, fact["is_proc_macro"])
+    asserts.true(env, cargo_toml_fact({
+        "dependencies": {},
+        "features": {},
+        "lib": {"crate-type": ["proc-macro"]},
+        "package": {"name": "derive-helper"},
+    })["is_proc_macro"])
+    return unittest.end(env)
+
+cargo_toml_fact_detects_proc_macro_test = unittest.make(_cargo_toml_fact_detects_proc_macro_impl)
+
 def _resolve_package_facts_preserves_persisted_dependency_features_impl(ctx):
     env = unittest.begin(ctx)
 
@@ -357,6 +378,7 @@ def cargo_workspace_graph_tests():
         "cargo_workspace_graph_tests",
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
+        cargo_toml_fact_detects_proc_macro_test,
         resolve_handles_dependency_chains_deeper_than_previous_round_limit_test,
         resolve_package_facts_attaches_feature_resolutions_test,
         resolve_package_facts_preserves_persisted_dependency_features_test,

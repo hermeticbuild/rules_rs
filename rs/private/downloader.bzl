@@ -32,10 +32,57 @@ def _github_source_to_raw_content_base_url(url):
 def _sanitize_path_fragment(path):
     return path.replace("/", "_").replace(":", "_").replace("?", "_")
 
+def _fact_cache_key(namespace, parts):
+    normalized_parts = [part or "" for part in parts]
+    return namespace + "".join([
+        "_%s_%s" % (len(part), part)
+        for part in normalized_parts
+    ])
+
+def git_cargo_toml_fact_key(source, name, selected_manifest, effective_strip_prefix):
+    """Returns the cache key for a Git crate's selected manifest view."""
+    return _fact_cache_key("git", [source, name, selected_manifest, effective_strip_prefix])
+
+def git_cargo_toml_fact_keys(
+        source,
+        name,
+        selected_manifest,
+        configured_strip_prefix,
+        effective_strip_prefix):
+    """Returns the effective fact key followed by its pre-discovery lookup key."""
+    effective_key = git_cargo_toml_fact_key(source, name, selected_manifest, effective_strip_prefix)
+    lookup_key = git_cargo_toml_fact_key(source, name, selected_manifest, configured_strip_prefix)
+    if lookup_key == effective_key:
+        return [effective_key]
+    return [effective_key, lookup_key]
+
+def registry_cargo_toml_fact_key(source, name, version):
+    """Returns the cache key for a registry crate from a specific source."""
+    return _fact_cache_key("registry", [source, name, version])
+
+def registry_metadata_key(source, name):
+    """Returns the in-flight metadata key for a crate from a specific registry."""
+    return _fact_cache_key("registry_metadata", [source, name])
+
+def _decode_current_cargo_toml_fact(serialized_fact):
+    if not serialized_fact:
+        return None
+
+    fact = json.decode(serialized_fact)
+    return fact if "is_proc_macro" in fact else None
+
+def current_cargo_toml_fact(state, key, serialized_fact):
+    """Returns and memoizes a current manifest-derived fact, if available."""
+    if key not in state.cargo_toml_facts_by_key:
+        state.cargo_toml_facts_by_key[key] = _decode_current_cargo_toml_fact(serialized_fact)
+    return state.cargo_toml_facts_by_key[key]
+
 def new_downloader_state():
     return struct(
-        in_flight_registry_fetches_by_crate = {},
+        cargo_toml_facts_by_key = {},
         in_flight_git_crate_fetches_by_url = {},
+        in_flight_git_member_fetches_by_url = {},
+        in_flight_registry_fetches_by_source_and_crate = {},
         pending_git_clones_by_source = {},
     )
 
@@ -52,12 +99,18 @@ def start_github_downloads(
             continue
 
         name = package["name"]
-
-        key = source + "_" + name
-        if key in existing_facts:
+        annotation = annotation_for(annotations, name, package["version"], package["hub_name"])
+        lookup_key = git_cargo_toml_fact_key(
+            source,
+            name,
+            annotation.workspace_cargo_toml,
+            annotation.strip_prefix,
+        )
+        fact = current_cargo_toml_fact(state, lookup_key, existing_facts.get(lookup_key))
+        if fact != None:
+            package["strip_prefix"] = fact["strip_prefix"]
             continue
 
-        annotation = annotation_for(annotations, name, package["version"], package["hub_name"])
         url = _github_source_to_raw_content_base_url(source) + annotation.workspace_cargo_toml
         in_flight_fetch = state.in_flight_git_crate_fetches_by_url.get(url)
         if in_flight_fetch:
@@ -97,30 +150,43 @@ def start_crate_registry_downloads(
         version = package["version"]
 
         if source.startswith("sparse+"):
-            key = name + "_" + version
+            key = registry_cargo_toml_fact_key(source, name, version)
             if key in existing_facts:
                 continue
 
-            in_flight_fetch = state.in_flight_registry_fetches_by_crate.get(name)
+            metadata_key = registry_metadata_key(source, name)
+            in_flight_fetch = state.in_flight_registry_fetches_by_source_and_crate.get(metadata_key)
             if not in_flight_fetch:
                 url = source.removeprefix("sparse+") + sharded_path(name.lower())
-                in_flight_fetch = mctx.download(
-                    url,
-                    name + ".jsonl",
-                    headers = registry_auth_headers(cargo_credentials, source),
-                    block = False,
+                metadata_path = "registry_metadata_%s.jsonl" % len(state.in_flight_registry_fetches_by_source_and_crate)
+                in_flight_fetch = struct(
+                    path = metadata_path,
+                    token = mctx.download(
+                        url,
+                        metadata_path,
+                        headers = registry_auth_headers(cargo_credentials, source),
+                        block = False,
+                    ),
                 )
-                state.in_flight_registry_fetches_by_crate[name] = in_flight_fetch
+                state.in_flight_registry_fetches_by_source_and_crate[metadata_key] = in_flight_fetch
 
-            package["download_token"] = in_flight_fetch
+            package["registry_metadata_info"] = in_flight_fetch
         elif source.startswith("git+"):
             # TODO(zbarsky): Ideally other forges could use the single-file fastpath...
             if source.startswith("git+https://github.com/"):
                 # Github already handled above
                 continue
 
-            key = source + "_" + name
-            if key in existing_facts:
+            annotation = annotation_for(annotations, name, version, package["hub_name"])
+            lookup_key = git_cargo_toml_fact_key(
+                source,
+                name,
+                annotation.workspace_cargo_toml,
+                annotation.strip_prefix,
+            )
+            fact = current_cargo_toml_fact(state, lookup_key, existing_facts.get(lookup_key))
+            if fact != None:
+                package["strip_prefix"] = fact["strip_prefix"]
                 continue
 
             clone_state = state.pending_git_clones_by_source.get(source)
@@ -303,11 +369,19 @@ def download_metadata_for_git_crates(
                 package["strip_prefix"] = strip_prefix
                 child_url = url.replace("Cargo.toml", strip_prefix + "/Cargo.toml")
 
-                child_cargo_toml_path = _sanitize_path_fragment(child_url)
-                package["member_crate_cargo_toml_info"] = struct(
-                    token = mctx.download(child_url, child_cargo_toml_path, block = False),
-                    path = child_cargo_toml_path,
-                )
+                # Deduplicate by URL so hubs sharing a workspace-member crate
+                # share one download token. A hub that reuses another hub's fact
+                # never waits its token, and Bazel does not allow pending
+                # downloads to outlive the extension evaluation.
+                member_fetch = state.in_flight_git_member_fetches_by_url.get(child_url)
+                if not member_fetch:
+                    child_cargo_toml_path = _sanitize_path_fragment(child_url)
+                    member_fetch = struct(
+                        token = mctx.download(child_url, child_cargo_toml_path, block = False),
+                        path = child_cargo_toml_path,
+                    )
+                    state.in_flight_git_member_fetches_by_url[child_url] = member_fetch
+                package["member_crate_cargo_toml_info"] = member_fetch
 
                 package["workspace_cargo_toml_json"] = cargo_toml_json
             else:
@@ -319,30 +393,33 @@ def download_metadata_for_git_crates(
         clone_dir = mctx.path(_sanitize_path_fragment(source))
         git_repo(clone_state.clone_config, clone_dir)
 
-        # TODO(zbarsky): multiple crates?
-        first_pkg = clone_state.packages[0]
-        annotations = _annotations_for_package(annotations_by_hub_name, first_pkg)
-        annotation = annotation_for(annotations, first_pkg["name"], first_pkg["version"], first_pkg["hub_name"])
-        cargo_toml_path = clone_dir.get_child(annotation.workspace_cargo_toml)
-        _ensure_cargo_toml_exists(cargo_toml_path, clone_state)
-        cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
-        workspace_member_by_package_name = None
+        cargo_tomls_by_path = {}
+        workspace_members_by_path = {}
 
         for package in clone_state.packages:
             name = package["name"]
             annotations = _annotations_for_package(annotations_by_hub_name, package)
+            annotation = annotation_for(annotations, name, package["version"], package["hub_name"])
+            cargo_toml_path = clone_dir.get_child(annotation.workspace_cargo_toml)
+            cargo_toml_path_key = str(cargo_toml_path)
+            cargo_toml_json = cargo_tomls_by_path.get(cargo_toml_path_key)
+            if cargo_toml_json == None:
+                _ensure_cargo_toml_exists(cargo_toml_path, clone_state)
+                cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
+                cargo_tomls_by_path[cargo_toml_path_key] = cargo_toml_json
 
             if cargo_toml_json.get("package", {}).get("name") != name:
-                annotation = annotation_for(annotations, name, package["version"], package["hub_name"])
                 strip_prefix = _compute_strip_prefix(annotation, cargo_toml_json, name)
 
                 if not strip_prefix:
+                    workspace_member_by_package_name = workspace_members_by_path.get(cargo_toml_path_key)
                     if workspace_member_by_package_name == None:
                         workspace_member_by_package_name = _workspace_member_by_package_name_from_local_clone(
                             mctx,
                             cargo_toml_path,
                             cargo_toml_json,
                         )
+                        workspace_members_by_path[cargo_toml_path_key] = workspace_member_by_package_name
                     strip_prefix = workspace_member_by_package_name.get(name)
 
                 if not strip_prefix:
@@ -350,7 +427,7 @@ def download_metadata_for_git_crates(
 
                 package["strip_prefix"] = strip_prefix
                 package["workspace_cargo_toml_json"] = cargo_toml_json
-                child_cargo_toml_path = str(cargo_toml_path).replace("Cargo.toml", strip_prefix + "/Cargo.toml")
+                child_cargo_toml_path = cargo_toml_path.dirname.get_child(strip_prefix).get_child("Cargo.toml")
                 package["cargo_toml_json"] = run_toml2json(mctx, child_cargo_toml_path)
             else:
                 package["cargo_toml_json"] = cargo_toml_json

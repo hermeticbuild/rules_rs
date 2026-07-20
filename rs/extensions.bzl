@@ -20,7 +20,7 @@ load(
     _select = "select_items",
 )
 load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
-load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
+load("//rs/private:downloader.bzl", "current_cargo_toml_fact", "download_metadata_for_git_crates", "git_cargo_toml_fact_key", "git_cargo_toml_fact_keys", "new_downloader_state", "parse_git_url", "registry_cargo_toml_fact_key", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_repository")
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
@@ -89,6 +89,11 @@ def _additive_build_file_content(mctx, annotation):
     content += annotation.additive_build_file_content
     return content
 
+def _facts_with_overlay(persisted_facts, overlay):
+    return struct(
+        get = lambda key: overlay.get(key, persisted_facts.get(key)),
+    )
+
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
@@ -104,7 +109,9 @@ def _generate_hub_and_spokes(
         validate_lockfile,
         debug,
         use_legacy_rules_rust_platforms,
-        dry_run = False):
+        dry_run = False,
+        existing_facts = None,
+        downloader_state = None):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
     Args:
@@ -121,7 +128,10 @@ def _generate_hub_and_spokes(
         cargo_config (label): .cargo/config.toml file
         validate_lockfile (bool): If true, validate we have appropriate versions in Cargo.lock
         debug (bool): Enable debug logging
+        use_legacy_rules_rust_platforms (bool): Whether to render legacy rules_rust platform labels.
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
+        existing_facts: Fact lookup, optionally overlaid with facts learned earlier in this evaluation.
+        downloader_state: Shared state for deduplicating extension downloads.
     """
     _date(mctx, "start")
 
@@ -136,7 +146,10 @@ def _generate_hub_and_spokes(
 
     _date(mctx, "parsed cargo metadata")
 
-    existing_facts = getattr(mctx, "facts", {}) or {}
+    if existing_facts == None:
+        existing_facts = getattr(mctx, "facts", {}) or {}
+    if downloader_state == None:
+        downloader_state = new_downloader_state()
     facts = {}
 
     split_packages = split_lockfile_packages(
@@ -157,16 +170,17 @@ def _generate_hub_and_spokes(
         source = package["source"]
 
         if source.startswith("sparse+"):
-            key = name + "_" + version
+            key = registry_cargo_toml_fact_key(source, name, version)
             fact = existing_facts.get(key)
             if fact:
                 facts[key] = fact
                 fact = json.decode(fact)
             else:
-                package["download_token"].wait()
+                metadata_info = package["registry_metadata_info"]
+                metadata_info.token.wait()
 
                 # TODO(zbarsky): Should we also dedupe this parsing?
-                metadatas = mctx.read(name + ".jsonl").strip().split("\n")
+                metadatas = mctx.read(metadata_info.path).strip().split("\n")
                 version_needle = '"vers":"%s"' % version
                 for metadata in metadatas:
                     if version_needle not in metadata:
@@ -216,13 +230,33 @@ def _generate_hub_and_spokes(
 
             package["strip_prefix"] = fact.get("strip_prefix", "")
         elif source.startswith("git+"):
-            key = source + "_" + name
-            fact = existing_facts.get(key)
-            if fact:
-                facts[key] = fact
-                fact = json.decode(fact)
+            annotation = annotation_for(annotations, name, package["version"], hub_name)
+            strip_prefix = package.get("strip_prefix") or ""
+            fact_keys = git_cargo_toml_fact_keys(
+                source,
+                name,
+                annotation.workspace_cargo_toml,
+                annotation.strip_prefix,
+                strip_prefix,
+            )
+            serialized_fact = None
+            fact = None
+            for key in fact_keys:
+                serialized_fact = existing_facts.get(key)
+                fact = current_cargo_toml_fact(downloader_state, key, serialized_fact)
+                if fact != None:
+                    break
+
+            if fact != None:
+                # A lockfile written before the pre-discovery alias was added
+                # can still cause this download to be enqueued. It must be
+                # waited even though the effective-view fact is reusable.
+                info = package.get("member_crate_cargo_toml_info")
+                if info:
+                    info.token.wait()
+                if not serialized_fact:
+                    serialized_fact = json.encode(fact)
             else:
-                annotation = annotation_for(annotations, name, package["version"], hub_name)
                 info = package.get("member_crate_cargo_toml_info")
                 if info:
                     # TODO(zbarsky): These tokens got enqueues last, so this can bottleneck
@@ -233,15 +267,19 @@ def _generate_hub_and_spokes(
                 else:
                     cargo_toml_json = package["cargo_toml_json"]
                     package_workspace_cargo_toml_json = package.get("workspace_cargo_toml_json")
-                strip_prefix = package.get("strip_prefix", "")
-
                 fact = cargo_toml_fact(cargo_toml_json, package_workspace_cargo_toml_json, strip_prefix = strip_prefix)
 
                 if not fact["dependencies"] and debug:
                     print(name, version, package["source"])
 
                 # Nest a serialized JSON since max path depth is 5.
-                facts[key] = json.encode(fact)
+                serialized_fact = json.encode(fact)
+
+            # Persist both the effective manifest view and the key used before
+            # an implicit workspace-member strip prefix was discovered.
+            for key in fact_keys:
+                facts[key] = serialized_fact
+                downloader_state.cargo_toml_facts_by_key[key] = fact
 
             package["strip_prefix"] = fact["strip_prefix"]
         else:
@@ -617,7 +655,7 @@ RESOLVED_PLATFORMS = select({{
     ))
 
     if dry_run:
-        return
+        return facts
 
     _hub_repo(
         name = hub_name,
@@ -706,6 +744,8 @@ def _crate_impl(mctx):
     download_metadata_for_git_crates(mctx, downloader_state, annotations_by_hub_name)
 
     facts = {}
+    persisted_facts = getattr(mctx, "facts", {}) or {}
+    session_facts = {}
     direct_deps = []
     direct_dev_deps = []
 
@@ -724,9 +764,48 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
+                    fact_view = _facts_with_overlay(persisted_facts, session_facts)
+                    session_facts.update(_generate_hub_and_spokes(
+                        mctx,
+                        cfg.name,
+                        annotations,
+                        suggested_annotation_snippet_paths,
+                        cargo_path,
+                        cfg.cargo_lock,
+                        cargo_toml_by_hub_name[cfg.name],
+                        hub_packages,
+                        cfg.platform_triples,
+                        cargo_credentials,
+                        cfg.cargo_config,
+                        cfg.validate_lockfile,
+                        cfg.debug,
+                        cfg.use_legacy_rules_rust_platforms,
+                        dry_run = True,
+                        existing_facts = fact_view,
+                        downloader_state = downloader_state,
+                    ))
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
+            fact_view = _facts_with_overlay(persisted_facts, session_facts)
+            generated_facts = _generate_hub_and_spokes(
+                mctx,
+                cfg.name,
+                annotations,
+                suggested_annotation_snippet_paths,
+                cargo_path,
+                cfg.cargo_lock,
+                cargo_toml_by_hub_name[cfg.name],
+                hub_packages,
+                cfg.platform_triples,
+                cargo_credentials,
+                cfg.cargo_config,
+                cfg.validate_lockfile,
+                cfg.debug,
+                cfg.use_legacy_rules_rust_platforms,
+                existing_facts = fact_view,
+                downloader_state = downloader_state,
+            )
+            session_facts.update(generated_facts)
+            facts |= generated_facts
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
@@ -766,7 +845,13 @@ def _crate_impl(mctx):
 
                 strip_prefix = package.get("strip_prefix")
                 if strip_prefix == None:
-                    strip_prefix = json.decode(facts[source + "_" + package["name"]])["strip_prefix"]
+                    fact_key = git_cargo_toml_fact_key(
+                        source,
+                        package["name"],
+                        annotation.workspace_cargo_toml,
+                        annotation.strip_prefix,
+                    )
+                    strip_prefix = json.decode(facts[fact_key])["strip_prefix"]
                 package_path = _git_crate_package_path(annotation, strip_prefix)
                 build_file_path = paths.join(package_path, "BUILD.bazel") if package_path else "BUILD.bazel"
                 git_repo["build_files"][build_file_path] = _additive_build_file_content(mctx, annotation)

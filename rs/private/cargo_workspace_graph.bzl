@@ -1,4 +1,5 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
+load("//rs/private:cargo_toml_utils.bzl", "cargo_toml_is_proc_macro")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:resolver.bzl", "resolve")
 load("//rs/private:select_utils.bzl", "compute_select")
@@ -184,6 +185,7 @@ def cargo_toml_fact(cargo_toml_json, workspace_cargo_toml_json = None, strip_pre
     return dict(
         features = cargo_toml_json.get("features", {}),
         dependencies = cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json),
+        is_proc_macro = cargo_toml_is_proc_macro(cargo_toml_json),
         strip_prefix = strip_prefix,
     )
 
