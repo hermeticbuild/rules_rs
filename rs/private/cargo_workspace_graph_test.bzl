@@ -1,5 +1,6 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
 load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_fq_deps", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages")
+load(":registry_utils.bzl", "registry_download_url")
 
 def _select_package_fq_dep_uses_package_name_impl(ctx):
     env = unittest.begin(ctx)
@@ -265,11 +266,35 @@ def _resolve_package_facts_attaches_feature_resolutions_impl(ctx):
 
 resolve_package_facts_attaches_feature_resolutions_test = unittest.make(_resolve_package_facts_attaches_feature_resolutions_impl)
 
+def _registry_download_url_uses_directory_prefix_impl(ctx):
+    env = unittest.begin(ctx)
+
+    asserts.equals(
+        env,
+        "https://registry.example/My/Cr/my/cr/MyCrate-1.2.3-deadbeef.crate",
+        registry_download_url(
+            {"dl": "https://registry.example/{prefix}/{lowerprefix}/{crate}-{version}-{sha256-checksum}.crate"},
+            "MyCrate",
+            "1.2.3",
+            "deadbeef",
+        ),
+    )
+    for crate, prefix in [("a", "1"), ("ab", "2"), ("abc", "3/a"), ("cargo", "ca/rg")]:
+        asserts.equals(
+            env,
+            "https://registry.example/" + prefix,
+            registry_download_url({"dl": "https://registry.example/{prefix}"}, crate, "1.0.0", "checksum"),
+        )
+    return unittest.end(env)
+
+registry_download_url_uses_directory_prefix_test = unittest.make(_registry_download_url_uses_directory_prefix_impl)
+
 def cargo_workspace_graph_tests():
     return unittest.suite(
         "cargo_workspace_graph_tests",
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
+        registry_download_url_uses_directory_prefix_test,
         resolve_package_facts_attaches_feature_resolutions_test,
         select_package_fq_dep_uses_package_name_test,
         select_package_fq_dep_uses_req_for_duplicate_versions_test,
