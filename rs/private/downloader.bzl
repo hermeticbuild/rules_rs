@@ -30,7 +30,7 @@ def _github_source_to_raw_content_base_url(url):
     return "https://raw.githubusercontent.com/%s/%s/" % _parse_github_url(url)
 
 def _sanitize_path_fragment(path):
-    return path.replace("/", "_").replace(":", "_")
+    return path.replace("/", "_").replace(":", "_").replace("?", "_")
 
 def new_downloader_state():
     return struct(
