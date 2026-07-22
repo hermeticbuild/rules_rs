@@ -760,10 +760,12 @@ def workspace_dep_data(
             "build_deps_by_platform": build_deps_by_platform,
             "crate_features": crate_features,
             "crate_features_by_platform": crate_features_by_platform,
+            "crate_name": package["name"].replace("-", "_"),
             "deps": deps,
             "deps_by_platform": deps_by_platform,
             "dev_deps": dev_deps,
             "dev_deps_by_platform": dev_deps_by_platform,
+            "edition": package.get("edition", "2015"),
             "shared_libraries": shared_libraries,
         }
 
