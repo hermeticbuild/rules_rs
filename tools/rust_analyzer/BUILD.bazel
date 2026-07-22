@@ -42,6 +42,21 @@ rust_binary(
 )
 
 rust_binary(
+    name = "flycheck",
+    srcs = ["@rules_rust//tools/rust_analyzer:bin/flycheck.rs"],
+    edition = "2021",
+    deps = [
+        ":gen_rust_project_lib",
+        "@rrra//:anyhow",
+        "@rrra//:camino",
+        "@rrra//:clap",
+        "@rrra//:env_logger",
+        "@rrra//:log",
+        "@rrra//:serde_json",
+    ],
+)
+
+rust_binary(
     name = "validate",
     srcs = ["@rules_rust//tools/rust_analyzer:bin/validate.rs"],
     data = [
@@ -69,6 +84,7 @@ rust_library(
         "@rules_rust//tools/rust_analyzer:cache.rs",
         "@rules_rust//tools/rust_analyzer:lib.rs",
         "@rules_rust//tools/rust_analyzer:rust_project.rs",
+        "@rules_rust//tools/rust_analyzer:user_config.rs",
     ],
     compile_data = [
         "@rules_rust//rust/private:rust_analyzer_detect_sysroot",
