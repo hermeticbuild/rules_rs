@@ -1,6 +1,6 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
-load("//rs/private:resolver.bzl", "resolve")
+load("//rs/private:resolver.bzl", "resolve", "seed_pending_host_features")
 load("//rs/private:select_utils.bzl", "compute_select")
 load("//rs/private:semver.bzl", "select_matching_version")
 
@@ -62,7 +62,7 @@ def cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache):
     cfg_match_cache[target] = match_info
     return match_info
 
-def new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples):
+def new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples, is_workspace_member = False):
     return struct(
         features_enabled = {triple: set() for triple in platform_triples},
         build_deps = {triple: set() for triple in platform_triples},
@@ -71,6 +71,13 @@ def new_feature_resolutions(package_index, possible_deps, possible_features, pla
         package_index = package_index,
         possible_deps = possible_deps,
         possible_features = possible_features,
+        # Feature-world split: fields above are the target world. `host` is a
+        # lazily-materialized container (ensure_host_state) the host world fills
+        # when it first reaches this crate. Members are world boundaries (see
+        # _dep_world in resolver.bzl).
+        target_active = {triple: False for triple in platform_triples},
+        host = {"state": None},
+        is_workspace_member = is_workspace_member,
     )
 
 _INTERNAL_RUSTC_PLACEHOLDER_CRATES = [
@@ -385,7 +392,12 @@ def _resolve_packages(packages, package_info_by_fq_crate, platform_triples, dep_
             converter = dep_converter,
             skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
         )
-        feature_resolutions = new_feature_resolutions(package_index, possible_deps, package_info.get("features", {}), platform_triples)
+        feature_resolutions = new_feature_resolutions(
+            package_index,
+            possible_deps,
+            package_info.get("features", {}),
+            platform_triples,
+        )
         package["feature_resolutions"] = feature_resolutions
         feature_resolutions_by_fq_crate[fq] = feature_resolutions
 
@@ -472,6 +484,290 @@ def _resolve_possible_deps(
             else:
                 dep["target"] = set(match_info.matches)
 
+def _seed_annotation_host_features(feature_resolutions, annotation, platform_triples):
+    """Seeds annotation crate_features into the host world WITHOUT activating it.
+    Writes live host state if materialized, else pending seeds — so a crate the
+    host world never reaches stays unallocated and host-inactive."""
+    host = feature_resolutions.host
+    state = host["state"]
+    if state != None:
+        features_enabled = state["features_enabled"]
+    else:
+        features_enabled = host.get("pending_features")
+        if features_enabled == None:
+            features_enabled = {triple: set() for triple in platform_triples}
+            host["pending_features"] = features_enabled
+
+    if annotation.crate_features:
+        for triple in platform_triples:
+            features_enabled[triple].update(annotation.crate_features)
+    for triple, features in annotation.crate_features_select.items():
+        if triple in features_enabled:
+            features_enabled[triple].update(features)
+
+def classify_worlds(packages, platform_triples):
+    """Classifies each package's host/target feature-world relationship.
+
+    Call after resolve() with the packages to classify. Returns
+    {fq_crate: class}:
+
+    - "unactivated":     reached by no world/triple (pinned but unused).
+    - "target_only":     host world never activated; renders today's content.
+    - "host_only":       target never activated; base target carries the host
+                         view (no `_host` suffix; includes proc-macros).
+    - "identical":       both active, no per-triple difference (disjoint-triple
+                         activity included — base renders the merged view).
+    - "divergent":       both active and features/deps/build-deps differ at some
+                         shared triple; rendering emits a `:<name>_host` target.
+    - "label_divergent": not itself divergent, but a host-world dep is, so the
+                         host instance's dep LABELS differ; also emits `_host`.
+
+    Divergence propagates along host-world normal-dep edges, dependencies before
+    dependents (iterative Kahn; acyclic since dev edges are dropped). Host-only
+    crates don't propagate upward (their base already renders the host view).
+    """
+    feature_resolutions_by_fq = {}
+    target_active_by_fq = {}
+    host_active_by_fq = {}
+    feature_divergent_by_fq = {}
+
+    for package in packages:
+        fq = fq_crate(package["name"], package["version"])
+        feature_resolutions = package["feature_resolutions"]
+        host_state = feature_resolutions.host["state"]
+
+        target_active_any = False
+        for is_active in feature_resolutions.target_active.values():
+            if is_active:
+                target_active_any = True
+                break
+
+        host_active_any = False
+        if host_state != None:
+            for is_active in host_state["active"].values():
+                if is_active:
+                    host_active_any = True
+                    break
+
+        feature_divergent = False
+        if target_active_any and host_active_any:
+            for triple in platform_triples:
+                if not feature_resolutions.target_active[triple] or not host_state["active"][triple]:
+                    continue
+                if (host_state["features_enabled"][triple] != feature_resolutions.features_enabled[triple] or
+                    host_state["deps"][triple] != feature_resolutions.deps[triple] or
+                    host_state["build_deps"][triple] != feature_resolutions.build_deps[triple]):
+                    feature_divergent = True
+                    break
+
+        feature_resolutions_by_fq[fq] = feature_resolutions
+        target_active_by_fq[fq] = target_active_any
+        host_active_by_fq[fq] = host_active_any
+        feature_divergent_by_fq[fq] = feature_divergent
+
+    # Host-world normal-dep edges between classified packages; recover the fq
+    # from the label tail. Edges outside the set (e.g. members) can't diverge.
+    host_dep_fqs_by_fq = {}
+    rdep_fqs_by_fq = {}
+    for fq, feature_resolutions in feature_resolutions_by_fq.items():
+        host_dep_fqs = []
+        host_state = feature_resolutions.host["state"]
+        if host_state != None:
+            seen = set()
+            for triple in platform_triples:
+                for label in host_state["deps"][triple]:
+                    dep_fq = label[label.rfind(":") + 1:]
+                    if dep_fq == fq or dep_fq in seen or dep_fq not in feature_resolutions_by_fq:
+                        continue
+                    seen.add(dep_fq)
+                    host_dep_fqs.append(dep_fq)
+        host_dep_fqs_by_fq[fq] = host_dep_fqs
+        for dep_fq in host_dep_fqs:
+            add_to_dict(rdep_fqs_by_fq, dep_fq, fq)
+
+    # Iterative Kahn pass, dependencies before dependents (cursor drain).
+    pending_dep_counts = {}
+    ready = []
+    for fq, host_dep_fqs in host_dep_fqs_by_fq.items():
+        pending_dep_counts[fq] = len(host_dep_fqs)
+        if not host_dep_fqs:
+            ready.append(fq)
+
+    divergent_by_fq = {}
+    for cursor in range(len(feature_resolutions_by_fq)):
+        if cursor >= len(ready):
+            break
+        fq = ready[cursor]
+
+        label_divergent = False
+        for dep_fq in host_dep_fqs_by_fq[fq]:
+            if divergent_by_fq[dep_fq]:
+                label_divergent = True
+                break
+
+        divergent_by_fq[fq] = (
+            target_active_by_fq[fq] and
+            (feature_divergent_by_fq[fq] or (host_active_by_fq[fq] and label_divergent))
+        )
+
+        for rdep_fq in rdep_fqs_by_fq.get(fq, []):
+            pending_dep_counts[rdep_fq] -= 1
+            if pending_dep_counts[rdep_fq] == 0:
+                ready.append(rdep_fq)
+
+    if len(divergent_by_fq) != len(feature_resolutions_by_fq):
+        fail("rules_rs internal error: cycle detected in the host-world dependency graph during world classification")
+
+    classes_by_fq = {}
+    for fq in feature_resolutions_by_fq:
+        target_active_any = target_active_by_fq[fq]
+        host_active_any = host_active_by_fq[fq]
+        if not target_active_any and not host_active_any:
+            classes_by_fq[fq] = "unactivated"
+        elif target_active_any and not host_active_any:
+            classes_by_fq[fq] = "target_only"
+        elif host_active_any and not target_active_any:
+            classes_by_fq[fq] = "host_only"
+        elif feature_divergent_by_fq[fq]:
+            classes_by_fq[fq] = "divergent"
+        elif divergent_by_fq[fq]:
+            classes_by_fq[fq] = "label_divergent"
+        else:
+            classes_by_fq[fq] = "identical"
+
+    return classes_by_fq
+
+def is_divergent_class(crate_class):
+    return crate_class == "divergent" or crate_class == "label_divergent"
+
+def host_rewritten_label(label, classes_by_fq):
+    """Rewrites a host-world dep edge's label to the `_host` sibling iff the target crate is divergent."""
+    dep_fq = label[label.rfind(":") + 1:]
+    if is_divergent_class(classes_by_fq.get(dep_fq)):
+        return label + "_host"
+    return label
+
+def _host_rewritten_labels(labels, classes_by_fq):
+    return set([host_rewritten_label(label, classes_by_fq) for label in labels])
+
+def _host_rewritten_aliases(aliases, classes_by_fq):
+    return {host_rewritten_label(label, classes_by_fq): alias for label, alias in aliases.items()}
+
+def _with_rewritten_alias_keys(aliases, classes_by_fq):
+    # The base `_bs` consumes both host-rewritten build-dep labels and
+    # unrewritten link_deps, so keep the original keys and ADD the rewritten
+    # spellings (extra keys are harmless).
+    rewritten = dict(aliases)
+    for label, alias in aliases.items():
+        rewritten_label = host_rewritten_label(label, classes_by_fq)
+        if rewritten_label != label:
+            rewritten[rewritten_label] = alias
+    return rewritten
+
+def render_world_views(feature_resolutions, crate_class, classes_by_fq, platform_triples):
+    """Computes the rendered views for one spoke crate.
+
+    The BASE views are the per-(crate, triple) world merge: target view where
+    target-active, else host view where host-active, else the active world's
+    view as a fallback (cfg-gated crates may still be CONFIGURED and must stay
+    buildable), else empty. Base `deps` are unrewritten on target triples and
+    host-rewritten where the host view renders; base `build_deps` are ALWAYS
+    host-rewritten (build-dep subtree is host world for both instances).
+
+    Returns a struct:
+      crate_features/deps/build_deps: {triple: set} base views.
+      aliases: base lib alias dict.
+      build_script_aliases: dict or None (None -> rust_crate uses aliases).
+      host_crate_features/host_deps/host_build_deps: {triple: set} or None —
+          host-instance views, only for divergent/label_divergent crates.
+      host_aliases: dict or None.
+      unactivated: bool (render the loud incompatible stub).
+    """
+    host_state = feature_resolutions.host["state"]
+    target_active = feature_resolutions.target_active
+
+    target_active_anywhere = False
+    for is_active in target_active.values():
+        if is_active:
+            target_active_anywhere = True
+            break
+
+    host_active_anywhere = False
+    if host_state != None:
+        for is_active in host_state["active"].values():
+            if is_active:
+                host_active_anywhere = True
+                break
+
+    base_features = {}
+    base_deps = {}
+    base_build_deps = {}
+    base_aliases = {}
+    merged_host_view = False
+    merged_target_view = False
+    for triple in platform_triples:
+        # Per-triple merge. Priority: this triple's target world, else its host
+        # world, else the target fallback (active at another triple), else the
+        # host fallback, else empty. The fallback keeps cfg-gated crates that
+        # are merely CONFIGURED (public hub aliases, hand-written refs)
+        # buildable instead of silently empty.
+        host_active_here = host_state != None and host_state["active"][triple]
+        if target_active[triple] or (not host_active_here and target_active_anywhere):
+            merged_target_view = True
+            base_features[triple] = feature_resolutions.features_enabled[triple]
+            base_deps[triple] = feature_resolutions.deps[triple]
+            base_build_deps[triple] = _host_rewritten_labels(feature_resolutions.build_deps[triple], classes_by_fq)
+        elif host_active_here or host_active_anywhere:
+            merged_host_view = True
+            base_features[triple] = host_state["features_enabled"][triple]
+            base_deps[triple] = _host_rewritten_labels(host_state["deps"][triple], classes_by_fq)
+            base_build_deps[triple] = _host_rewritten_labels(host_state["build_deps"][triple], classes_by_fq)
+        else:
+            base_features[triple] = set()
+            base_deps[triple] = set()
+            base_build_deps[triple] = set()
+
+    if merged_target_view:
+        base_aliases |= feature_resolutions.aliases
+    if merged_host_view:
+        base_aliases |= _host_rewritten_aliases(host_state["aliases"], classes_by_fq)
+
+    build_script_aliases = _with_rewritten_alias_keys(base_aliases, classes_by_fq)
+    if build_script_aliases == base_aliases:
+        build_script_aliases = None
+
+    host_crate_features = None
+    host_deps = None
+    host_build_deps = None
+    host_aliases = None
+    if is_divergent_class(crate_class):
+        host_crate_features = {}
+        host_deps = {}
+        host_build_deps = {}
+        for triple in platform_triples:
+            if host_state["active"][triple]:
+                host_crate_features[triple] = host_state["features_enabled"][triple]
+                host_deps[triple] = _host_rewritten_labels(host_state["deps"][triple], classes_by_fq)
+                host_build_deps[triple] = _host_rewritten_labels(host_state["build_deps"][triple], classes_by_fq)
+            else:
+                host_crate_features[triple] = set()
+                host_deps[triple] = set()
+                host_build_deps[triple] = set()
+        host_aliases = _host_rewritten_aliases(host_state["aliases"], classes_by_fq)
+
+    return struct(
+        crate_features = base_features,
+        deps = base_deps,
+        build_deps = base_build_deps,
+        aliases = base_aliases,
+        build_script_aliases = build_script_aliases,
+        host_crate_features = host_crate_features,
+        host_deps = host_deps,
+        host_build_deps = host_build_deps,
+        host_aliases = host_aliases,
+        unactivated = crate_class == "unactivated",
+    )
+
 def resolve_cargo_workspace_members(
         ctx,
         *,
@@ -529,7 +825,13 @@ def resolve_cargo_workspace_members(
             "dependencies": lockfile_pkg.get("dependencies", []),
         }
 
-        feature_resolutions = new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
+        feature_resolutions = new_feature_resolutions(
+            package_index,
+            possible_deps,
+            possible_features,
+            platform_triples,
+            is_workspace_member = True,
+        )
         resolver_package["feature_resolutions"] = feature_resolutions
         feature_resolutions_by_fq_crate[fq_crate(name, version)] = feature_resolutions
 
@@ -554,6 +856,12 @@ def resolve_cargo_workspace_members(
             ctx.watch(package["manifest_path"])
 
         package_feature_resolutions = feature_resolutions_by_fq_crate[fq_crate(package["name"], package["version"])]
+
+        # Members are world boundaries: always target-world roots (single
+        # gazelle targets must link base instances everywhere).
+        for triple in platform_triples:
+            package_feature_resolutions.target_active[triple] = True
+
         if "default" in package.get("features", {}):
             for triple in platform_triples:
                 package_feature_resolutions.features_enabled[triple].add("default")
@@ -614,6 +922,14 @@ def resolve_cargo_workspace_members(
                 if not is_first_party_dep or materialize_workspace_members:
                     workspace_dep_labels_by_triple[triple].add(":" + dep_name)
                 feature_resolutions.features_enabled[triple].update(features)
+                feature_resolutions.target_active[triple] = True
+
+                # Member [build-dependencies] are feature-AMPHIBIOUS:
+                # edge stays target-world, but features also reach the
+                # dep's host instance (without activating it) so shared
+                # crates agree across worlds.
+                if dep.get("kind") == "build" and not feature_resolutions.is_workspace_member:
+                    seed_pending_host_features(feature_resolutions, triple, features)
 
     for crate, annotation_versions in annotations.items():
         for version_key, annotation in annotation_versions.items():
@@ -625,19 +941,22 @@ def resolve_cargo_workspace_members(
             if not annotation.crate_features and not annotation.crate_features_select:
                 continue
             for version in target_versions:
-                features_enabled = feature_resolutions_by_fq_crate[fq_crate(crate, version)].features_enabled
+                annotated_feature_resolutions = feature_resolutions_by_fq_crate[fq_crate(crate, version)]
+                features_enabled = annotated_feature_resolutions.features_enabled
                 if annotation.crate_features:
                     for triple in platform_triples:
                         features_enabled[triple].update(annotation.crate_features)
                 for triple, features in annotation.crate_features_select.items():
                     if triple in features_enabled:
                         features_enabled[triple].update(features)
+                _seed_annotation_host_features(annotated_feature_resolutions, annotation, platform_triples)
 
-    resolve(ctx, resolver_packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug)
+    resolution_rounds = resolve(ctx, resolver_packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug)
 
     for package in packages:
         feature_resolutions = package["feature_resolutions"]
         features_enabled = feature_resolutions.features_enabled
+        host_state = feature_resolutions.host["state"]
 
         for dep in feature_resolutions.possible_deps:
             if "bazel_target" in dep:
@@ -648,8 +967,11 @@ def resolve_cargo_workspace_members(
             for triple in platform_triples:
                 if prefixed_dep_alias in features_enabled[triple]:
                     fail("Crate %s has enabled %s but it was not in the lockfile..." % (package["name"], prefixed_dep_alias))
+                if host_state != None and prefixed_dep_alias in host_state["features_enabled"][triple]:
+                    fail("Crate %s has enabled %s in the host world but it was not in the lockfile..." % (package["name"], prefixed_dep_alias))
 
     return struct(
+        resolution_rounds = resolution_rounds,
         cfg_match_cache = cfg_match_cache,
         feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,
         platform_cfg_attrs = platform_cfg_attrs,
@@ -671,6 +993,8 @@ def workspace_dep_data(
         repo_root,
         workspace_package,
         use_legacy_rules_rust_platforms):
+    # Members are world boundaries, so DEP_DATA always renders the target-world
+    # view with unrewritten labels (no `_host` label may reach it).
     dep_data = {}
     for package in cargo_metadata["packages"]:
         aliases = {}
@@ -710,6 +1034,8 @@ def workspace_dep_data(
                     continue
                 bazel_target = "//" + paths.join(workspace_package, normalize_path(dep_path).removeprefix(repo_root + "/"))
 
+            kind = dep["kind"]
+
             is_self_dep = dep_path and normalize_path(dep_path) == package_manifest_dir
 
             if not is_self_dep:
@@ -722,7 +1048,6 @@ def workspace_dep_data(
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
             match = match_info.matches
 
-            kind = dep["kind"]
             if kind == "dev":
                 target_deps = dev_deps
             elif kind == "build":
