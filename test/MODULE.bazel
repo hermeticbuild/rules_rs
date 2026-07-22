@@ -172,6 +172,7 @@ TESTS = [
     "binaries",
     "binary_only",
     "uv",
+    "garage",
 ]
 
 [
