@@ -9,16 +9,15 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
   workflow_call:
-    secrets:
-      BUILDBUDDY_API_KEY:
-        required: true
-      SSH_PRIVATE_KEY:
-        required: true
 concurrency:
   # Cancel previous actions from the same PR or branch except 'main' branch.
   # See https://docs.github.com/en/actions/using-jobs/using-concurrency and https://docs.github.com/en/actions/learn-github-actions/contexts for more info.
   group: concurrency-group::${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}${{ github.ref_name == 'main' && format('::{0}', github.run_id) || ''}}
   cancel-in-progress: ${{ github.ref_name != 'main' }}
+env:
+  # hermeticbuild/hermetic-llvm already publishes this BuildBuddy key, so fork
+  # pull requests can use remote execution without repository secrets.
+  BUILDBUDDY_API_KEY: 4jtaxdhxtyu4ylxdEwI7
 jobs:
   test:
     strategy:
@@ -38,16 +37,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Trust GitHub host key
+      # test/git_crates/Cargo.toml exercises SSH-form GitHub dependencies, but
+      # fork pull requests cannot access SSH_PRIVATE_KEY for that public repo.
+      - name: Fetch public GitHub SSH dependencies over HTTPS
         shell: bash
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
       # Cache build and external artifacts so that the next ci build is incremental.
       # Because github action caches cannot be updated after a build, we need to
@@ -72,8 +68,6 @@ jobs:
       - name: bazel test //...
         env:
           USE_BAZEL_VERSION: ${{ matrix.bazel_version }}
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-          GIT_SSH_COMMAND: ssh -o StrictHostKeyChecking=yes
         working-directory: ${{ matrix.folder }}
         shell: bash
         run: |
@@ -100,23 +94,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Trust GitHub host key
+      # test/git_crates/Cargo.toml exercises SSH-form GitHub dependencies, but
+      # fork pull requests cannot access SSH_PRIVATE_KEY for that public repo.
+      - name: Fetch public GitHub SSH dependencies over HTTPS
         shell: bash
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
       - name: bazel test windows targets
         id: bazel_test
         env:
           USE_BAZEL_VERSION: ${{ matrix.bazel_version }}
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-          GIT_SSH_COMMAND: ssh -o StrictHostKeyChecking=yes
         working-directory: ${{ matrix.folder }}
         shell: bash
         run: |
