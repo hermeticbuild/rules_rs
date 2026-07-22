@@ -560,6 +560,7 @@ cargo_lints(
 
     defs_bzl_contents = \
         """load(":data.bzl", "DEP_DATA")
+load("@rules_rs//rs/private:aliases.bzl", _aliases = "aliases")
 load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
 
 _PLATFORMS = [
@@ -571,7 +572,7 @@ def aliases(package_name = None):
     if not dep_data:
         return {{}}
 
-    return dep_data["aliases"]
+    return _aliases(dep_data, platforms = _PLATFORMS)
 
 def all_crate_deps(
         normal = False,

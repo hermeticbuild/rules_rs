@@ -1,5 +1,6 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_fq_deps", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages")
+load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_fq_deps", "platform_label", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages", "workspace_dep_data")
+load(":cfg_parser.bzl", "triple_to_cfg_attrs")
 
 def _select_package_fq_dep_uses_package_name_impl(ctx):
     env = unittest.begin(ctx)
@@ -265,6 +266,64 @@ def _resolve_package_facts_attaches_feature_resolutions_impl(ctx):
 
 resolve_package_facts_attaches_feature_resolutions_test = unittest.make(_resolve_package_facts_attaches_feature_resolutions_impl)
 
+def _workspace_dep_data_scopes_first_party_aliases_by_platform_impl(ctx):
+    env = unittest.begin(ctx)
+
+    platform_triples = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+    platform_cfg_attrs = [triple_to_cfg_attrs(triple) for triple in platform_triples]
+
+    dep_data = workspace_dep_data(
+        cargo_metadata = {
+            "packages": [
+                {
+                    "name": "app",
+                    "version": "0.1.0",
+                    "manifest_path": "/repo/app/Cargo.toml",
+                    "dependencies": [
+                        {
+                            "name": "netdep",
+                            "kind": "normal",
+                            "path": "/repo/netdep",
+                            "bazel_target": "//netdep",
+                            "target": "cfg(target_os = \"linux\")",
+                        },
+                        {
+                            "name": "macdep",
+                            "kind": "normal",
+                            "path": "/repo/macdep",
+                            "bazel_target": "//macdep",
+                            "target": "cfg(target_os = \"macos\")",
+                        },
+                    ],
+                },
+            ],
+        },
+        feature_resolutions_by_fq_crate = {},
+        platform_triples = platform_triples,
+        platform_cfg_attrs = platform_cfg_attrs,
+        cfg_match_cache = {},
+        repo_root = "/repo",
+        workspace_package = "",
+        use_legacy_rules_rust_platforms = False,
+    )
+
+    app = dep_data["app"]
+    linux_platform = platform_label("x86_64-unknown-linux-gnu", False)
+    darwin_platform = platform_label("aarch64-apple-darwin", False)
+
+    # No first-party alias is shared across all platforms.
+    asserts.equals(env, {}, app["aliases"])
+
+    # Each alias only appears for the platform that actually depends on it.
+    asserts.equals(env, {
+        linux_platform: {"//netdep": "netdep"},
+        darwin_platform: {"//macdep": "macdep"},
+    }, app["aliases_by_platform"])
+
+    return unittest.end(env)
+
+workspace_dep_data_scopes_first_party_aliases_by_platform_test = unittest.make(_workspace_dep_data_scopes_first_party_aliases_by_platform_impl)
+
 def cargo_workspace_graph_tests():
     return unittest.suite(
         "cargo_workspace_graph_tests",
@@ -274,4 +333,5 @@ def cargo_workspace_graph_tests():
         select_package_fq_dep_uses_package_name_test,
         select_package_fq_dep_uses_req_for_duplicate_versions_test,
         split_lockfile_packages_finds_local_package_paths_test,
+        workspace_dep_data_scopes_first_party_aliases_by_platform_test,
     )

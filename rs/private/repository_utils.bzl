@@ -1,4 +1,4 @@
-load(":select_utils.bzl", "compute_select")
+load(":select_utils.bzl", "compute_select_list")
 load(":semver.bzl", "parse_full_version")
 
 # Bazel 8 does not define attr.label_list_dict.
@@ -22,7 +22,7 @@ def render_select(non_platform_items, platform_items, use_legacy_rules_rust_plat
         platform: [str(item) for item in items]
         for platform, items in platform_items.items()
     }
-    common_items, branches = compute_select(non_platform_items, platform_items)
+    common_items, branches = compute_select_list(non_platform_items, platform_items)
     common_items = list(common_items)
 
     if not branches:
@@ -207,7 +207,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
     # See `rust_crate.bzl` for details.
-    crate_features, conditional_crate_features = compute_select(
+    crate_features, conditional_crate_features = compute_select_list(
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
     )

@@ -1,7 +1,7 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:resolver.bzl", "resolve")
-load("//rs/private:select_utils.bzl", "compute_select")
+load("//rs/private:select_utils.bzl", "compute_select_dict", "compute_select_list")
 load("//rs/private:semver.bzl", "select_matching_version")
 
 def platform_label(triple, use_legacy_rules_rust_platforms):
@@ -31,7 +31,22 @@ def add_to_dict(d, k, v):
 def exclude_deps_from_features(features):
     return [f for f in features if not f.startswith("dep:")]
 
-def shared_and_per_platform(platform_items, use_legacy_rules_rust_platforms):
+def _shared_and_per_platform_dict(platform_items, use_legacy_rules_rust_platforms):
+    if not platform_items:
+        return {}, {}
+
+    by_platform = {}
+    for triple, items in platform_items.items():
+        platform = platform_label(triple, use_legacy_rules_rust_platforms)
+        existing = by_platform.get(platform)
+        if existing == None:
+            by_platform[platform] = dict(items)
+        else:
+            existing.update(items)
+
+    return compute_select_dict({}, by_platform)
+
+def _shared_and_per_platform_list(platform_items, use_legacy_rules_rust_platforms):
     if not platform_items:
         return [], {}
 
@@ -44,7 +59,7 @@ def shared_and_per_platform(platform_items, use_legacy_rules_rust_platforms):
         else:
             existing.update(items)
 
-    items, per_platform = compute_select([], by_platform)
+    items, per_platform = compute_select_list([], by_platform)
     return sorted(items), per_platform
 
 def select_items(items):
@@ -712,12 +727,6 @@ def workspace_dep_data(
 
             is_self_dep = dep_path and normalize_path(dep_path) == package_manifest_dir
 
-            if not is_self_dep:
-                if dep.get("rename"):
-                    aliases[bazel_target] = dep["rename"].replace("-", "_")
-                elif dep_path:
-                    aliases[bazel_target] = dep["name"].replace("-", "_")
-
             target = dep.get("target")
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
             match = match_info.matches
@@ -740,6 +749,11 @@ def workspace_dep_data(
                 if is_self_dep:
                     continue
 
+                if dep.get("rename"):
+                    aliases.setdefault(triple, {})[bazel_target] = dep["rename"].replace("-", "_")
+                elif dep_path:
+                    aliases.setdefault(triple, {})[bazel_target] = dep["name"].replace("-", "_")
+
                 target_deps[triple].add(bazel_target)
 
         if feature_resolutions:
@@ -748,13 +762,15 @@ def workspace_dep_data(
 
         bazel_package = paths.join(workspace_package, package_dir) if package_dir else workspace_package
 
-        crate_features, crate_features_by_platform = shared_and_per_platform(crate_features, use_legacy_rules_rust_platforms)
-        deps, deps_by_platform = shared_and_per_platform(deps, use_legacy_rules_rust_platforms)
-        build_deps, build_deps_by_platform = shared_and_per_platform(build_deps, use_legacy_rules_rust_platforms)
-        dev_deps, dev_deps_by_platform = shared_and_per_platform(dev_deps, use_legacy_rules_rust_platforms)
+        aliases, aliases_by_platform = _shared_and_per_platform_dict(aliases, use_legacy_rules_rust_platforms)
+        crate_features, crate_features_by_platform = _shared_and_per_platform_list(crate_features, use_legacy_rules_rust_platforms)
+        deps, deps_by_platform = _shared_and_per_platform_list(deps, use_legacy_rules_rust_platforms)
+        build_deps, build_deps_by_platform = _shared_and_per_platform_list(build_deps, use_legacy_rules_rust_platforms)
+        dev_deps, dev_deps_by_platform = _shared_and_per_platform_list(dev_deps, use_legacy_rules_rust_platforms)
 
         dep_data[bazel_package] = {
             "aliases": aliases,
+            "aliases_by_platform": aliases_by_platform,
             "binaries": binaries,
             "build_deps": build_deps,
             "build_deps_by_platform": build_deps_by_platform,
