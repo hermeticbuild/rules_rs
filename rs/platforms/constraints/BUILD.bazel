@@ -20,6 +20,26 @@ constraint_value(
 )
 
 constraint_setting(
+    # Bare-metal RISC-V target triples can share the same Bazel CPU and OS
+    # constraints while enabling different ISA extensions. Default to the
+    # previously supported RV32IMC target so existing custom riscv32/none
+    # platforms continue to resolve to the same Rust toolchain.
+    name = "riscv_isa",
+    default_constraint_value = "rv32imc",
+)
+
+constraint_value(
+    name = "rv32imc",
+    constraint_setting = "riscv_isa",
+)
+
+constraint_value(
+    # ESP32-C6 and ESP32-H2 use the atomic-capable RV32IMAC target.
+    name = "rv32imac",
+    constraint_setting = "riscv_isa",
+)
+
+constraint_setting(
     # Disambiguates ARM soft-float vs hard-float target triples that otherwise
     # project to identical constraint sets (e.g. arm-unknown-linux-gnueabi vs
     # ...gnueabihf, or aarch64-unknown-none vs ...none-softfloat). Defaults to

@@ -65,6 +65,7 @@ def declare_rustc_toolchains(
         rustc_repo_label = "@rustc_{}_{}//:".format(triple_suffix, version_key)
         cargo_repo_label = "@cargo_{}_{}//:".format(triple_suffix, version_key)
         clippy_repo_label = "@clippy_{}_{}//:".format(triple_suffix, version_key)
+        lld_label = rustc_repo_label + "rust-lld"
 
         rust_toolchain_name = "{}_{}_{}_rust_toolchain".format(
             exec_triple.system,
@@ -102,8 +103,10 @@ def declare_rustc_toolchains(
             llvm_cov = "@llvm//tools:llvm-cov",
             llvm_profdata = "@llvm//tools:llvm-profdata",
             linker = select({
-                "@platforms//cpu:wasm32": "{}rust-lld".format(rustc_repo_label),
-                "@platforms//cpu:wasm64": "{}rust-lld".format(rustc_repo_label),
+                "@rules_rs//rs/platforms/config:riscv32imac-unknown-none-elf": lld_label,
+                "@rules_rs//rs/platforms/config:riscv32imc-unknown-none-elf": lld_label,
+                "@platforms//cpu:wasm32": lld_label,
+                "@platforms//cpu:wasm64": lld_label,
                 "//conditions:default": None,
             }),
             linker_type = "direct",
