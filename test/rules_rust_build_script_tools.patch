@@ -1,8 +1,0 @@
-diff --git a/cargo/private/cargo_build_script.bzl b/cargo/private/cargo_build_script.bzl
---- a/cargo/private/cargo_build_script.bzl
-+++ b/cargo/private/cargo_build_script.bzl
-@@ -392,3 +392,3 @@ def _cargo_build_script_impl(ctx):
--    for target in ctx.attr.data:
-+    for target in ctx.attr.data + ctx.attr.tools:
-         script_data.append(target[DefaultInfo].files)
-         script_data.append(target[DefaultInfo].default_runfiles.files)
