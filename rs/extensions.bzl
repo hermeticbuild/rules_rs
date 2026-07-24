@@ -23,7 +23,7 @@ load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repos
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_repository")
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
-load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
+load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name")
 load("//rs/private:repository_utils.bzl", "render_select")
@@ -530,6 +530,7 @@ filegroup(
     )
 
     lint_flags = cargo_toml_lint_flags(workspace_cargo_toml_json)
+    workspace_lint_flags = workspace_cargo_toml_lint_flags(workspace_cargo_toml_json)
     hub_contents.append(
         """
 load("@rules_rs//rs/private:cargo_lints.bzl", "cargo_lints")
@@ -545,10 +546,26 @@ cargo_lints(
     rustdoc_lint_flags = [
         {rustdoc}
     ],
+)
+
+cargo_lints(
+    name = "workspace_cargo_lints",
+    rustc_lint_flags = [
+        {workspace_rustc}
+    ],
+    clippy_lint_flags = [
+        {workspace_clippy}
+    ],
+    rustdoc_lint_flags = [
+        {workspace_rustdoc}
+    ],
 )""".format(
             rustc = _render_ordered_string_list(lint_flags.rustc_lint_flags),
             clippy = _render_ordered_string_list(lint_flags.clippy_lint_flags),
             rustdoc = _render_ordered_string_list(lint_flags.rustdoc_lint_flags),
+            workspace_rustc = _render_ordered_string_list(workspace_lint_flags.rustc_lint_flags),
+            workspace_clippy = _render_ordered_string_list(workspace_lint_flags.clippy_lint_flags),
+            workspace_rustdoc = _render_ordered_string_list(workspace_lint_flags.rustdoc_lint_flags),
         ),
     )
 
