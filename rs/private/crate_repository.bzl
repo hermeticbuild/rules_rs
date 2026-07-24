@@ -1,7 +1,7 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
 load(":cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
-load(":registry_utils.bzl", "sharded_path")
+load(":registry_utils.bzl", "registry_download_url_from_template")
 load(":repository_utils.bzl", "cargo_build_file_values", "common_attrs", "render_build_file_content")
 load(":toml2json.bzl", "run_toml2json")
 
@@ -41,13 +41,7 @@ def _crate_repository_impl(rctx):
 
     dl = rctx.read(rctx.attr.registry_config)
 
-    url = dl.format(**{
-        "crate": crate_name,
-        "version": version,
-        "prefix": sharded_path(crate_name),
-        "lowerprefix": sharded_path(crate_name.lower()),
-        "sha256-checksum": sha256,
-    })
+    url = registry_download_url_from_template(dl, crate_name, version, sha256)
 
     rctx.download_and_extract(
         url,

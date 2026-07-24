@@ -7,6 +7,7 @@ load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
+load(":registry_utils_test.bzl", "registry_utils_tests")
 load(":semver_test.bzl", "semver_select_tests")
 
 bool_setting(
@@ -32,6 +33,8 @@ cargo_workspace_graph_tests()
 cfg_parser_tests()
 
 lint_flags_tests()
+
+registry_utils_tests()
 
 semver_select_tests()
 
@@ -135,13 +138,25 @@ bzl_library(
     name = "registry_config_repository",
     srcs = ["registry_config_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
-    deps = [":cargo_credentials"],
+    deps = [
+        ":cargo_credentials",
+        ":registry_utils",
+    ],
 )
 
 bzl_library(
     name = "registry_utils",
     srcs = ["registry_utils.bzl"],
     visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "registry_utils_test",
+    srcs = ["registry_utils_test.bzl"],
+    deps = [
+        ":registry_utils",
+        "@bazel_skylib//lib:unittest",
+    ],
 )
 
 bzl_library(
