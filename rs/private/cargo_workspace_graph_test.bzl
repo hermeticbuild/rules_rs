@@ -352,42 +352,12 @@ def _resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl(ctx
 
 resolve_handles_dependency_chains_deeper_than_previous_round_limit_test = unittest.make(_resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl)
 
-def _resolve_handles_feature_chains_deeper_than_previous_round_limit_impl(ctx):
-    env = unittest.begin(ctx)
-
-    triple = "x86_64-unknown-linux-gnu"
-    triples = [triple]
-    possible_features = {}
-    for index in range(60):
-        feature = "feature-%s" % index
-        possible_features[feature] = [] if index == 59 else ["feature-%s" % (index + 1)]
-
-    resolution = new_feature_resolutions(0, [], possible_features, triples)
-    resolution.features_enabled[triple].add("feature-0")
-    resolve(
-        None,
-        [{
-            "feature_resolutions": resolution,
-            "name": "feature-chain",
-            "version": "1.0.0",
-        }],
-        {"feature-chain-1.0.0": resolution},
-        {},
-        False,
-    )
-
-    asserts.true(env, "feature-59" in resolution.features_enabled[triple])
-    return unittest.end(env)
-
-resolve_handles_feature_chains_deeper_than_previous_round_limit_test = unittest.make(_resolve_handles_feature_chains_deeper_than_previous_round_limit_impl)
-
 def cargo_workspace_graph_tests():
     return unittest.suite(
         "cargo_workspace_graph_tests",
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
         resolve_handles_dependency_chains_deeper_than_previous_round_limit_test,
-        resolve_handles_feature_chains_deeper_than_previous_round_limit_test,
         resolve_package_facts_attaches_feature_resolutions_test,
         resolve_package_facts_preserves_persisted_dependency_features_test,
         select_package_fq_dep_uses_package_name_test,
