@@ -1,3 +1,4 @@
+load(":cargo_toml_utils.bzl", "cargo_toml_is_proc_macro")
 load(":select_utils.bzl", "compute_select")
 load(":semver.bzl", "parse_full_version")
 
@@ -124,7 +125,7 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
             build_script = "build.rs"
 
     lib = cargo_toml.get("lib", {})
-    is_proc_macro = lib.get("proc-macro") or lib.get("proc_macro") or False
+    is_proc_macro = cargo_toml_is_proc_macro(cargo_toml)
     crate_root = (lib.get("path") or "src/lib.rs").removeprefix("./")
     has_lib = "lib" in cargo_toml or package_dir.get_child(crate_root).exists
 
