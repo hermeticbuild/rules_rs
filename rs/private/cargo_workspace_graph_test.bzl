@@ -1,5 +1,6 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_fq_deps", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages")
+load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_fq_deps", "new_feature_resolutions", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages")
+load(":resolver.bzl", "resolve")
 
 def _select_package_fq_dep_uses_package_name_impl(ctx):
     env = unittest.begin(ctx)
@@ -265,12 +266,130 @@ def _resolve_package_facts_attaches_feature_resolutions_impl(ctx):
 
 resolve_package_facts_attaches_feature_resolutions_test = unittest.make(_resolve_package_facts_attaches_feature_resolutions_impl)
 
+def _resolve_package_facts_preserves_persisted_dependency_features_impl(ctx):
+    env = unittest.begin(ctx)
+
+    facts = {
+        "consumer-1.0.0": {
+            "dependencies": [
+                {
+                    "default_features": True,
+                    "features": ["derive"],
+                    "name": "helper",
+                },
+            ],
+            "features": {},
+        },
+        "helper-1.0.0": {
+            "dependencies": [],
+            "features": {},
+        },
+    }
+    packages = [
+        {
+            "dependencies": ["helper 1.0.0"],
+            "name": "consumer",
+            "version": "1.0.0",
+        },
+        {
+            "dependencies": [],
+            "name": "helper",
+            "version": "1.0.0",
+        },
+    ]
+
+    first = resolve_package_facts(packages, facts, ["x86_64-unknown-linux-gnu"])
+    resolve_package_facts([dict(package) for package in packages], facts, ["x86_64-unknown-linux-gnu"])
+
+    asserts.equals(env, ["derive"], facts["consumer-1.0.0"]["dependencies"][0]["features"])
+    asserts.equals(
+        env,
+        ["derive", "default"],
+        first.feature_resolutions_by_fq_crate["consumer-1.0.0"].possible_deps[0]["features"],
+    )
+    return unittest.end(env)
+
+resolve_package_facts_preserves_persisted_dependency_features_test = unittest.make(_resolve_package_facts_preserves_persisted_dependency_features_impl)
+
+def _resolve_handles_dependency_chains_deeper_than_round_limit_impl(ctx):
+    env = unittest.begin(ctx)
+
+    triple = "x86_64-unknown-linux-gnu"
+    triples = [triple]
+    packages = []
+    resolutions = []
+    resolutions_by_crate = {}
+    for index in range(60):
+        name = "chain-%s" % index
+        possible_deps = []
+        if index:
+            possible_deps.append({
+                "bazel_target": "//:chain-%s" % (index - 1),
+                "feature_resolutions": resolutions[index - 1],
+                "name": "chain-%s" % (index - 1),
+                "target": set(triples),
+            })
+
+        possible_features = {"forward": []}
+        if index:
+            possible_features["forward"] = ["chain-%s/forward" % (index - 1)]
+
+        resolution = new_feature_resolutions(index, possible_deps, possible_features, triples)
+        resolutions.append(resolution)
+        resolutions_by_crate["%s-1.0.0" % name] = resolution
+        packages.append({
+            "feature_resolutions": resolution,
+            "name": name,
+            "version": "1.0.0",
+        })
+
+    resolutions[-1].features_enabled[triple].add("forward")
+    resolve(None, packages, resolutions_by_crate, {}, False)
+
+    asserts.true(env, "forward" in resolutions[0].features_enabled[triple])
+    asserts.equals(env, ["//:chain-0"], sorted(resolutions[1].deps[triple]))
+    return unittest.end(env)
+
+resolve_handles_dependency_chains_deeper_than_round_limit_test = unittest.make(_resolve_handles_dependency_chains_deeper_than_round_limit_impl)
+
+def _resolve_handles_feature_chains_deeper_than_round_limit_impl(ctx):
+    env = unittest.begin(ctx)
+
+    triple = "x86_64-unknown-linux-gnu"
+    triples = [triple]
+    possible_features = {}
+    for index in range(60):
+        feature = "feature-%s" % index
+        possible_features[feature] = [] if index == 59 else ["feature-%s" % (index + 1)]
+
+    resolution = new_feature_resolutions(0, [], possible_features, triples)
+    resolution.features_enabled[triple].add("feature-0")
+    resolve(
+        None,
+        [{
+            "feature_resolutions": resolution,
+            "name": "feature-chain",
+            "version": "1.0.0",
+        }],
+        {"feature-chain-1.0.0": resolution},
+        {},
+        False,
+    )
+
+    asserts.true(env, "feature-59" in resolution.features_enabled[triple])
+    return unittest.end(env)
+
+resolve_handles_feature_chains_deeper_than_round_limit_test = unittest.make(_resolve_handles_feature_chains_deeper_than_round_limit_impl)
+
 def cargo_workspace_graph_tests():
     return unittest.suite(
         "cargo_workspace_graph_tests",
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
+        resolve_handles_dependency_chains_deeper_than_round_limit_test,
+        resolve_handles_feature_chains_deeper_than_round_limit_test,
         resolve_package_facts_attaches_feature_resolutions_test,
+        resolve_package_facts_preserves_persisted_dependency_features_test,
         select_package_fq_dep_uses_package_name_test,
         select_package_fq_dep_uses_req_for_duplicate_versions_test,
         split_lockfile_packages_finds_local_package_paths_test,
