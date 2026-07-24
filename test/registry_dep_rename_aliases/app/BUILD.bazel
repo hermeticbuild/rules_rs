@@ -1,0 +1,21 @@
+load("@registry_dep_rename_aliases//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
+load("@rules_rs//rs:rust_test.bzl", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_test(
+    name = "registry_dep_rename_demo_test",
+    srcs = ["src/lib.rs"],
+    aliases = aliases(),
+    crate_name = "registry_dep_rename_demo",
+    edition = "2024",
+    deps = all_crate_deps(normal = True),
+)
+
+rust_binary(
+    name = "direct_hub_alias",
+    srcs = ["direct_main.rs"],
+    edition = "2024",
+    deps = ["@registry_dep_rename_aliases//:my_itoa"],
+)
