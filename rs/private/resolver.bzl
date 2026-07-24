@@ -181,16 +181,7 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple
     # Do some rounds of mutual resolution; bail when no more changes
     dirty_package_indices = range(len(packages))
 
-    # With adverse package ordering, feature enablement can advance by only one
-    # crate or feature alias per round. Allow for every possible feature state
-    # in addition to a full graph traversal and the convergence allowance.
-    max_rounds = len(packages) + _MAX_ROUNDS
-    for feature_resolutions in feature_resolutions_by_fq_crate.values():
-        max_rounds += (
-            len(feature_resolutions.possible_features) *
-            len(feature_resolutions.features_enabled)
-        )
-    for i in range(max_rounds):
+    for i in range(_MAX_ROUNDS):
         if mctx:
             mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
@@ -203,4 +194,4 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple
         dirty_package_indices = sorted(dirty_package_indices)
 
     if dirty_package_indices:
-        fail("Resolution did not converge after %s rounds! This is likely a bug in rules_rs, please report it to github.com/hermeticbuild/rules_rs" % max_rounds)
+        fail("Resolution did not converge after %s rounds! This is likely a bug in rules_rs, please report it to github.com/hermeticbuild/rules_rs" % _MAX_ROUNDS)
