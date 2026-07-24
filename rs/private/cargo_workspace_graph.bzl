@@ -196,6 +196,12 @@ def prepare_possible_deps(dependencies, converter = None, skip_internal_rustc_pl
         else:
             dep = dict(dep)
 
+            # Dependency features originate in persisted facts. Copy the list
+            # before adding the implicit default feature so resolution cannot
+            # mutate the cached fact in place.
+            if "features" in dep:
+                dep["features"] = list(dep["features"])
+
         if dep.get("kind") == "dev":
             continue
 
