@@ -494,12 +494,26 @@ alias(
             # same-named rename overwrite its alias.
             continue
 
+        real_name_by_version = {}
         for fq in sorted(fqs):
             package = package_by_fq[fq]
             target_repo_name = package["target_repo_name"]
             target_package_path = package["target_package_path"]
             real_name = package["name"]
             version = package["version"]
+
+            existing_real_name = real_name_by_version.get(version)
+            if existing_real_name and existing_real_name != real_name:
+                fail("Cargo dependency rename %r refers to both %r and %r at version %s; can't alias both to @%s//:%s-%s" % (
+                    rename,
+                    existing_real_name,
+                    real_name,
+                    version,
+                    hub_name,
+                    rename,
+                    version,
+                ))
+            real_name_by_version[version] = real_name
 
             hub_contents.append("""
 alias(
