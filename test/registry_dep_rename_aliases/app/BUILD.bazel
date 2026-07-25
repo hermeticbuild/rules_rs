@@ -17,5 +17,5 @@ rust_binary(
     name = "direct_hub_alias",
     srcs = ["direct_main.rs"],
     edition = "2024",
-    deps = ["@registry_dep_rename_aliases//:my_itoa"],
+    deps = ["@registry_dep_rename_aliases//:renamed_dep"],
 )

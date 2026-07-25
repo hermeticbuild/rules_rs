@@ -1,4 +1,3 @@
 fn main() {
-    let mut buffer = itoa::Buffer::new();
-    println!("direct hub alias says: {}", buffer.format(42));
+    println!("direct hub alias says: {}", external_dep::dep_value());
 }

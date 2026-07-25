@@ -1,6 +1,4 @@
 [workspace]
 members = ["app"]
+exclude = ["external_dep"]
 resolver = "3"
-
-[patch.crates-io]
-itoa = { path = "vendor/itoa" }
