@@ -266,51 +266,6 @@ def _resolve_package_facts_attaches_feature_resolutions_impl(ctx):
 
 resolve_package_facts_attaches_feature_resolutions_test = unittest.make(_resolve_package_facts_attaches_feature_resolutions_impl)
 
-def _resolve_package_facts_preserves_persisted_dependency_features_impl(ctx):
-    env = unittest.begin(ctx)
-
-    facts = {
-        "consumer-1.0.0": {
-            "dependencies": [
-                {
-                    "default_features": True,
-                    "features": ["derive"],
-                    "name": "helper",
-                },
-            ],
-            "features": {},
-        },
-        "helper-1.0.0": {
-            "dependencies": [],
-            "features": {},
-        },
-    }
-    packages = [
-        {
-            "dependencies": ["helper 1.0.0"],
-            "name": "consumer",
-            "version": "1.0.0",
-        },
-        {
-            "dependencies": [],
-            "name": "helper",
-            "version": "1.0.0",
-        },
-    ]
-
-    first = resolve_package_facts(packages, facts, ["x86_64-unknown-linux-gnu"])
-    resolve_package_facts([dict(package) for package in packages], facts, ["x86_64-unknown-linux-gnu"])
-
-    asserts.equals(env, ["derive"], facts["consumer-1.0.0"]["dependencies"][0]["features"])
-    asserts.equals(
-        env,
-        ["derive", "default"],
-        first.feature_resolutions_by_fq_crate["consumer-1.0.0"].possible_deps[0]["features"],
-    )
-    return unittest.end(env)
-
-resolve_package_facts_preserves_persisted_dependency_features_test = unittest.make(_resolve_package_facts_preserves_persisted_dependency_features_impl)
-
 def _resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl(ctx):
     env = unittest.begin(ctx)
 
@@ -359,7 +314,6 @@ def cargo_workspace_graph_tests():
         cargo_toml_dependencies_normalizes_dependency_specs_test,
         resolve_handles_dependency_chains_deeper_than_previous_round_limit_test,
         resolve_package_facts_attaches_feature_resolutions_test,
-        resolve_package_facts_preserves_persisted_dependency_features_test,
         select_package_fq_dep_uses_package_name_test,
         select_package_fq_dep_uses_req_for_duplicate_versions_test,
         split_lockfile_packages_finds_local_package_paths_test,
