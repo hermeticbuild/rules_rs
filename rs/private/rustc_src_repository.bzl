@@ -50,7 +50,14 @@ def _rustc_src_tool_path(version):
     return "rustc-{}-src".format(version)
 
 def _rustc_src_strip_prefix(version):
-    return paths.join(_rustc_src_tool_path(version), "src")
+    root = _rustc_src_tool_path(version)
+    if version in ("beta", "nightly"):
+        return root
+
+    version_parts = [int(part) for part in version.split(".")]
+    if version_parts[0] > 1 or version_parts[1] >= 79:
+        return root
+    return paths.join(root, "src")
 
 def _rustc_src_tool_suburl(version, iso_date = None):
     path = _rustc_src_tool_path(version)

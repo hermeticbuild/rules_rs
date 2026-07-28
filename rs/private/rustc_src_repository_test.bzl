@@ -14,7 +14,12 @@ def _strip_prefix_test_impl(ctx):
     )
     asserts.equals(
         env,
-        "rustc-nightly-src/src",
+        "rustc-1.79.0-src",
+        rustc_src_repository_test_helpers.strip_prefix("1.79.0"),
+    )
+    asserts.equals(
+        env,
+        "rustc-nightly-src",
         rustc_src_repository_test_helpers.strip_prefix("nightly"),
     )
     return unittest.end(env)
