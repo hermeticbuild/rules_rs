@@ -11,17 +11,21 @@ declare_rustc_toolchains(
     edition = {edition},
     extra_rustc_flags = {extra_rustc_flags},
     extra_exec_rustc_flags = {extra_exec_rustc_flags},
+    execs = {execs},
+    targets = {targets},
 )
 
 declare_rustfmt_toolchains(
     version = {version},
     rustfmt_version = {rustfmt_version},
     edition = {edition},
+    execs = {execs},
 )
 
 declare_rust_analyzer_toolchains(
     version = {version},
     rust_analyzer_version = {rust_analyzer_version},
+    execs = {execs},
 )
 """.format(
             version = repr(rctx.attr.version),
@@ -30,6 +34,8 @@ declare_rust_analyzer_toolchains(
             edition = repr(rctx.attr.edition),
             extra_rustc_flags = repr(rctx.attr.extra_rustc_flags),
             extra_exec_rustc_flags = repr(rctx.attr.extra_exec_rustc_flags),
+            execs = repr(rctx.attr.execs),
+            targets = repr(rctx.attr.targets),
         ),
     )
 
@@ -44,5 +50,7 @@ toolchains_repository = repository_rule(
         "edition": attr.string(mandatory = True),
         "extra_rustc_flags": attr.string_list_dict(),
         "extra_exec_rustc_flags": attr.string_list_dict(),
+        "execs": attr.string_list(mandatory = True),
+        "targets": attr.string_list(mandatory = True),
     },
 )

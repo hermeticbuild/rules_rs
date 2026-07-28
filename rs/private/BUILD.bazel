@@ -9,7 +9,10 @@ load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
+load(":rustc_src_repository_test.bzl", "rustc_src_repository_tests")
+load(":rust_toolchain_version_test.bzl", "rust_toolchain_version_metadata_tests")
 load(":semver_test.bzl", "semver_select_tests")
+load(":toolchain_triple_selection_test.bzl", "toolchain_triple_selection_tests")
 
 bool_setting(
     name = "source_stdlib_building",
@@ -39,7 +42,13 @@ lint_flags_tests()
 
 registry_utils_tests()
 
+rustc_src_repository_tests()
+
+rust_toolchain_version_metadata_tests()
+
 semver_select_tests()
+
+toolchain_triple_selection_tests()
 
 bzl_library(
     name = "all_crate_deps",
@@ -178,6 +187,30 @@ bzl_library(
 )
 
 bzl_library(
+    name = "rust_toolchain_version",
+    srcs = ["rust_toolchain_version.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "rustc_src_repository_test",
+    srcs = ["rustc_src_repository_test.bzl"],
+    deps = [
+        ":rustc_src_repository",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "rust_toolchain_version_test",
+    srcs = ["rust_toolchain_version_test.bzl"],
+    deps = [
+        ":rust_toolchain_version",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
     name = "repository_utils",
     srcs = ["repository_utils.bzl"],
     visibility = ["//rs:__subpackages__"],
@@ -230,6 +263,7 @@ bzl_library(
     visibility = ["//rs:__subpackages__"],
     deps = [
         "//rs/private:rust_repository_utils",
+        "//rs/private:rust_toolchain_version",
         "@rules_rust//rust/platform:bzl_lib",
         "@rules_rust//rust/private:bzl_lib",
     ],
@@ -312,6 +346,23 @@ bzl_library(
         "//rs/toolchains:declare_rust_analyzer_toolchains",
         "//rs/toolchains:declare_rustc_toolchains",
         "//rs/toolchains:declare_rustfmt_toolchains",
+    ],
+)
+
+bzl_library(
+    name = "toolchain_triple_selection",
+    srcs = ["toolchain_triple_selection.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = ["//rs/platforms:triples"],
+)
+
+bzl_library(
+    name = "toolchain_triple_selection_test",
+    srcs = ["toolchain_triple_selection_test.bzl"],
+    deps = [
+        ":toolchain_triple_selection",
+        "//rs/platforms:triples",
+        "@bazel_skylib//lib:unittest",
     ],
 )
 

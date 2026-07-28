@@ -4,14 +4,8 @@ load("@rules_rust//rust:toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES", "triple_to_rust_constraint_set")
 load("//rs/private:bpf_linker_repository.bzl", "bpf_linker_binary_name", "bpf_linker_repository_name")
+load("//rs/private:rust_toolchain_version.bzl", "rust_toolchain_version_metadata")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
-
-def _channel(version):
-    if version.startswith("nightly"):
-        return "nightly"
-    if version.startswith("beta"):
-        return "beta"
-    return "stable"
 
 def _rustc_flags_to_select(rustc_flags_by_triple):
     return select(
@@ -40,7 +34,9 @@ def declare_rustc_toolchains(
     """
 
     version_key = sanitize_version(version)
-    channel = _channel(version)
+    metadata = rust_toolchain_version_metadata(version)
+    channel = metadata.channel
+    rustc_srcs = "@rust_src_{}//lib/rustlib/src:rustc_srcs".format(version_key)
 
     source_stdlib_building_select = {}
     for target_triple in targets:
@@ -110,8 +106,9 @@ def declare_rustc_toolchains(
                 "//conditions:default": None,
             }),
             linker_type = "direct",
-            rust_objcopy = "{}rust-objcopy".format(rustc_repo_label),
+            rust_objcopy = "{}rust-objcopy".format(rustc_repo_label) if metadata.has_rust_objcopy else None,
             rustc_lib = "{}rustc_lib".format(rustc_repo_label),
+            rustc_srcs = rustc_srcs,
             allocator_library = None,
             global_allocator_library = None,
             binary_ext = select({
@@ -168,6 +165,9 @@ def declare_rustc_toolchains(
             extra_rustc_flags = _rustc_flags_to_select(extra_rustc_flags),
             exec_triple = triple,
             target_triple = select(target_triple_select),
+            version = metadata.version,
+            channel = metadata.channel,
+            iso_date = metadata.iso_date,
             visibility = ["//visibility:public"],
             tags = ["rust_version={}".format(version)],
         )

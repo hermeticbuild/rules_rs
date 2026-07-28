@@ -49,6 +49,9 @@ _EXTRA_COMPILE_DATA = {
 def _rustc_src_tool_path(version):
     return "rustc-{}-src".format(version)
 
+def _rustc_src_strip_prefix(version):
+    return paths.join(_rustc_src_tool_path(version), "src")
+
 def _rustc_src_tool_suburl(version, iso_date = None):
     path = _rustc_src_tool_path(version)
     return iso_date + "/" + path if (iso_date and version in ("beta", "nightly")) else path
@@ -251,7 +254,7 @@ def _rustc_src_repository_impl(rctx):
         output = _SOURCE_ROOT,
         sha256 = rctx.attr.sha256,
         auth = get_auth(rctx, urls),
-        strip_prefix = _rustc_src_tool_path(rctx.attr.version),
+        strip_prefix = _rustc_src_strip_prefix(rctx.attr.version),
     )
 
     root_build = [
@@ -451,4 +454,8 @@ rustc_src_repository = repository_rule(
         "sha256": attr.string(mandatory = True),
         "urls": attr.string_list(default = DEFAULT_STATIC_RUST_URL_TEMPLATES),
     },
+)
+
+rustc_src_repository_test_helpers = struct(
+    strip_prefix = _rustc_src_strip_prefix,
 )

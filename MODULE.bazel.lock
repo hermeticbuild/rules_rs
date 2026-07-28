@@ -1054,6 +1054,7 @@
       "rust-std-1.92.0-powerpc64-unknown-linux-gnu.tar.xz": "2ce706afa4a46b6773340854de877fc63618a40e351298a4e3da8eb482619863",
       "rust-std-1.92.0-powerpc64le-unknown-linux-gnu.tar.xz": "eba59766c2d9805c0a1fc82fd723acbb36569e1bec1088c037bba84d965f70ba",
       "rust-std-1.92.0-powerpc64le-unknown-linux-musl.tar.xz": "8b515e18b6ac8f8d37ea3cabe644b7f571984333c3b4192b7f5877e79eae7893",
+      "rust-std-1.92.0-riscv32imac-unknown-none-elf.tar.xz": "5915223db6b8afa173f67eb4fe6f5aff2402351ed9abab1b370d0860be4af6c9",
       "rust-std-1.92.0-riscv32imc-unknown-none-elf.tar.xz": "e1c6968ce25ab78f2c5b5460691763a2d39cb71b01d6d54c208d4a8b735b0584",
       "rust-std-1.92.0-riscv64gc-unknown-linux-gnu.tar.xz": "8ee20dcf3b1063fa6069b3ce85e1fcf42794dfa783263314865cb53fff42d9e4",
       "rust-std-1.92.0-riscv64gc-unknown-linux-musl.tar.xz": "f20d822309900fd6c7230688694baf91e900154e44e6247feca49b7b7a203a57",

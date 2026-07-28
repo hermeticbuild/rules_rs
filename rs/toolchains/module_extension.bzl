@@ -8,7 +8,7 @@ load(
     "produce_tool_suburl",
 )
 load("//rs/experimental/miri/private:miri_repository.bzl", "miri_repository")
-load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_AND_2_TRIPLES")
+load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES")
 load("//rs/private:bpf_linker_repository.bzl", "BPF_LINKER_SUPPORTED_EXEC_TRIPLES", "declare_bpf_linker_repository")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
@@ -19,6 +19,13 @@ load("//rs/private:rustc_repository.bzl", "rustc_repository")
 load("//rs/private:rustc_src_repository.bzl", "rustc_src_repository")
 load("//rs/private:rustfmt_repository.bzl", "rustfmt_repository")
 load("//rs/private:stdlib_repository.bzl", "stdlib_repository")
+load(
+    "//rs/private:toolchain_triple_selection.bzl",
+    "add_version_triples",
+    "downloadable_stdlib_targets",
+    "resolve_toolchain_execs",
+    "resolve_toolchain_targets",
+)
 load("//rs/private:toolchains_repository.bzl", "toolchains_repository")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
 
@@ -91,6 +98,12 @@ _TOOLCHAIN_TAG = tag_class(
         "extra_exec_rustc_flags": attr.string_list_dict(
             doc = "Additional rustc flags by exec triple.",
         ),
+        "execs": attr.string_list(
+            doc = "Execution triples to declare toolchains for. An empty list uses all supported execution triples.",
+        ),
+        "targets": attr.string_list(
+            doc = "Target triples supported by the declared toolchains. An empty list uses all supported target triples.",
+        ),
     },
 )
 
@@ -153,15 +166,15 @@ def _toolchains_impl(mctx):
             root_module_name = mod.name
             break
 
-    version_tags = []
+    raw_version_tags = []
     had_tags = True
     for mod in mctx.modules:
         for tag in mod.tags.toolchain:
-            version_tags.append(tag)
+            raw_version_tags.append(tag)
 
-    if not version_tags:
+    if not raw_version_tags:
         had_tags = False
-        version_tags.append(struct(
+        raw_version_tags.append(struct(
             name = _DEFAULT_TOOLCHAIN_REPO_NAME,
             version = _DEFAULT_RUSTC_VERSION,
             rustfmt_version = "",
@@ -169,18 +182,48 @@ def _toolchains_impl(mctx):
             edition = _DEFAULT_EDITION,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
+            execs = [],
+            targets = [],
+        ))
+
+    version_tags = []
+    for tag in raw_version_tags:
+        version_tags.append(struct(
+            source_tag = tag if had_tags else None,
+            name = tag.name,
+            version = tag.version,
+            rustfmt_version = tag.rustfmt_version,
+            rust_analyzer_version = tag.rust_analyzer_version,
+            edition = tag.edition,
+            extra_rustc_flags = tag.extra_rustc_flags,
+            extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
+            execs = resolve_toolchain_execs(tag.execs),
+            targets = resolve_toolchain_targets(tag.targets),
         ))
 
     versions = set([])
     rustfmt_versions = set([])
     rust_analyzer_versions = set([])
+    toolchain_execs_by_version = {}
+    rust_execs_by_version = {}
+    rust_targets_by_version = {}
+    rustfmt_execs_by_version = {}
+    rust_analyzer_execs_by_version = {}
 
     for tag in version_tags:
+        rustfmt_version = tag.rustfmt_version or tag.version
+        rust_analyzer_version = tag.rust_analyzer_version or tag.version
         versions.add(tag.version)
-        rustfmt_versions.add(tag.rustfmt_version or tag.version)
-        rust_analyzer_versions.add(tag.rust_analyzer_version or tag.version)
+        rustfmt_versions.add(rustfmt_version)
+        rust_analyzer_versions.add(rust_analyzer_version)
+        add_version_triples(toolchain_execs_by_version, tag.version, tag.execs)
+        add_version_triples(rust_execs_by_version, tag.version, tag.execs)
+        add_version_triples(rust_targets_by_version, tag.version, tag.targets)
+        add_version_triples(rustfmt_execs_by_version, rustfmt_version, tag.execs)
+        add_version_triples(rust_analyzer_execs_by_version, rust_analyzer_version, tag.execs)
 
     miri_versions = set([])
+    miri_execs_by_version = {}
     miri_repo_configs = {}
     miri_repo_tags = []
     for mod in mctx.modules:
@@ -203,10 +246,44 @@ def _toolchains_impl(mctx):
                 miri_repo_configs[tag.name] = tag
                 miri_repo_tags.append(tag)
                 miri_versions.add(tag.version)
+                add_version_triples(miri_execs_by_version, tag.version, tag.exec_triples)
+                add_version_triples(rust_execs_by_version, tag.version, tag.exec_triples)
+                add_version_triples(rust_targets_by_version, tag.version, ALL_TARGET_TRIPLES)
 
     rust_versions = versions | miri_versions
+    rust_src_versions = rust_versions | rust_analyzer_versions
 
-    for triple in BPF_LINKER_SUPPORTED_EXEC_TRIPLES:
+    host_os = _normalize_os_name(mctx.os.name)
+    host_arch = _normalize_arch_name(mctx.os.arch)
+    host_exec_triple = None
+    for triple in SUPPORTED_EXEC_TRIPLES:
+        parsed = _parse_triple(triple)
+        if parsed.arch == host_arch and parsed.system == host_os:
+            host_exec_triple = triple
+            break
+    if not host_exec_triple:
+        fail("Could not find host Rust tools for {}-{}".format(host_os, host_arch))
+
+    # rustc source repositories run Cargo during repository evaluation. Keep
+    # that implementation-only host tool available even when it is not one of
+    # the execution toolchains requested by the user.
+    for version in rust_versions:
+        add_version_triples(rust_execs_by_version, version, [host_exec_triple])
+
+    rustc_execs_by_version = {}
+    for version, execs in rust_execs_by_version.items():
+        add_version_triples(rustc_execs_by_version, version, execs)
+    for version, execs in rustfmt_execs_by_version.items():
+        add_version_triples(rustc_execs_by_version, version, execs)
+    for version, execs in rust_analyzer_execs_by_version.items():
+        add_version_triples(rustc_execs_by_version, version, execs)
+
+    bpf_linker_execs = []
+    for execs in toolchain_execs_by_version.values():
+        for triple in execs:
+            if triple in BPF_LINKER_SUPPORTED_EXEC_TRIPLES and triple not in bpf_linker_execs:
+                bpf_linker_execs.append(triple)
+    for triple in bpf_linker_execs:
         declare_bpf_linker_repository(triple)
 
     existing_facts = getattr(mctx, "facts", {}) or {}
@@ -242,16 +319,16 @@ def _toolchains_impl(mctx):
     for version in rust_versions:
         base_version, iso_date = _parse_version(version)
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
+        for triple in rust_execs_by_version[version]:
             exec_triple = _parse_triple(triple)
             for tool_name in ["rustc", "cargo"]:
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
-            if version in versions:
+            if triple in toolchain_execs_by_version.get(version, []):
                 _request_sha("clippy", base_version, iso_date, exec_triple)
-            if version in miri_versions:
+            if triple in miri_execs_by_version.get(version, []):
                 _request_sha("miri", base_version, iso_date, exec_triple)
 
-        for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES:
+        for target_triple in downloadable_stdlib_targets(rust_targets_by_version[version]):
             _request_sha("rust-std", base_version, iso_date, _parse_triple(target_triple))
 
         _request_archive_sha(_rustc_src_archive_path(base_version, iso_date), _rustc_src_tool_suburl(base_version, iso_date))
@@ -259,19 +336,22 @@ def _toolchains_impl(mctx):
     for version in rustfmt_versions:
         base_version, iso_date = _parse_version(version)
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
+        for triple in rustfmt_execs_by_version[version]:
             exec_triple = _parse_triple(triple)
 
             # Rustfmt dynamically links against components in rustc, so we need both.
             for tool_name in ["rustc", "rustfmt"]:
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
 
-    for version in rust_analyzer_versions:
+    for version in rust_src_versions:
         base_version, iso_date = _parse_version(version)
 
         _request_sha("rust-src", base_version, iso_date, None)
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
+    for version in rust_analyzer_versions:
+        base_version, iso_date = _parse_version(version)
+
+        for triple in rust_analyzer_execs_by_version[version]:
             exec_triple = _parse_triple(triple)
 
             for tool_name in ["rustc", "rust-analyzer"]:
@@ -290,8 +370,6 @@ def _toolchains_impl(mctx):
         archive_path = _archive_path(tool_name, target_triple, version, iso_date)
         return new_facts[archive_path]
 
-    host_os = _normalize_os_name(mctx.os.name)
-    host_arch = _normalize_arch_name(mctx.os.arch)
     host_cargo_repos = {}
     host_rustc_repos = {}
 
@@ -299,7 +377,7 @@ def _toolchains_impl(mctx):
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
+        for triple in rustc_execs_by_version[version]:
             exec_triple = _parse_triple(triple)
 
             triple_suffix = exec_triple.system + "_" + exec_triple.arch
@@ -313,7 +391,7 @@ def _toolchains_impl(mctx):
                 sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
             )
 
-            if version in rust_versions:
+            if triple in rust_execs_by_version.get(version, []):
                 cargo_name = "cargo_{}_{}".format(triple_suffix, version_key)
                 if exec_triple.arch == host_arch and exec_triple.system == host_os:
                     host_cargo_repos[version] = cargo_name
@@ -327,7 +405,7 @@ def _toolchains_impl(mctx):
                     sha256 = _sha_for("cargo", base_version, iso_date, exec_triple),
                 )
 
-            if version in versions:
+            if triple in toolchain_execs_by_version.get(version, []):
                 clippy_repository(
                     name = "clippy_{}_{}".format(triple_suffix, version_key),
                     triple = triple,
@@ -337,7 +415,7 @@ def _toolchains_impl(mctx):
                     rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
                 )
 
-            if version in miri_versions:
+            if triple in miri_execs_by_version.get(version, []):
                 miri_repository(
                     name = "miri_{}_{}".format(triple_suffix, version_key),
                     triple = triple,
@@ -348,7 +426,7 @@ def _toolchains_impl(mctx):
                 )
 
         if version in rust_versions:
-            for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES:
+            for target_triple in downloadable_stdlib_targets(rust_targets_by_version[version]):
                 stdlib_repository(
                     name = "rust_stdlib_{}_{}".format(sanitize_triple(target_triple), version_key),
                     triple = target_triple,
@@ -361,7 +439,7 @@ def _toolchains_impl(mctx):
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
+        for triple in rustfmt_execs_by_version[version]:
             exec_triple = _parse_triple(triple)
             triple_suffix = exec_triple.system + "_" + exec_triple.arch
 
@@ -374,7 +452,7 @@ def _toolchains_impl(mctx):
                 rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
             )
 
-    for version in rust_analyzer_versions:
+    for version in rust_src_versions:
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
 
@@ -385,7 +463,11 @@ def _toolchains_impl(mctx):
             sha256 = _sha_for("rust-src", base_version, iso_date, None),
         )
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
+    for version in rust_analyzer_versions:
+        version_key = sanitize_version(version)
+        base_version, iso_date = _parse_version(version)
+
+        for triple in rust_analyzer_execs_by_version[version]:
             exec_triple = _parse_triple(triple)
             triple_suffix = exec_triple.system + "_" + exec_triple.arch
 
@@ -438,7 +520,9 @@ def _toolchains_impl(mctx):
             (existing.rust_analyzer_version or existing.version) != rust_analyzer_version or
             existing.edition != tag.edition or
             existing.extra_rustc_flags != tag.extra_rustc_flags or
-            existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags
+            existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags or
+            existing.execs != tag.execs or
+            existing.targets != tag.targets
         ):
             fail("Toolchain repo {} has conflicting tag configurations".format(repo_name))
 
@@ -452,8 +536,10 @@ def _toolchains_impl(mctx):
                 edition = tag.edition,
                 extra_rustc_flags = tag.extra_rustc_flags,
                 extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
+                execs = tag.execs,
+                targets = tag.targets,
             )
-        is_dev_dependency = had_tags and mctx.is_dev_dependency(tag)
+        is_dev_dependency = had_tags and mctx.is_dev_dependency(tag.source_tag)
         if is_dev_dependency:
             if repo_name not in direct_dev_deps:
                 direct_dev_deps.append(repo_name)

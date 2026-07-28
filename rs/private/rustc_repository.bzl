@@ -6,6 +6,7 @@ load(
     "includes_rust_analyzer_proc_macro_srv",
 )
 load(":rust_repository_utils.bzl", "RUST_REPOSITORY_COMMON_ATTR", "download_and_extract")
+load(":rust_toolchain_version.bzl", "rust_toolchain_version_metadata")
 
 _LINUX_ZLIB = {
     "aarch64": struct(
@@ -56,14 +57,19 @@ def _symlink_rust_objcopy_shared_libraries(rctx, exec_triple):
 
 def _rustc_repository_impl(rctx):
     exec_triple = triple(rctx.attr.triple)
+    metadata = rust_toolchain_version_metadata(
+        rctx.attr.version + ("/" + rctx.attr.iso_date if rctx.attr.iso_date else ""),
+    )
     download_and_extract(rctx, "rustc", "rustc", exec_triple)
+
     # Upstream Linux rustc bundles libLLVM, which dynamically links against libz.so.1.
     _add_linux_zlib(rctx, exec_triple)
-    _symlink_rust_objcopy_shared_libraries(rctx, exec_triple)
+    if metadata.has_rust_objcopy:
+        _symlink_rust_objcopy_shared_libraries(rctx, exec_triple)
     build_content = [BUILD_for_compiler(
         exec_triple,
         include_linker = True,
-        include_objcopy = True,
+        include_objcopy = metadata.has_rust_objcopy,
     )]
     if includes_rust_analyzer_proc_macro_srv(rctx.attr.version, rctx.attr.iso_date):
         build_content.append(BUILD_for_rust_analyzer_proc_macro_srv(exec_triple))
