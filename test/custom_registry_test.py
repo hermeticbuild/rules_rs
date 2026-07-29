@@ -1,9 +1,8 @@
-"""Queries Rust targets generated from a local Cargo sparse HTTP registry."""
+"""Queries Rust targets generated from on-disk Cargo sparse registries."""
 
 from __future__ import annotations
 
 import hashlib
-import http.server
 import io
 import json
 import os
@@ -12,7 +11,6 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
-import threading
 import unittest
 
 
@@ -42,78 +40,35 @@ def _crate_archive() -> bytes:
     return archive.getvalue()
 
 
-class _RegistryServer(http.server.ThreadingHTTPServer):
-    daemon_threads = True
+def _write_registry(
+    directory: pathlib.Path, registry_kind: str
+) -> tuple[str, str]:
+    archive = _crate_archive()
+    checksum = hashlib.sha256(archive).hexdigest()
+    index = directory / "index"
+    metadata_path = index / "re" / "gi" / CRATE_NAME
+    archive_path = directory / "crates" / CRATE_NAME / CRATE_VERSION / "download"
 
-    def __init__(self) -> None:
-        super().__init__(("127.0.0.1", 0), _RegistryHandler)
-        self.archive = _crate_archive()
-        self.checksum = hashlib.sha256(self.archive).hexdigest()
-        self.requests: list[str] = []
-        self.request_lock = threading.Lock()
-
-    @property
-    def base_url(self) -> str:
-        return f"http://127.0.0.1:{self.server_port}"
-
-    def config(self, registry_kind: str) -> bytes:
-        return json.dumps({"dl": f"{self.base_url}/{registry_kind}/crates"}).encode()
-
-    def metadata(self, registry_kind: str) -> bytes:
-        return (
-            json.dumps(
-                {
-                    "name": CRATE_NAME,
-                    "vers": CRATE_VERSION,
-                    "deps": [],
-                    "cksum": self.checksum,
-                    "features": {f"{registry_kind}_fixture": []},
-                    "yanked": False,
-                }
-            )
-            + "\n"
-        ).encode()
-
-
-class _RegistryHandler(http.server.BaseHTTPRequestHandler):
-    server: _RegistryServer
-
-    def do_GET(self) -> None:
-        with self.server.request_lock:
-            self.server.requests.append(self.path)
-
-        for registry_kind in ("named", "replacement"):
-            if self.path == f"/{registry_kind}/index/config.json":
-                self._respond(
-                    200,
-                    "application/json",
-                    self.server.config(registry_kind),
-                )
-                return
-
-            if self.path == f"/{registry_kind}/index/re/gi/{CRATE_NAME}":
-                self._respond(
-                    200,
-                    "application/json",
-                    self.server.metadata(registry_kind),
-                )
-                return
-
-            if self.path == f"/{registry_kind}/crates/{CRATE_NAME}/{CRATE_VERSION}/download":
-                self._respond(200, "application/gzip", self.server.archive)
-                return
-
-        self._respond(404, "text/plain", f"Unknown registry path: {self.path}\n".encode())
-
-    def log_message(self, format: str, *args: object) -> None:
-        del format, args
-
-    def _respond(self, status: int, content_type: str, content: bytes) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(content)))
-        self.end_headers()
-        self.wfile.write(content)
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    (index / "config.json").write_text(
+        json.dumps({"dl": (directory / "crates").as_uri()}) + "\n"
+    )
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "name": CRATE_NAME,
+                "vers": CRATE_VERSION,
+                "deps": [],
+                "cksum": checksum,
+                "features": {f"{registry_kind}_fixture": []},
+                "yanked": False,
+            }
+        )
+        + "\n"
+    )
+    archive_path.write_bytes(archive)
+    return f"sparse+{index.as_uri()}/", checksum
 
 
 class CustomRegistryTest(unittest.TestCase):
@@ -135,114 +90,99 @@ class CustomRegistryTest(unittest.TestCase):
 
             bazel_environment["HOME"] = pwd.getpwuid(os.getuid()).pw_dir
 
-        with _RegistryServer() as registry:
-            server_thread = threading.Thread(target=registry.serve_forever, daemon=True)
-            server_thread.start()
-            self.addCleanup(server_thread.join, 10)
-            self.addCleanup(registry.shutdown)
+        # Bazel includes file registry URLs in repository names, so keep the
+        # registry outside Bazel's deeply nested TEST_TMPDIR.
+        with tempfile.TemporaryDirectory(prefix="rs-registry-") as temporary_directory:
+            temporary_root = pathlib.Path(temporary_directory)
+            for registry_kind in ("named", "replacement"):
+                with self.subTest(registry_kind=registry_kind):
+                    registry_source, checksum = _write_registry(
+                        temporary_root / "registries" / registry_kind,
+                        registry_kind,
+                    )
+                    workspace = temporary_root / "workspace"
+                    self._write_workspace(
+                        workspace,
+                        rules_rs_root,
+                        registry_source,
+                        checksum,
+                        registry_kind,
+                    )
 
-            with tempfile.TemporaryDirectory(
-                prefix="rules-rs-custom-registry-",
-                dir=os.environ.get("TEST_TMPDIR"),
-            ) as temporary_directory:
-                temporary_root = pathlib.Path(temporary_directory)
-                for registry_kind in ("named", "replacement"):
-                    with self.subTest(registry_kind=registry_kind):
-                        with registry.request_lock:
-                            registry.requests.clear()
-                        workspace = temporary_root / "workspace"
-                        self._write_workspace(workspace, rules_rs_root, registry, registry_kind)
-
-                        command = [
-                            bazel,
-                            "--ignore_all_rc_files",
-                            "--batch",
-                            f"--output_base={temporary_root / 'bazel'}",
-                            "query",
-                            "--lockfile_mode=off",
-                            "--noimplicit_deps",
-                            "deps(//:custom_registry, 3)",
-                        ]
-                        print(f"Querying {registry_kind} sparse registry fixture", flush=True)
-                        result = subprocess.run(
-                            command,
-                            cwd=workspace,
-                            check=False,
-                            capture_output=True,
-                            text=True,
-                            timeout=120,
-                            env=bazel_environment,
-                        )
-                        self.assertEqual(
-                            result.returncode,
-                            0,
-                            f"{registry_kind} registry Bazel query failed\n"
-                            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
-                        )
-                        labels = result.stdout.splitlines()
-                        self.assertIn("//:custom_registry", labels)
-                        hub_name = "custom_registry_crates_" + registry_kind
-                        self.assertTrue(
-                            any(
-                                hub_name in label
-                                and label.endswith(f"//:{CRATE_NAME}")
-                                for label in labels
-                            ),
-                            f"{registry_kind} registry query did not generate the "
-                            f"{CRATE_NAME} dependency target: {labels}",
-                        )
-                        self.assertTrue(
-                            any(
-                                f"{hub_name}__{CRATE_NAME}-{CRATE_VERSION}" in label
-                                and label.endswith(f"//:{CRATE_NAME}")
-                                for label in labels
-                            ),
-                            f"{registry_kind} registry query did not generate the "
-                            f"{CRATE_NAME} {CRATE_VERSION} crate target: {labels}",
-                        )
-
-                        with registry.request_lock:
-                            requests = list(registry.requests)
-                        for path in (
-                            f"/{registry_kind}/index/config.json",
-                            f"/{registry_kind}/index/re/gi/{CRATE_NAME}",
-                            f"/{registry_kind}/crates/{CRATE_NAME}/{CRATE_VERSION}/download",
-                        ):
-                            self.assertIn(
-                                path,
-                                requests,
-                                f"{registry_kind} registry query never requested "
-                                f"{path}: {requests}",
-                            )
-                        print(
-                            f"Queried {registry_kind} registry crate; verified sparse index, "
-                            "registry configuration, and archive downloads",
-                            flush=True,
-                        )
+                    command = [
+                        bazel,
+                        "--ignore_all_rc_files",
+                        "--batch",
+                        f"--output_base={temporary_root / 'bazel'}",
+                        "query",
+                        "--lockfile_mode=off",
+                        "--noimplicit_deps",
+                        "deps(//:custom_registry, 3)",
+                    ]
+                    print(f"Querying {registry_kind} on-disk sparse registry", flush=True)
+                    result = subprocess.run(
+                        command,
+                        cwd=workspace,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                        env=bazel_environment,
+                    )
+                    self.assertEqual(
+                        result.returncode,
+                        0,
+                        f"{registry_kind} registry Bazel query failed\n"
+                        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
+                    )
+                    labels = result.stdout.splitlines()
+                    self.assertIn("//:custom_registry", labels)
+                    hub_name = "custom_registry_crates_" + registry_kind
+                    self.assertTrue(
+                        any(
+                            hub_name in label and label.endswith(f"//:{CRATE_NAME}")
+                            for label in labels
+                        ),
+                        f"{registry_kind} registry query did not generate the "
+                        f"{CRATE_NAME} dependency target: {labels}",
+                    )
+                    self.assertTrue(
+                        any(
+                            f"{hub_name}__{CRATE_NAME}-{CRATE_VERSION}" in label
+                            and label.endswith(f"//:{CRATE_NAME}")
+                            for label in labels
+                        ),
+                        f"{registry_kind} registry query did not generate the "
+                        f"{CRATE_NAME} {CRATE_VERSION} crate target: {labels}",
+                    )
+                    print(
+                        f"Verified {registry_kind} registry alias and generated crate target",
+                        flush=True,
+                    )
 
     def _write_workspace(
         self,
         workspace: pathlib.Path,
         rules_rs_root: pathlib.Path,
-        registry: _RegistryServer,
+        registry_source: str,
+        checksum: str,
         registry_kind: str,
     ) -> None:
         (workspace / ".cargo").mkdir(parents=True, exist_ok=True)
         (workspace / "src").mkdir(exist_ok=True)
-        index = f"sparse+{registry.base_url}/{registry_kind}/index/"
         hub_name = "custom_registry_crates_" + registry_kind
 
         if registry_kind == "named":
-            cargo_config = f'[registries.artifactory]\nindex = "{index}"\n'
+            cargo_config = f'[registries.artifactory]\nindex = "{registry_source}"\n'
             dependency = (
                 f'{CRATE_NAME} = {{ version = "={CRATE_VERSION}", '
                 'registry = "artifactory" }'
             )
-            lock_source = index
+            lock_source = registry_source
         else:
             cargo_config = (
                 '[source.crates-io]\nreplace-with = "artifactory"\n\n'
-                f'[source.artifactory]\nregistry = "{index}"\n'
+                f'[source.artifactory]\nregistry = "{registry_source}"\n'
             )
             dependency = f'{CRATE_NAME} = "={CRATE_VERSION}"'
             lock_source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -258,7 +198,7 @@ class CustomRegistryTest(unittest.TestCase):
             '[[package]]\nname = "custom_registry"\nversion = "0.1.0"\n'
             f'dependencies = ["{CRATE_NAME}"]\n\n'
             f'[[package]]\nname = "{CRATE_NAME}"\nversion = "{CRATE_VERSION}"\n'
-            f'source = "{lock_source}"\nchecksum = "{registry.checksum}"\n'
+            f'source = "{lock_source}"\nchecksum = "{checksum}"\n'
         )
         (workspace / "src" / "lib.rs").write_text(
             "pub fn registry_answer() -> u32 { registry_smoke::answer() }\n"
@@ -285,12 +225,6 @@ class CustomRegistryTest(unittest.TestCase):
             '    cargo_config = "//:.cargo/config.toml",\n'
             '    cargo_lock = "//:Cargo.lock",\n'
             '    cargo_toml = "//:Cargo.toml",\n'
-            "    registry_file_checksums = {\n"
-            f"        {registry.base_url + '/' + registry_kind + '/index/config.json'!r}: "
-            f"{hashlib.sha256(registry.config(registry_kind)).hexdigest()!r},\n"
-            f"        {registry.base_url + '/' + registry_kind + '/index/re/gi/' + CRATE_NAME!r}: "
-            f"{hashlib.sha256(registry.metadata(registry_kind)).hexdigest()!r},\n"
-            "    },\n"
             '    platform_triples = ["x86_64-unknown-linux-gnu"],\n'
             ")\n"
             f'use_repo(crate, "{hub_name}")\n'

@@ -14,7 +14,6 @@ def _registry_config_repository_impl(rctx):
     rctx.download(
         rctx.attr.source.removeprefix("sparse+") + "config.json",
         "config.json",
-        sha256 = rctx.attr.config_sha256,
         headers = headers,
     )
 
@@ -27,7 +26,6 @@ def _registry_config_repository_impl(rctx):
 registry_config_repository = repository_rule(
     implementation = _registry_config_repository_impl,
     attrs = {
-        "config_sha256": attr.string(),
         "source": attr.string(mandatory = True),
         "cargo_config": attr.label(),
         "use_home_cargo_credentials": attr.bool(),

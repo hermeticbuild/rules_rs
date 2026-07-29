@@ -704,22 +704,12 @@ def _crate_impl(mctx):
                 if source and source.startswith("sparse+"):
                     registry_sources.add(source)
 
-            start_crate_registry_downloads(
-                mctx,
-                downloader_state,
-                annotations,
-                packages,
-                cargo_credentials,
-                cfg.debug,
-                cfg.registry_file_checksums,
-            )
+            start_crate_registry_downloads(mctx, downloader_state, annotations, packages, cargo_credentials, cfg.debug)
 
             for source in sorted(registry_sources):
-                config_url = source.removeprefix("sparse+") + "config.json"
                 registry_config_repository(
                     name = registry_config_repo_name(cfg.name, source),
                     source = source,
-                    config_sha256 = cfg.registry_file_checksums.get(config_url, ""),
                     cargo_config = cfg.cargo_config,
                     use_home_cargo_credentials = cfg.use_home_cargo_credentials,
                 )
@@ -851,9 +841,6 @@ _from_cargo = tag_class(
         ),
         "cargo_lock": attr.label(),
         "cargo_config": attr.label(),
-        "registry_file_checksums": attr.string_dict(
-            doc = "SHA-256 checksums for sparse registry index and config URLs. Plain HTTP registry URLs require a checksum.",
-        ),
         "use_home_cargo_credentials": attr.bool(
             doc = "If set, the ruleset will load `~/cargo/credentials.toml` and attach those credentials to registry requests.",
         ),
