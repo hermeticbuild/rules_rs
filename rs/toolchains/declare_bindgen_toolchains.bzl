@@ -43,7 +43,10 @@ def bindgen_binary_name(os):
     return "bindgen.exe" if os == "windows" else "bindgen"
 
 def _bindgen_toolchain_impl(ctx):
-    return [platform_common.ToolchainInfo(bindgen = ctx.executable.bindgen)]
+    return [platform_common.ToolchainInfo(
+        bindgen = ctx.executable.bindgen,
+        exec_os = ctx.attr.exec_os,
+    )]
 
 _bindgen_toolchain = rule(
     implementation = _bindgen_toolchain_impl,
@@ -54,15 +57,18 @@ _bindgen_toolchain = rule(
             executable = True,
             mandatory = True,
         ),
+        "exec_os": attr.string(mandatory = True),
     },
 )
 
+# buildifier: disable=unnamed-macro
 def declare_bindgen_toolchains():
     """Declares one toolchain for each bindgen prebuilt."""
     for prebuilt in BINDGEN_PREBUILTS:
         _bindgen_toolchain(
             name = prebuilt.name + "_impl",
             bindgen = "@rules_rust_bindgen_{}//:{}".format(prebuilt.name, bindgen_binary_name(prebuilt.os)),
+            exec_os = prebuilt.os,
         )
 
         native.toolchain(

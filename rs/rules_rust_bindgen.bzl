@@ -14,8 +14,9 @@
 
 """Hermetic bindgen rule and prebuilt toolchains."""
 
-load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "C_COMPILE_ACTION_NAME")
+load("@apple_support//lib:apple_support.bzl", "apple_support")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@rules_cc//cc:action_names.bzl", "C_COMPILE_ACTION_NAME")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
@@ -23,6 +24,21 @@ load("//rs/private:bindgen.bzl", "CLANG_PARAMETER_FLAGS", "normalize_msvc_compil
 load("//rs/toolchains:declare_bindgen_toolchains.bzl", "BINDGEN_PREBUILTS", "bindgen_binary_name")
 
 _BINDGEN_TOOLCHAIN_TYPE = Label("//rs:bindgen_toolchain_type")
+
+def _supports_apple_action(ctx, bindgen_toolchain):
+    if not hasattr(bindgen_toolchain, "exec_os") or bindgen_toolchain.exec_os != "macos":
+        return False
+
+    return apple_support.target_os_from_rule_ctx(
+        ctx,
+        fail_on_missing_constraint = False,
+    ) != None and apple_support.target_environment_from_rule_ctx(
+        ctx,
+        fail_on_missing_constraint = False,
+    ) != None and apple_support.target_arch_from_rule_ctx(
+        ctx,
+        fail_on_missing_constraint = False,
+    ) != None
 
 def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
     compilation_context = ctx.attr.cc_lib[CcInfo].compilation_context
@@ -121,6 +137,44 @@ def _rust_bindgen_impl(ctx):
     args.add_all(_clang_compile_flags(ctx, cc_toolchain, feature_configuration))
 
     bindgen_toolchain = ctx.toolchains[_BINDGEN_TOOLCHAIN_TYPE]
+    if _supports_apple_action(ctx, bindgen_toolchain):
+        wrapper = ctx.actions.declare_file(ctx.label.name + "_apple_bindgen_wrapper.sh")
+        ctx.actions.write(
+            wrapper,
+            """#!/bin/bash
+set -euo pipefail
+
+bindgen="$1"
+shift
+
+resource_dir="$(xcrun clang -print-resource-dir)"
+exec "$bindgen" "$@" -resource-dir "$resource_dir"
+""",
+            is_executable = True,
+        )
+
+        bindgen_arg = ctx.actions.args()
+        bindgen_arg.add(bindgen_toolchain.bindgen)
+
+        apple_support.run(
+            actions = ctx.actions,
+            xcode_config = ctx.attr._xcode_config[apple_common.XcodeVersionConfig],
+            apple_platform_info = apple_support.platform_info_from_rule_ctx(ctx),
+            xcode_path_resolve_level = apple_support.xcode_path_resolve_level.args_and_files,
+            executable = wrapper,
+            arguments = [bindgen_arg, args],
+            inputs = compilation_context.headers,
+            outputs = [output],
+            tools = depset(
+                [bindgen_toolchain.bindgen],
+                transitive = [cc_toolchain.all_files],
+            ),
+            mnemonic = "RustBindgen",
+            progress_message = "Generating Rust bindings for {}".format(header.short_path),
+            toolchain = _BINDGEN_TOOLCHAIN_TYPE,
+        )
+        return
+
     ctx.actions.run(
         executable = bindgen_toolchain.bindgen,
         arguments = [args],
@@ -135,7 +189,7 @@ def _rust_bindgen_impl(ctx):
 rust_bindgen = rule(
     implementation = _rust_bindgen_impl,
     doc = "Generates Rust bindings for a C header with a hermetic bindgen executable.",
-    attrs = {
+    attrs = ({
         "bindgen_flags": attr.string_list(
             doc = "Arguments passed to bindgen before the input header.",
         ),
@@ -152,7 +206,7 @@ rust_bindgen = rule(
             allow_single_file = True,
             mandatory = True,
         ),
-    },
+    } | apple_support.action_required_attrs() | apple_support.platform_constraint_attrs()),
     fragments = ["cpp"],
     outputs = {"out": "%{name}.rs"},
     toolchains = [_BINDGEN_TOOLCHAIN_TYPE] + use_cc_toolchain(),

@@ -20,8 +20,7 @@ http_archive(
     url = "https://static.crates.io/crates/tinyjson/tinyjson-2.5.1.crate",
 )
 
-# TODO: Bump apple_support after Keith fixes the apple_support C++ toolchain and let BCR test with it.
-bazel_dep(name = "apple_support", version = "1.24.1")
+bazel_dep(name = "apple_support", version = "2.7.0")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 #########################################################
