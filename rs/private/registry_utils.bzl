@@ -12,13 +12,12 @@ def resolve_registry_source(source, cargo_config = {}):
         return source
 
     sources = cargo_config.get("source", {})
-    registries = cargo_config.get("registries", {})
     replacement = sources.get("crates-io", {}).get("replace-with")
     if not replacement:
         return CRATES_IO_REGISTRY
 
     visited = ["crates-io"]
-    for _ in range(len(sources) + len(registries) + 1):
+    for _ in range(len(sources) + 1):
         if replacement in visited:
             fail("Cargo registry source replacement cycle: %s" % " -> ".join(visited + [replacement]))
         visited.append(replacement)
@@ -29,9 +28,7 @@ def resolve_registry_source(source, cargo_config = {}):
             replacement = next_replacement
             continue
 
-        registry = replacement_source.get("registry")
-        if not registry:
-            registry = registries.get(replacement, {}).get("index")
+        registry = replacement_source.get("registry") or cargo_config.get("registries", {}).get(replacement, {}).get("index")
         if not registry:
             fail("Cargo registry source replacement %s does not define a registry index" % replacement)
         if not registry.startswith("sparse+"):

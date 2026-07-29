@@ -169,46 +169,44 @@ def _generate_hub_and_spokes(
                 package["download_token"].wait()
 
                 # TODO(zbarsky): Should we also dedupe this parsing?
-                metadatas = mctx.read(name + ".jsonl").strip().split("\n")
-                metadata = None
-                for line in metadatas:
-                    candidate = json.decode(line)
-                    if candidate["vers"] != version:
+                for line in mctx.read(name + ".jsonl").strip().split("\n"):
+                    if version not in line:
+                        continue
+                    metadata = json.decode(line)
+                    if metadata["vers"] != version:
                         continue
 
-                    metadata = candidate
+                    features = metadata.get("features") or {}
+
+                    # Crates published with newer Cargo populate this field for `resolver = "2"`.
+                    # It can express more nuanced feature dependencies and overrides the keys from legacy features, if present.
+                    features.update(metadata.get("features2") or {})
+
+                    dependencies = metadata["deps"]
+
+                    for dep in dependencies:
+                        if dep["default_features"]:
+                            dep.pop("default_features")
+                        if not dep["features"]:
+                            dep.pop("features")
+                        if dep.get("target", "") == None:
+                            dep.pop("target")
+                        if dep["kind"] == "normal":
+                            dep.pop("kind")
+                        if not dep["optional"]:
+                            dep.pop("optional")
+
+                    fact = dict(
+                        features = features,
+                        dependencies = dependencies,
+                    )
+
+                    # Nest a serialized JSON since max path depth is 5.
+                    facts[key] = json.encode(fact)
                     break
 
-                if metadata == None:
+                if fact == None:
                     fail("Sparse registry %s has no metadata for %s %s" % (source, name, version))
-
-                features = metadata.get("features") or {}
-
-                # Crates published with newer Cargo populate this field for `resolver = "2"`.
-                # It can express more nuanced feature dependencies and overrides the keys from legacy features, if present.
-                features.update(metadata.get("features2") or {})
-
-                dependencies = metadata["deps"]
-
-                for dep in dependencies:
-                    if dep["default_features"]:
-                        dep.pop("default_features")
-                    if not dep["features"]:
-                        dep.pop("features")
-                    if dep.get("target", "") == None:
-                        dep.pop("target")
-                    if dep["kind"] == "normal":
-                        dep.pop("kind")
-                    if not dep["optional"]:
-                        dep.pop("optional")
-
-                fact = dict(
-                    features = features,
-                    dependencies = dependencies,
-                )
-
-                # Nest a serialized JSON since max path depth is 5.
-                facts[key] = json.encode(fact)
         elif source.startswith("path+"):
             # Always re-read a path dependency's Cargo.toml instead of using cached facts.
             # Path dependencies are local, and Cargo.toml can change features or
@@ -697,10 +695,6 @@ def _crate_impl(mctx):
 
             for package in packages:
                 source = package.get("source")
-                if source == "registry+https://github.com/rust-lang/crates.io-index":
-                    source = CRATES_IO_REGISTRY
-                    package["source"] = source
-
                 if source and source.startswith("sparse+"):
                     registry_sources.add(source)
 
