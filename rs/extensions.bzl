@@ -125,12 +125,9 @@ def _generate_hub_and_spokes(
     _date(mctx, "start")
 
     mctx.report_progress("Reading workspace metadata")
-    cargo_metadata_args = [cargo_path, "metadata", "--no-deps", "--locked", "--format-version=1", "--quiet"]
-    if cargo_config:
-        cargo_metadata_args.extend(["--config", str(mctx.path(cargo_config))])
-
     result = mctx.execute(
-        cargo_metadata_args,
+        [cargo_path, "metadata", "--no-deps", "--locked", "--format-version=1", "--quiet"] +
+        (["--config", str(mctx.path(cargo_config))] if cargo_config else []),
         working_directory = str(mctx.path(cargo_lock_path).dirname),
     )
     if result.return_code != 0:
@@ -691,12 +688,11 @@ def _crate_impl(mctx):
 
             cargo_credentials_by_hub_name[cfg.name] = cargo_credentials
             packages = packages_by_hub_name[cfg.name]
-            registry_sources = set()
-
-            for package in packages:
-                source = package.get("source")
-                if source and source.startswith("sparse+"):
-                    registry_sources.add(source)
+            registry_sources = set([
+                package["source"]
+                for package in packages
+                if package.get("source") and package["source"].startswith("sparse+")
+            ])
 
             start_crate_registry_downloads(mctx, downloader_state, annotations, packages, cargo_credentials, cfg.debug)
 

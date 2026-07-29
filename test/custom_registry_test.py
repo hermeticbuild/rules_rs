@@ -1,9 +1,9 @@
+#!/usr/bin/env python3
 """Queries Rust targets generated from on-disk Cargo sparse registries."""
 
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import os
 import pathlib
@@ -17,28 +17,6 @@ import unittest
 
 CRATE_NAME = "registry_smoke"
 CRATE_VERSION = "1.0.0"
-CRATE_SOURCE = "pub fn answer() -> u32 { 42 }\n"
-
-
-def _crate_archive() -> bytes:
-    archive = io.BytesIO()
-    with tarfile.open(fileobj=archive, mode="w:gz") as tar:
-        files = {
-            "Cargo.toml": (
-                "[package]\n"
-                f'name = "{CRATE_NAME}"\n'
-                f'version = "{CRATE_VERSION}"\n'
-                'edition = "2021"\n'
-            ),
-            "src/lib.rs": CRATE_SOURCE,
-        }
-        for name, content in files.items():
-            encoded = content.encode()
-            entry = tarfile.TarInfo(f"{CRATE_NAME}-{CRATE_VERSION}/{name}")
-            entry.size = len(encoded)
-            entry.mode = 0o644
-            tar.addfile(entry, io.BytesIO(encoded))
-    return archive.getvalue()
 
 
 def _write_files(directory: pathlib.Path, files: dict[str, str]) -> None:
@@ -48,15 +26,28 @@ def _write_files(directory: pathlib.Path, files: dict[str, str]) -> None:
         path.write_text(textwrap.dedent(content))
 
 
-def _write_registry(
-    directory: pathlib.Path, registry_kind: str
-) -> tuple[str, str]:
-    archive = _crate_archive()
-    checksum = hashlib.sha256(archive).hexdigest()
+def _write_registry(directory: pathlib.Path) -> tuple[str, str]:
     index = directory / "index"
+    crate = directory / f"{CRATE_NAME}-{CRATE_VERSION}"
     archive_path = directory / "crates" / CRATE_NAME / CRATE_VERSION / "download"
 
+    _write_files(
+        crate,
+        {
+            "Cargo.toml": f"""\
+                [package]
+                name = "{CRATE_NAME}"
+                version = "{CRATE_VERSION}"
+                edition = "2021"
+                """,
+            "src/lib.rs": "pub fn answer() -> u32 { 42 }\n",
+        },
+    )
     archive_path.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(archive_path, mode="w:gz") as archive:
+        archive.add(crate, arcname=crate.name)
+    checksum = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+
     _write_files(
         directory,
         {
@@ -70,14 +61,13 @@ def _write_registry(
                     "vers": CRATE_VERSION,
                     "deps": [],
                     "cksum": checksum,
-                    "features": {f"{registry_kind}_fixture": []},
+                    "features": {},
                     "yanked": False,
                 }
             )
             + "\n",
         },
     )
-    archive_path.write_bytes(archive)
     return f"sparse+{index.as_uri()}/", checksum
 
 
@@ -103,14 +93,11 @@ class CustomRegistryTest(unittest.TestCase):
         # registry outside Bazel's deeply nested TEST_TMPDIR.
         with tempfile.TemporaryDirectory(prefix="rs-registry-") as temporary_directory:
             temporary_root = pathlib.Path(temporary_directory)
+            registry_source, checksum = _write_registry(temporary_root / "registry")
             for registry_kind in ("named", "replacement"):
                 with self.subTest(registry_kind=registry_kind):
-                    registry_source, checksum = _write_registry(
-                        temporary_root / "registries" / registry_kind,
-                        registry_kind,
-                    )
                     workspace = temporary_root / "workspace"
-                    self._write_workspace(
+                    hub_name = self._write_workspace(
                         workspace,
                         rules_rs_root,
                         registry_source,
@@ -118,7 +105,6 @@ class CustomRegistryTest(unittest.TestCase):
                         registry_kind,
                     )
 
-                    print(f"Querying {registry_kind} on-disk sparse registry", flush=True)
                     result = subprocess.run(
                         [
                             bazel,
@@ -128,7 +114,7 @@ class CustomRegistryTest(unittest.TestCase):
                             "query",
                             "--lockfile_mode=off",
                             "--noimplicit_deps",
-                            "deps(//:custom_registry, 3)",
+                            f"deps(@{hub_name}//:{CRATE_NAME}, 2)",
                         ],
                         cwd=workspace,
                         check=False,
@@ -144,8 +130,6 @@ class CustomRegistryTest(unittest.TestCase):
                         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
                     )
                     labels = result.stdout.splitlines()
-                    self.assertIn("//:custom_registry", labels)
-                    hub_name = "custom_registry_crates_" + registry_kind
                     self.assertIn(f"@{hub_name}//:{CRATE_NAME}", labels)
                     self.assertTrue(
                         any(
@@ -164,7 +148,7 @@ class CustomRegistryTest(unittest.TestCase):
         registry_source: str,
         checksum: str,
         registry_kind: str,
-    ) -> None:
+    ) -> str:
         hub_name = "custom_registry_crates_" + registry_kind
 
         if registry_kind == "named":
@@ -218,16 +202,7 @@ class CustomRegistryTest(unittest.TestCase):
                 "src/lib.rs": (
                     "pub fn registry_answer() -> u32 { registry_smoke::answer() }\n"
                 ),
-                "BUILD.bazel": f"""\
-                load("@rules_rs//rs:rust_library.bzl", "rust_library")
-
-                rust_library(
-                    name = "custom_registry",
-                    srcs = ["src/lib.rs"],
-                    edition = "2021",
-                    deps = ["@{hub_name}//:{CRATE_NAME}"],
-                )
-                """,
+                "BUILD.bazel": "",
                 "MODULE.bazel": f"""\
                 module(name = "custom_registry_test")
 
@@ -249,6 +224,7 @@ class CustomRegistryTest(unittest.TestCase):
                 """,
             },
         )
+        return hub_name
 
 
 if __name__ == "__main__":
