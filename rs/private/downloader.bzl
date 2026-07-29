@@ -82,7 +82,8 @@ def start_crate_registry_downloads(
         annotations,
         packages,
         cargo_credentials,
-        debug):
+        debug,
+        registry_file_checksums = {}):
     existing_facts = getattr(mctx, "facts", {}) or {}
 
     for package in packages:
@@ -107,6 +108,7 @@ def start_crate_registry_downloads(
                 in_flight_fetch = mctx.download(
                     url,
                     name + ".jsonl",
+                    sha256 = registry_file_checksums.get(url, ""),
                     headers = registry_auth_headers(cargo_credentials, source),
                     block = False,
                 )

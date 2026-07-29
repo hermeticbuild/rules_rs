@@ -1,5 +1,45 @@
 CRATES_IO_REGISTRY = "sparse+https://index.crates.io/"
 
+def resolve_registry_source(source, cargo_config = {}):
+    """Resolves a Cargo.lock registry source using Cargo source replacements."""
+    if source == None:
+        return None
+
+    if source.startswith("registry+sparse+"):
+        return source.removeprefix("registry+")
+
+    if source != "registry+https://github.com/rust-lang/crates.io-index":
+        return source
+
+    sources = cargo_config.get("source", {})
+    registries = cargo_config.get("registries", {})
+    replacement = sources.get("crates-io", {}).get("replace-with")
+    if not replacement:
+        return CRATES_IO_REGISTRY
+
+    visited = ["crates-io"]
+    for _ in range(len(sources) + len(registries) + 1):
+        if replacement in visited:
+            fail("Cargo registry source replacement cycle: %s" % " -> ".join(visited + [replacement]))
+        visited.append(replacement)
+
+        replacement_source = sources.get(replacement, {})
+        next_replacement = replacement_source.get("replace-with")
+        if next_replacement:
+            replacement = next_replacement
+            continue
+
+        registry = replacement_source.get("registry")
+        if not registry:
+            registry = registries.get(replacement, {}).get("index")
+        if not registry:
+            fail("Cargo registry source replacement %s does not define a registry index" % replacement)
+        if not registry.startswith("sparse+"):
+            fail("Cargo registry source replacement %s must use a sparse registry index: %s" % (replacement, registry))
+        return registry
+
+    fail("Cargo registry source replacements could not be resolved")
+
 def registry_download_template(config):
     """Returns the crate download template from a registry config.
 

@@ -24,7 +24,7 @@ load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_rep
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
-load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name")
+load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
 load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
@@ -125,8 +125,12 @@ def _generate_hub_and_spokes(
     _date(mctx, "start")
 
     mctx.report_progress("Reading workspace metadata")
+    cargo_metadata_args = [cargo_path, "metadata", "--no-deps", "--locked", "--format-version=1", "--quiet"]
+    if cargo_config:
+        cargo_metadata_args.extend(["--config", str(mctx.path(cargo_config))])
+
     result = mctx.execute(
-        [cargo_path, "metadata", "--no-deps", "--locked", "--format-version=1", "--quiet"],
+        cargo_metadata_args,
         working_directory = str(mctx.path(cargo_lock_path).dirname),
     )
     if result.return_code != 0:
@@ -166,41 +170,45 @@ def _generate_hub_and_spokes(
 
                 # TODO(zbarsky): Should we also dedupe this parsing?
                 metadatas = mctx.read(name + ".jsonl").strip().split("\n")
-                version_needle = '"vers":"%s"' % version
-                for metadata in metadatas:
-                    if version_needle not in metadata:
-                        continue
-                    metadata = json.decode(metadata)
-                    if metadata["vers"] != version:
+                metadata = None
+                for line in metadatas:
+                    candidate = json.decode(line)
+                    if candidate["vers"] != version:
                         continue
 
-                    features = metadata["features"]
+                    metadata = candidate
+                    break
 
-                    # Crates published with newer Cargo populate this field for `resolver = "2"`.
-                    # It can express more nuanced feature dependencies and overrides the keys from legacy features, if present.
-                    features.update(metadata.get("features2") or {})
+                if metadata == None:
+                    fail("Sparse registry %s has no metadata for %s %s" % (source, name, version))
 
-                    dependencies = metadata["deps"]
+                features = metadata.get("features") or {}
 
-                    for dep in dependencies:
-                        if dep["default_features"]:
-                            dep.pop("default_features")
-                        if not dep["features"]:
-                            dep.pop("features")
-                        if dep.get("target", "") == None:
-                            dep.pop("target")
-                        if dep["kind"] == "normal":
-                            dep.pop("kind")
-                        if not dep["optional"]:
-                            dep.pop("optional")
+                # Crates published with newer Cargo populate this field for `resolver = "2"`.
+                # It can express more nuanced feature dependencies and overrides the keys from legacy features, if present.
+                features.update(metadata.get("features2") or {})
 
-                    fact = dict(
-                        features = features,
-                        dependencies = dependencies,
-                    )
+                dependencies = metadata["deps"]
 
-                    # Nest a serialized JSON since max path depth is 5.
-                    facts[key] = json.encode(fact)
+                for dep in dependencies:
+                    if dep["default_features"]:
+                        dep.pop("default_features")
+                    if not dep["features"]:
+                        dep.pop("features")
+                    if dep.get("target", "") == None:
+                        dep.pop("target")
+                    if dep["kind"] == "normal":
+                        dep.pop("kind")
+                    if not dep["optional"]:
+                        dep.pop("optional")
+
+                fact = dict(
+                    features = features,
+                    dependencies = dependencies,
+                )
+
+                # Nest a serialized JSON since max path depth is 5.
+                facts[key] = json.encode(fact)
         elif source.startswith("path+"):
             # Always re-read a path dependency's Cargo.toml instead of using cached facts.
             # Path dependencies are local, and Cargo.toml can change features or
@@ -653,11 +661,18 @@ def _crate_impl(mctx):
             annotations_by_hub_name[cfg.name] = annotations
             mctx.watch(cfg.cargo_lock)
             mctx.watch(cfg.cargo_toml)
+            cargo_config = {}
+            if cfg.cargo_config:
+                mctx.watch(cfg.cargo_config)
+                cargo_config = run_toml2json(mctx, cfg.cargo_config)
             cargo_toml_by_hub_name[cfg.name] = run_toml2json(mctx, cfg.cargo_toml)
             cargo_lock = run_toml2json(mctx, cfg.cargo_lock)
             parsed_packages = cargo_lock.get("package", [])
             for package in parsed_packages:
                 package["hub_name"] = cfg.name
+                source = resolve_registry_source(package.get("source"), cargo_config)
+                if source:
+                    package["source"] = source
             packages_by_hub_name[cfg.name] = parsed_packages
 
             # Process git downloads first because they may require a followup download if the repo is a workspace,
@@ -689,12 +704,22 @@ def _crate_impl(mctx):
                 if source and source.startswith("sparse+"):
                     registry_sources.add(source)
 
-            start_crate_registry_downloads(mctx, downloader_state, annotations, packages, cargo_credentials, cfg.debug)
+            start_crate_registry_downloads(
+                mctx,
+                downloader_state,
+                annotations,
+                packages,
+                cargo_credentials,
+                cfg.debug,
+                cfg.registry_file_checksums,
+            )
 
             for source in sorted(registry_sources):
+                config_url = source.removeprefix("sparse+") + "config.json"
                 registry_config_repository(
                     name = registry_config_repo_name(cfg.name, source),
                     source = source,
+                    config_sha256 = cfg.registry_file_checksums.get(config_url, ""),
                     cargo_config = cfg.cargo_config,
                     use_home_cargo_credentials = cfg.use_home_cargo_credentials,
                 )
@@ -826,6 +851,9 @@ _from_cargo = tag_class(
         ),
         "cargo_lock": attr.label(),
         "cargo_config": attr.label(),
+        "registry_file_checksums": attr.string_dict(
+            doc = "SHA-256 checksums for sparse registry index and config URLs. Plain HTTP registry URLs require a checksum.",
+        ),
         "use_home_cargo_credentials": attr.bool(
             doc = "If set, the ruleset will load `~/cargo/credentials.toml` and attach those credentials to registry requests.",
         ),
