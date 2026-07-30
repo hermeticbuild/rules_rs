@@ -64,6 +64,22 @@ use_repo(crate, "crates")
 
 `platform_triples` should include every exec and target triple that can participate in the build. For the common case, include the host triples you use locally and in CI plus the target triples you build for.
 
+### Global Cargo configuration
+
+The root module can configure a shared Cargo configuration file for every Cargo closure, including closures declared by dependencies:
+
+```bzl
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.config(
+    cargo_config_toml = "//:.cargo/config.toml",
+    use_home_cargo_credentials = True,  # Optional.
+)
+```
+
+Use `cargo_config_toml` to configure custom Cargo registries such as Artifactory, including `[source.crates-io]` replacements. Set `use_home_cargo_credentials = True` when the registry requires credentials from `~/.cargo/credentials.toml`.
+
+A closure that supplies `crate.from_cargo(cargo_config = ...)` uses its own configuration file instead. Only the root module's `crate.config` applies globally; `crate.config` tags in dependency modules are ignored.
+
 ### `.bazelrc`
 
 Linux hosts work with Bazel's default host platform. If you also build on Windows,

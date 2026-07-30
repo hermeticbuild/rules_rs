@@ -642,13 +642,29 @@ def _crate_impl(mctx):
     downloader_state = new_downloader_state()
     suggested_annotation_snippet_paths = well_known_annotation_snippet_paths(mctx)
 
+    global_config = None
+    for mod in mctx.modules:
+        if not mod.is_root:
+            continue
+
+        if len(mod.tags.config) > 1:
+            fail("Only one `crate.config` tag may be declared by the root module")
+
+        if mod.tags.config:
+            global_config = mod.tags.config[0]
+
     packages_by_hub_name = {}
     cargo_toml_by_hub_name = {}
+    cargo_config_by_hub_name = {}
+    parsed_cargo_configs = {}
     cargo_credentials_by_hub_name = {}
+    use_home_cargo_credentials_by_hub_name = {}
     annotations_by_hub_name = {}
 
     for mod in mctx.modules:
         if not mod.tags.from_cargo:
+            if mod.tags.config:
+                continue
             fail("`.from_cargo` is required. Please update %s" % mod.name)
 
         for cfg in mod.tags.from_cargo:
@@ -656,10 +672,20 @@ def _crate_impl(mctx):
             annotations_by_hub_name[cfg.name] = annotations
             mctx.watch(cfg.cargo_lock)
             mctx.watch(cfg.cargo_toml)
+
+            effective_cargo_config = cfg.cargo_config or (global_config.cargo_config_toml if global_config else None)
+            cargo_config_by_hub_name[cfg.name] = effective_cargo_config
+            use_home_cargo_credentials_by_hub_name[cfg.name] = cfg.use_home_cargo_credentials or (global_config.use_home_cargo_credentials if global_config else False)
+
             cargo_config = {}
-            if cfg.cargo_config:
-                mctx.watch(cfg.cargo_config)
-                cargo_config = run_toml2json(mctx, cfg.cargo_config)
+            if effective_cargo_config:
+                cargo_config_key = str(effective_cargo_config)
+                cargo_config = parsed_cargo_configs.get(cargo_config_key)
+                if cargo_config == None:
+                    mctx.watch(effective_cargo_config)
+                    cargo_config = run_toml2json(mctx, effective_cargo_config)
+                    parsed_cargo_configs[cargo_config_key] = cargo_config
+
             cargo_toml_by_hub_name[cfg.name] = run_toml2json(mctx, cfg.cargo_toml)
             cargo_lock = run_toml2json(mctx, cfg.cargo_lock)
             parsed_packages = cargo_lock.get("package", [])
@@ -677,12 +703,14 @@ def _crate_impl(mctx):
     for mod in mctx.modules:
         for cfg in mod.tags.from_cargo:
             annotations = build_annotation_map(mod, cfg.name)
+            effective_cargo_config = cargo_config_by_hub_name[cfg.name]
+            use_home_cargo_credentials = use_home_cargo_credentials_by_hub_name[cfg.name]
 
-            if cfg.use_home_cargo_credentials:
-                if not cfg.cargo_config:
-                    fail("Must provide cargo_config when using cargo credentials")
+            if use_home_cargo_credentials:
+                if not effective_cargo_config:
+                    fail("Must provide cargo_config or crate.config(cargo_config_toml = ...) when using cargo credentials")
 
-                cargo_credentials = load_cargo_credentials(mctx, cfg.cargo_config)
+                cargo_credentials = load_cargo_credentials(mctx, effective_cargo_config)
             else:
                 cargo_credentials = {}
 
@@ -700,8 +728,8 @@ def _crate_impl(mctx):
                 registry_config_repository(
                     name = registry_config_repo_name(cfg.name, source),
                     source = source,
-                    cargo_config = cfg.cargo_config,
-                    use_home_cargo_credentials = cfg.use_home_cargo_credentials,
+                    cargo_config = effective_cargo_config,
+                    use_home_cargo_credentials = use_home_cargo_credentials,
                 )
 
     for fetch_state in downloader_state.in_flight_git_crate_fetches_by_url.values():
@@ -722,15 +750,16 @@ def _crate_impl(mctx):
                     direct_deps.append(cfg.name)
 
             hub_packages = packages_by_hub_name[cfg.name]
+            effective_cargo_config = cargo_config_by_hub_name[cfg.name]
             cargo_credentials = cargo_credentials_by_hub_name[cfg.name]
 
             annotations = build_annotation_map(mod, cfg.name)
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, cfg.cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
@@ -816,6 +845,19 @@ def _crate_impl(mctx):
         kwargs["facts"] = facts
 
     return mctx.extension_metadata(**kwargs)
+
+_config = tag_class(
+    doc = "Global Cargo configuration for closures that do not provide their own cargo_config.",
+    attrs = {
+        "cargo_config_toml": attr.label(
+            doc = "The Cargo configuration file applied to every closure without cargo_config.",
+            mandatory = True,
+        ),
+        "use_home_cargo_credentials": attr.bool(
+            doc = "Load ~/.cargo/credentials.toml for every Cargo closure.",
+        ),
+    },
+)
 
 _from_cargo = tag_class(
     doc = "Generates a repo @crates from a Cargo.toml / Cargo.lock pair.",
@@ -1010,6 +1052,7 @@ crate = module_extension(
     implementation = _crate_impl,
     tag_classes = {
         "annotation": _annotation,
+        "config": _config,
         "from_cargo": _from_cargo,
     },
 )
