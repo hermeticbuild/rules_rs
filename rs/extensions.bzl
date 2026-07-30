@@ -642,7 +642,8 @@ def _crate_impl(mctx):
     downloader_state = new_downloader_state()
     suggested_annotation_snippet_paths = well_known_annotation_snippet_paths(mctx)
 
-    global_config = None
+    global_cargo_config = None
+    global_use_home_cargo_credentials = False
     for mod in mctx.modules:
         if not mod.is_root:
             continue
@@ -651,7 +652,8 @@ def _crate_impl(mctx):
             fail("Only one `crate.config` tag may be declared by the root module")
 
         if mod.tags.config:
-            global_config = mod.tags.config[0]
+            global_cargo_config = mod.tags.config[0].cargo_config_toml
+            global_use_home_cargo_credentials = mod.tags.config[0].use_home_cargo_credentials
 
     packages_by_hub_name = {}
     cargo_toml_by_hub_name = {}
@@ -673,9 +675,9 @@ def _crate_impl(mctx):
             mctx.watch(cfg.cargo_lock)
             mctx.watch(cfg.cargo_toml)
 
-            effective_cargo_config = cfg.cargo_config or (global_config.cargo_config_toml if global_config else None)
+            effective_cargo_config = cfg.cargo_config or global_cargo_config
             cargo_config_by_hub_name[cfg.name] = effective_cargo_config
-            use_home_cargo_credentials_by_hub_name[cfg.name] = cfg.use_home_cargo_credentials or (global_config.use_home_cargo_credentials if global_config else False)
+            use_home_cargo_credentials_by_hub_name[cfg.name] = cfg.use_home_cargo_credentials or global_use_home_cargo_credentials
 
             cargo_config = {}
             if effective_cargo_config:
