@@ -645,6 +645,7 @@ def _crate_impl(mctx):
     global_cargo_config = None
     global_use_home_cargo_credentials = False
     for mod in mctx.modules:
+        # A dependency's standalone configuration must not override the root module's configuration.
         if not mod.is_root:
             continue
 
@@ -660,12 +661,13 @@ def _crate_impl(mctx):
     cargo_config_by_hub_name = {}
     parsed_cargo_configs = {}
     cargo_credentials_by_hub_name = {}
-    use_home_cargo_credentials_by_hub_name = {}
     annotations_by_hub_name = {}
 
     for mod in mctx.modules:
         if not mod.tags.from_cargo:
             if mod.tags.config:
+                # The root module can configure dependency closures without declaring a closure.
+                # Dependency modules that only declare crate.config remain valid when ignored.
                 continue
             fail("`.from_cargo` is required. Please update %s" % mod.name)
 
@@ -677,7 +679,6 @@ def _crate_impl(mctx):
 
             effective_cargo_config = cfg.cargo_config or global_cargo_config
             cargo_config_by_hub_name[cfg.name] = effective_cargo_config
-            use_home_cargo_credentials_by_hub_name[cfg.name] = cfg.use_home_cargo_credentials or global_use_home_cargo_credentials
 
             cargo_config = {}
             if effective_cargo_config:
@@ -706,7 +707,7 @@ def _crate_impl(mctx):
         for cfg in mod.tags.from_cargo:
             annotations = build_annotation_map(mod, cfg.name)
             effective_cargo_config = cargo_config_by_hub_name[cfg.name]
-            use_home_cargo_credentials = use_home_cargo_credentials_by_hub_name[cfg.name]
+            use_home_cargo_credentials = cfg.use_home_cargo_credentials or global_use_home_cargo_credentials
 
             if use_home_cargo_credentials:
                 if not effective_cargo_config:
