@@ -390,6 +390,7 @@ def _toolchains_impl(mctx):
                 version = base_version,
                 iso_date = iso_date,
                 sha256 = _sha_for("rust-analyzer", base_version, iso_date, exec_triple),
+                rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
             )
 
     if len(host_cargo_repos) != len(rust_versions):
