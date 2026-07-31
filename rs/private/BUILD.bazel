@@ -1,6 +1,6 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_setting")
-load("@rules_rust//rust:defs.bzl", "rust_stdlib_filegroup")
+load("@rules_rust//rust:rust_stdlib_filegroup.bzl", "rust_stdlib_filegroup")
 load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
 load(":bindgen_test.bzl", "bindgen_tests")
 load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
@@ -202,7 +202,10 @@ bzl_library(
     name = "source_stdlib",
     srcs = ["source_stdlib.bzl"],
     visibility = ["//rs:__subpackages__"],
-    deps = ["@rules_rust//rust:bzl_lib"],
+    deps = [
+        "@rules_rust//rust:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
 )
 
 bzl_library(

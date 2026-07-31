@@ -3,7 +3,7 @@ load("@rules_rust//rust/platform:triple_mappings.bzl", "system_to_dylib_ext", "s
 load(":rust_repository_utils.bzl", "RUST_REPOSITORY_COMMON_ATTR", "download_and_extract")
 
 _build_file_tmpl = """\
-load("@rules_rust//rust:toolchain.bzl", "rust_stdlib_filegroup")
+load("@rules_rust//rust:rust_stdlib_filegroup.bzl", "rust_stdlib_filegroup")
 
 rust_stdlib_filegroup(
     name = "rust_std-{target_triple}",

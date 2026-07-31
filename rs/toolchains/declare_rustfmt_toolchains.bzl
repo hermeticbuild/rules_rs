@@ -1,4 +1,4 @@
-load("@rules_rust//rust:toolchain.bzl", "rustfmt_toolchain")
+load("@rules_rust//rust:rustfmt_toolchain.bzl", "rustfmt_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_version")

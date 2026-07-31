@@ -2,8 +2,9 @@
 
 load("@bazel_skylib//lib:structs.bzl", "structs")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
+load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load(
-    "@rules_rust//rust:rust_common.bzl",
+    "@rules_rust//rust/private:providers.bzl",
     "BuildInfo",
     "CrateGroupInfo",
     "CrateInfo",
@@ -11,7 +12,6 @@ load(
     "DepVariantInfo",
     "TestCrateInfo",
 )
-load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("@rules_rust//rust/private:rustc.bzl", "rustc_compile")
 load("@rules_rust//rust/private:utils.bzl", "determine_output_hash")
 load("//rs/experimental/miri/private:providers.bzl", "MiriCrateInfo")

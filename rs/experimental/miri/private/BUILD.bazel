@@ -29,7 +29,6 @@ bzl_library(
         ":toolchain",
         "@bazel_skylib//lib:structs",
         "@rules_cc//cc/common",
-        "@rules_rust//rust:bzl_lib",
         "@rules_rust//rust/platform:bzl_lib",
         "@rules_rust//rust/private:bzl_lib",
     ],

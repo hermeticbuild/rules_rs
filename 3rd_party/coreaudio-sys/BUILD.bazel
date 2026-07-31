@@ -14,6 +14,6 @@ bzl_library(
         "@bazel_lib//lib:copy_to_directory",
         "@rules_cc//cc:defs_bzl",
         "@rules_rs//rs:rules_rust_bindgen",
-        "@rules_rust//rust:bzl_lib",
+        "@rules_rust//rust/private:bzl_lib",
     ],
 )

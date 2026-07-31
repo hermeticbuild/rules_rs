@@ -1,4 +1,4 @@
-load("@rules_rust//rust:toolchain.bzl", "rust_analyzer_toolchain")
+load("@rules_rust//rust:rust_analyzer_toolchain.bzl", "rust_analyzer_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
 load("//rs/private:rust_repository_utils.bzl", "includes_rust_analyzer_proc_macro_srv")

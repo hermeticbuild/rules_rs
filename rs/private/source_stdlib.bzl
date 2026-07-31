@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_stdlib_filegroup")
-load("@rules_rust//rust:rust_common.bzl", "CrateInfo", "DepInfo")
+load("@rules_rust//rust:rust_stdlib_filegroup.bzl", "rust_stdlib_filegroup")
+load("@rules_rust//rust/private:providers.bzl", "CrateInfo", "DepInfo")
 
 def _source_stdlib_build_transition_impl(_settings, _attr):
     return {

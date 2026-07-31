@@ -3,7 +3,7 @@
 load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@rules_cc//cc:defs.bzl", "CcInfo", "cc_library")
 load("@rules_rs//rs:rules_rust_bindgen.bzl", "rust_bindgen")
-load("@rules_rust//rust:rust_common.bzl", "BuildInfo")
+load("@rules_rust//rust/private:providers.bzl", "BuildInfo")
 
 def _coreaudio_sys_build_info_impl(ctx):
     out_dir = ctx.file.out_dir
