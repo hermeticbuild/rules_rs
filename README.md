@@ -130,14 +130,12 @@ rust_binary(
 
 ## rust-analyzer
 
-The rust-analyzer generator can be invoked like so:
-
-```bash
-bazel run @rules_rs//tools/rust_analyzer:gen_rust_project -- --help
-```
-
 See the upstream `rules_rust` rust-analyzer docs for editor setup details:
 https://bazelbuild.github.io/rules_rust/rust_analyzer.html#vscode
+
+If your root module does not expose rules_rs’s patched rules_rust repository
+as `@rules_rust`, replace `@rules_rust//tools/rust_analyzer:setup` in the
+upstream instructions with `@rules_rs//tools/rust_analyzer:setup`.
 
 ## Advanced Options
 
