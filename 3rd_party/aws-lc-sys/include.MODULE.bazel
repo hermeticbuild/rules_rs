@@ -1,4 +1,4 @@
-bazel_dep(name = "aws-lc", version = "5.1.0")
+bazel_dep(name = "aws-lc", version = "5.1.0.bcr.2")
 
 rules_rust_bindgen = use_extension("@rules_rs//rs:rules_rust_bindgen.bzl", "rules_rust_bindgen")
 use_repo(rules_rust_bindgen, "rules_rust_bindgen")

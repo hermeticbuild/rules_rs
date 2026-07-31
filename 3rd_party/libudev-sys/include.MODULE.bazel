@@ -1,4 +1,4 @@
-bazel_dep(name = "systemd", version = "260.1")
+bazel_dep(name = "systemd", version = "260.1.bcr.2")
 
 crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.annotation(

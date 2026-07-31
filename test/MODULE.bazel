@@ -36,27 +36,6 @@ git_override(
     strip_prefix = "tools",
 )
 
-osx = use_extension("@llvm//extensions:osx.bzl", "osx")
-osx.frameworks(names = [
-    "AudioToolbox",
-    "AudioUnit",
-    "CFNetwork",
-    "CoreAudio",
-    "CoreAudioTypes",
-    "CoreFoundation",
-    "CoreMIDI",
-    "CoreServices",
-    "DiskArbitration",
-    "Foundation",
-    "IOKit",
-    "Kernel",
-    "OSLog",
-    "OpenAL",
-    "Security",
-    "SystemConfiguration",
-])
-use_repo(osx, "macos_sdk")
-
 #local_path_override(
 #    module_name = "llvm",
 #    path = "../toolchains_llvm_bootstrapped",
@@ -88,21 +67,7 @@ single_version_override(
     patches = ["//:libffi-aarch64-trampoline.patch"],
 )
 
-single_version_override(
-    module_name = "systemd",
-    patch_strip = 1,
-    patches = ["//:systemd-external-include-paths.patch"],
-    version = "260.1.bcr.1",
-)
-
-# Fix swift toolchains...
-bazel_dep(name = "rules_swift", version = "3.5.0")
-single_version_override(
-    module_name = "rules_swift",
-    patch_strip = 1,
-    patches = ["//:0001-allow-disabling-autoconfiguration.patch"],
-)
-
+bazel_dep(name = "rules_swift", version = "4.0.0-rc4", repo_name = None)
 bazel_dep(name = "rules_rs", version = "0.0.0")
 local_path_override(
     module_name = "rules_rs",
