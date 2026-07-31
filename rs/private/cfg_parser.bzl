@@ -150,14 +150,75 @@ def _normalize_os(os_raw):
         return "macos"
     return os_raw
 
+# Architecture tokens that rustc reports under a different `target_arch` than
+# the triple spells. Mirrors the `arch` field of rustc's target specs.
 def _normalize_arch(arch_raw):
+    # Apple spells 64-bit Arm arm64/arm64e/arm64_32. Preserve other arm64*
+    # architectures such as Windows ARM64EC; every remaining arm* and thumb*
+    # variant is 32-bit Arm.
+    if arch_raw in ["arm64", "arm64_32", "arm64e"]:
+        return "aarch64"
+    if arch_raw.startswith("arm64"):
+        return arch_raw
+    if arch_raw.startswith("arm") or arch_raw.startswith("thumb"):
+        return "arm"
+    if arch_raw in ["i386", "i486", "i586", "i686"]:
+        return "x86"
     # RISC-V target triples encode the enabled ISA extensions in their first
     # component, while Rust's cfg(target_arch) exposes only the register width.
     if arch_raw.startswith("riscv32"):
         return "riscv32"
     if arch_raw.startswith("riscv64"):
         return "riscv64"
+    if arch_raw == "powerpc64le":
+        return "powerpc64"
+    if arch_raw.startswith("bpf"):
+        return "bpf"
     return arch_raw
+
+# ABIs that occupy the third component of a 3-part triple in place of an OS
+# (thumbv7m-none-eabi, thumbv7em-none-eabihf).
+_BARE_ABIS = ["eabi", "eabihf"]
+
+def _split_triple(triple):
+    """Splits a triple into (arch, vendor, os, env, abi) the way rustc does.
+
+    A 4-part triple is positional. A 3-part triple is not: the third component
+    may be an OS, an ABI, or an OS with the ABI glued onto it.
+
+    Args:
+        triple (str): A platform triple, e.g. `armv7-linux-androideabi`.
+
+    Returns:
+        A 5-tuple of raw (unnormalized) components.
+    """
+    parts = triple.split("-")
+    arch = _get(parts, 0, "")
+    vendor = _get(parts, 1, "unknown")
+    os_raw = _get(parts, 2, "none")
+    env = "-".join(parts[3:])
+    abi = ""
+
+    if len(parts) == 3 and os_raw in _BARE_ABIS:
+        # <arch>-<os>-<abi>: the OS sits in the vendor slot and the triple
+        # carries no vendor at all (thumbv7m-none-eabi -> os "none").
+        abi = os_raw
+        os_raw = vendor
+        vendor = "unknown"
+    elif os_raw == "androideabi":
+        # <arch>-linux-androideabi: the eabi ABI is glued onto the OS token,
+        # so a positional read yields target_os "androideabi" — which is
+        # neither "android" nor unix, and silently drops every cfg(unix) and
+        # cfg(target_os = "android") dependency for 32-bit Android.
+        abi = "eabi"
+        os_raw = "android"
+        vendor = "unknown"
+    elif os_raw == "android":
+        # <arch>-linux-android: the middle component is the system, not a
+        # vendor; rustc reports target_vendor "unknown".
+        vendor = "unknown"
+
+    return arch, vendor, os_raw, env, abi
 
 def _family_for_os(os_name):
     if os_name == "windows":
@@ -200,8 +261,9 @@ def _endian_for_arch(arch):
     return "little"
 
 def _abi_from_env(env):
-    # Very rough: surface a few commonly referenced ABIs
-    abi_pieces = ["eabi", "eabihf", "elf", "gnuabi64"]
+    # Very rough: surface a few commonly referenced ABIs. Longest first, so
+    # "gnueabihf" reports "eabihf" rather than matching "eabi" on the way past.
+    abi_pieces = ["gnuabi64", "eabihf", "eabi", "elf"]
     for abi_piece in abi_pieces:
         if abi_piece in env:
             return abi_piece
@@ -219,21 +281,23 @@ def _target_has_feature(ctx, feature):
     return False
 
 def triple_to_cfg_attrs(triple):
-    parts = triple.split("-")
-    arch_part = _normalize_arch(_get(parts, 0, ""))
-    vendor_part = _get(parts, 1, "unknown")
-    os_raw_part = _get(parts, 2, "none")
-    env_part = "-".join(parts[3:])
+    arch_raw, vendor_part, os_raw_part, env_part, abi_part = _split_triple(triple)
+    arch_norm = _normalize_arch(arch_raw)
     os_norm = _normalize_os(os_raw_part)
-    fam = _family_for_arch_and_os(arch_part, os_norm)
-    width = _pointer_width_for_arch(arch_part)
-    endian = _endian_for_arch(arch_part)
-    abi_guess = _abi_from_env(env_part)
+    fam = _family_for_arch_and_os(arch_norm, os_norm)
+
+    # Width from the normalized arch (thumbv7m is 32-bit Arm, but matches no
+    # entry in the raw table); endianness from the RAW arch, which is where the
+    # byte order is spelled — powerpc64le is little-endian while powerpc64 is
+    # big, and bpfeb is big-endian while bpfel is little.
+    width = _pointer_width_for_arch(arch_norm)
+    endian = _endian_for_arch(arch_raw)
+    abi_guess = abi_part if abi_part else _abi_from_env(env_part)
 
     return {
         "_triple": triple,
 
-        "target_arch": arch_part,
+        "target_arch": arch_norm,
         "target_vendor": vendor_part,
         "target_os": os_norm,
         "target_env": env_part,
