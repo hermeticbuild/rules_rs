@@ -12,10 +12,3 @@ version = "0.1.0"
 dependencies = [
  "path-walker-inner",
 ]
-
-[[package]]
-name = "workspace_path_demo"
-version = "0.1.0"
-dependencies = [
- "path-walker-outer",
-]

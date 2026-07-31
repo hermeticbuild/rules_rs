@@ -5,6 +5,7 @@ load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
+    "cargo_metadata_dep_to_dep_dict",
     "cargo_toml_fact",
     "platform_label",
     "render_dep_data",
@@ -76,6 +77,15 @@ def _git_crate_package_path(annotation, strip_prefix):
         return _normalize_path(workspace_dir)
     return _normalize_path(crate_dir)
 
+def _is_path_in_workspace(path, workspace_root):
+    """Checks whether a path belongs to the Cargo workspace being resolved."""
+    normalized_path = _normalize_path(path)
+    if not paths.is_absolute(normalized_path):
+        normalized_path = paths.join(workspace_root, normalized_path)
+    normalized_path = paths.normalize(normalized_path)
+    normalized_workspace_root = paths.normalize(_normalize_path(workspace_root))
+    return normalized_path.startswith(normalized_workspace_root + "/")
+
 def _target_label(repo_name, package_path, target):
     if package_path:
         return "@%s//%s:%s" % (repo_name, package_path, target)
@@ -134,6 +144,62 @@ def _generate_hub_and_spokes(
         fail(result.stdout + "\n" + result.stderr)
     cargo_metadata = json.decode(result.stdout)
 
+    path_package_names = {
+        package["name"]: True
+        for package in all_packages
+        if not package.get("source")
+    }
+    workspace_root = paths.normalize(_normalize_path(cargo_metadata["workspace_root"]))
+    path_manifests = []
+    scheduled_path_manifests = {}
+
+    # Root metadata only reports direct path dependencies. Seed the walk with direct external
+    # manifests, then inspect each manifest without resolving its complete dependency graph.
+    for package in cargo_metadata["packages"]:
+        for dep in package.get("dependencies", []):
+            dep_path = dep.get("path")
+            if dep_path and dep["name"] in path_package_names and not _is_path_in_workspace(dep_path, workspace_root):
+                manifest_path = paths.join(dep_path, "Cargo.toml")
+                if manifest_path not in scheduled_path_manifests:
+                    scheduled_path_manifests[manifest_path] = True
+                    path_manifests.append(manifest_path)
+    path_metadata_packages = cargo_metadata["packages"][:]
+    path_metadata_package_ids = {package["id"]: True for package in path_metadata_packages}
+
+    # There cannot be more manifests to inspect than path packages in the lockfile, which bounds
+    # this loop without requiring Starlark recursion.
+    for _ in range(len(all_packages)):
+        if not path_manifests:
+            break
+        manifest_path = path_manifests.pop()
+        result = mctx.execute(
+            [cargo_path, "metadata", "--no-deps", "--format-version=1", "--quiet", "--manifest-path", manifest_path] +
+            (["--config", str(mctx.path(cargo_config))] if cargo_config else []),
+            working_directory = str(mctx.path(cargo_lock_path).dirname),
+        )
+        if result.return_code != 0:
+            fail(result.stdout + "\n" + result.stderr)
+        path_metadata = json.decode(result.stdout)
+        for package in path_metadata["packages"]:
+            if package["id"] not in path_metadata_package_ids:
+                path_metadata_package_ids[package["id"]] = True
+                path_metadata_packages.append(package)
+            for dep in package.get("dependencies", []):
+                dep_path = dep.get("path")
+                if dep_path and dep["name"] in path_package_names and not _is_path_in_workspace(dep_path, workspace_root):
+                    dep_manifest_path = paths.join(dep_path, "Cargo.toml")
+                    if dep_manifest_path not in scheduled_path_manifests:
+                        scheduled_path_manifests[dep_manifest_path] = True
+                        path_manifests.append(dep_manifest_path)
+
+    if path_manifests:
+        fail("Could not resolve all transitive path dependencies with cargo metadata --no-deps")
+
+    path_metadata_by_fq_crate = {
+        _fq_crate(package["name"], package["version"]): package
+        for package in path_metadata_packages
+    }
+
     _date(mctx, "parsed cargo metadata")
 
     existing_facts = getattr(mctx, "facts", {}) or {}
@@ -144,6 +210,7 @@ def _generate_hub_and_spokes(
         cargo_metadata,
         workspace_cargo_toml_json,
         all_packages,
+        path_metadata_packages = path_metadata_packages,
     )
     packages = split_packages.packages
     workspace_members = split_packages.workspace_members
@@ -209,12 +276,27 @@ def _generate_hub_and_spokes(
             # Path dependencies are local, and Cargo.toml can change features or
             # dependencies without changing Cargo.lock, causing stale resolution.
             # Do not return path dependency facts for storage in MODULE.bazel.lock.
-            # Watch Cargo.toml so Bazel re-runs the extension when Cargo.toml changes.
+            # Watch workspace Cargo.toml files so Bazel re-runs the extension when they change.
             cargo_toml_path = paths.join(package["local_path"], "Cargo.toml")
-            mctx.watch(mctx.path(cargo_toml_path))
-            annotation = annotation_for(annotations, name, package["version"], hub_name)
-            cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
-            fact = cargo_toml_fact(cargo_toml_json, {})
+
+            # Module extensions cannot watch manifests outside the current workspace.
+            if _is_path_in_workspace(cargo_toml_path, workspace_root):
+                mctx.watch(mctx.path(cargo_toml_path))
+                annotation = annotation_for(annotations, name, package["version"], hub_name)
+                cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
+                fact = cargo_toml_fact(cargo_toml_json, {})
+            else:
+                # Cargo metadata resolves workspace inheritance in external path dependencies.
+                metadata_package = path_metadata_by_fq_crate.get(_fq_crate(name, version))
+                if not metadata_package:
+                    fail("Cargo metadata did not include path dependency %s %s" % (name, version))
+                fact = dict(
+                    features = metadata_package.get("features", {}),
+                    dependencies = [
+                        cargo_metadata_dep_to_dep_dict(dep)
+                        for dep in metadata_package.get("dependencies", [])
+                    ],
+                )
 
             package["strip_prefix"] = fact.get("strip_prefix", "")
         elif source.startswith("git+"):
