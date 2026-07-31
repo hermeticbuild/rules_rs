@@ -57,6 +57,52 @@ rust_binary(
 )
 
 rust_binary(
+    name = "launcher",
+    srcs = ["@rules_rust//tools/rust_analyzer:bin/launcher.rs"],
+    edition = "2021",
+    deps = ["@rrra//:serde_json"],
+)
+
+rust_binary(
+    name = "setup",
+    srcs = ["@rules_rust//tools/rust_analyzer:bin/setup.rs"],
+    data = [
+        "@rules_rust//rust/toolchain:current_rust_analyzer_toolchain",
+        "@rules_rust//rust/toolchain:current_rustfmt_toolchain",
+        ":discover_bazel_rust_project",
+        ":flycheck",
+        ":launcher",
+    ],
+    edition = "2021",
+    rustc_env = {
+        "ASPECT_REPOSITORY": aspect_repository(),
+        "DISCOVER_BINARY_RLOCATION": "$(rlocationpath :discover_bazel_rust_project)",
+        "FLYCHECK_BINARY_RLOCATION": "$(rlocationpath :flycheck)",
+        "DISCOVER_BINARY_RLOCATIONPATH": "$(rlocationpath :discover_bazel_rust_project)",
+        "FLYCHECK_BINARY_RLOCATIONPATH": "$(rlocationpath :flycheck)",
+        "LAUNCHER_RLOCATIONPATH": "$(rlocationpath :launcher)",
+        "RUST_ANALYZER_PROC_MACRO_SRV_RLOCATIONPATH": "$(RUST_ANALYZER_PROC_MACRO_SRV_RLOCATIONPATH)",
+        "RUST_ANALYZER_RLOCATIONPATH": "$(RUST_ANALYZER_RLOCATIONPATH)",
+        "RUSTFMT_RLOCATIONPATH": "$(RUSTFMT_RLOCATIONPATH)",
+    },
+    toolchains = [
+        "@rules_rust//rust/toolchain:current_rust_analyzer_toolchain",
+        "@rules_rust//rust/toolchain:current_rustfmt_toolchain",
+    ],
+    deps = [
+        ":gen_rust_project_lib",
+        "@rrra//:anyhow",
+        "@rrra//:camino",
+        "@rrra//:clap",
+        "@rrra//:env_logger",
+        "@rrra//:jsonc-parser",
+        "@rrra//:log",
+        "@rrra//:serde_json",
+        "@rules_rust//rust/runfiles",
+    ],
+)
+
+rust_binary(
     name = "validate",
     srcs = ["@rules_rust//tools/rust_analyzer:bin/validate.rs"],
     data = [
