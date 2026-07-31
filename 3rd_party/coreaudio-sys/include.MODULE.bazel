@@ -10,7 +10,6 @@ osx.frameworks(names = [
     "IOKit",
     "OpenAL",
 ])
-use_repo(osx, "macos_sdk")
 
 rules_rust_bindgen = use_extension("@rules_rs//rs:rules_rust_bindgen.bzl", "rules_rust_bindgen")
 rules_rust_bindgen.toolchain(name = "coreaudio_rules_rust_bindgen")
