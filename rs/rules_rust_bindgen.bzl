@@ -198,9 +198,17 @@ def _rules_rust_bindgen_impl(mctx):
     for name in sorted(toolchain_repositories):
         _rules_rust_bindgen_repo(name = name)
 
+    direct_deps = []
+    direct_dev_deps = []
+    if any([module.is_root for module in mctx.modules]):
+        if mctx.root_module_has_non_dev_dependency:
+            direct_deps = sorted(toolchain_repositories)
+        else:
+            direct_dev_deps = sorted(toolchain_repositories)
+
     return mctx.extension_metadata(
-        root_module_direct_deps = sorted(toolchain_repositories),
-        root_module_direct_dev_deps = [],
+        root_module_direct_deps = direct_deps,
+        root_module_direct_dev_deps = direct_dev_deps,
         reproducible = True,
     )
 
