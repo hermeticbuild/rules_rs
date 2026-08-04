@@ -1,0 +1,7 @@
+[package]
+name = "path-walker-outer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+path-walker-inner = { workspace = true }

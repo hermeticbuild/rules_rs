@@ -324,7 +324,14 @@ def _cargo_toml_patch_paths_by_name(workspace_cargo_toml, workspace_root, worksp
 
     return package_dirs
 
-def split_lockfile_packages(hub_name, cargo_metadata, workspace_cargo_toml, all_packages, repo_root = None, workspace_package_dir = ""):
+def split_lockfile_packages(
+        hub_name,
+        cargo_metadata,
+        workspace_cargo_toml,
+        all_packages,
+        repo_root = None,
+        workspace_package_dir = "",
+        path_metadata_packages = None):
     if repo_root == None:
         repo_root = cargo_metadata["workspace_root"]
     repo_root = normalize_path(repo_root)
@@ -333,7 +340,9 @@ def split_lockfile_packages(hub_name, cargo_metadata, workspace_cargo_toml, all_
     for package in cargo_metadata["packages"]:
         workspace_member_keys[(package["name"], package["version"])] = True
 
-    dep_paths_by_name = _cargo_metadata_dep_paths_by_name(cargo_metadata["packages"], repo_root)
+    if path_metadata_packages == None:
+        path_metadata_packages = cargo_metadata["packages"]
+    dep_paths_by_name = _cargo_metadata_dep_paths_by_name(path_metadata_packages, repo_root)
     patch_paths_by_name = _cargo_toml_patch_paths_by_name(workspace_cargo_toml, repo_root, workspace_package_dir)
     workspace_members = []
     packages = []

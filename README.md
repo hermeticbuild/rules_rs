@@ -64,6 +64,12 @@ use_repo(crate, "crates")
 
 `platform_triples` should include every exec and target triple that can participate in the build. For the common case, include the host triples you use locally and in CI plus the target triples you build for.
 
+### External path dependencies
+
+`crate.from_cargo` supports transitive Cargo path dependencies outside its root workspace. Because
+Bazel module extensions cannot watch manifests outside that workspace, run `bazel mod tidy` after
+changing an external dependency's `Cargo.toml` to refresh dependency resolution.
+
 ### Global Cargo configuration
 
 The root module can configure a shared Cargo configuration file for every Cargo closure, including closures declared by dependencies:
@@ -381,4 +387,3 @@ See https://registry.bazel.build/docs/rules_rs
 - [Etsy](https://www.etsy.com/)
 - [Aya](https://github.com/aya-rs/aya) and [bpf-linker](https://github.com/aya-rs/bpf-linker)
 - [Xybrid](https://github.com/xybrid-ai/xybrid)
-

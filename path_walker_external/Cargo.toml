@@ -1,0 +1,6 @@
+[workspace]
+members = ["inner", "outer"]
+resolver = "3"
+
+[workspace.dependencies]
+path-walker-inner = { path = "./inner" }

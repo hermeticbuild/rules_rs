@@ -1,6 +1,3 @@
-use itoa::Buffer;
-
 fn main() {
-    let mut buffer = Buffer::new();
-    println!("{}", buffer.format(1234));
+    println!("{}", path_walker_outer::answer());
 }
