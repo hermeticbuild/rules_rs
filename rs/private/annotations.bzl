@@ -1,3 +1,5 @@
+load("@bazel_skylib//lib:structs.bzl", "structs")
+
 def _crate_annotation(
         additive_build_file = None,
         additive_build_file_content = "",
@@ -97,7 +99,59 @@ def annotation_for(annotations_by_crate, crate_name, version, hub_name):
         return _windows_gnullvm_implicit_annotation(crate_name, version, hub_name)
     return _DEFAULT_CRATE_ANNOTATION
 
-def build_annotation_map(mod, cfg_name):
+_SELECTABLE_ANNOTATION_FIELDS = {
+    "build_script_data": "build_script_data_select",
+    "build_script_env": "build_script_env_select",
+    "build_script_tools": "build_script_tools_select",
+    "crate_features": "crate_features_select",
+    "deps": "deps_select",
+    "link_deps": "link_deps_select",
+    "rustc_flags": "rustc_flags_select",
+}
+
+_LIST_SELECT_FIELDS = [
+    "build_script_data_select",
+    "build_script_tools_select",
+    "crate_features_select",
+    "deps_select",
+    "link_deps_select",
+    "rustc_flags_select",
+    "target_compatible_with_select",
+]
+
+def _annotation_values(annotation):
+    values = structs.to_dict(annotation)
+    for field in ["crate", "repositories", "triples", "version"]:
+        values.pop(field, None)
+    return values
+
+def _merge_annotation_select(values, annotation, crate, version, cfg_name):
+    selected_values = _annotation_values(annotation)
+    for field, select_field in _SELECTABLE_ANNOTATION_FIELDS.items():
+        value = selected_values.get(field)
+        if not value:
+            continue
+
+        platform_values = dict(values.get(select_field, {}))
+        for triple in annotation.triples:
+            if triple in platform_values:
+                fail("Duplicate crate.annotation_select for %s version %s triple %s field %s in repo %s" % (crate, version, triple, field, cfg_name))
+            platform_values[triple] = json.encode(value) if field == "build_script_env" else value
+        values[select_field] = platform_values
+
+def _fill_select_defaults(values, platform_triples):
+    # Keep explicitly selected values conditional, including empty branches.
+    for field in _LIST_SELECT_FIELDS:
+        platform_values = values.get(field)
+        if not platform_values:
+            continue
+
+        platform_values = dict(platform_values)
+        for triple in platform_triples:
+            platform_values.setdefault(triple, [])
+        values[field] = platform_values
+
+def build_annotation_map(mod, cfg_name, platform_triples):
     """Build mapping {crate: {version|\"*\": annotation}} for a cfg name."""
     annotations = {}
     for annotation in mod.tags.annotation:
@@ -108,7 +162,21 @@ def build_annotation_map(mod, cfg_name):
         crate_map = annotations.setdefault(annotation.crate, {})
         if version_key in crate_map:
             fail("Duplicate crate.annotation for %s version %s in repo %s" % (annotation.crate, version_key, cfg_name))
-        crate_map[version_key] = annotation
+        crate_map[version_key] = _annotation_values(annotation)
+
+    for annotation in mod.tags.annotation_select:
+        if cfg_name not in (annotation.repositories or [cfg_name]):
+            continue
+
+        version_key = annotation.version or "*"
+        crate_map = annotations.setdefault(annotation.crate, {})
+        values = crate_map.setdefault(version_key, structs.to_dict(_DEFAULT_CRATE_ANNOTATION))
+        _merge_annotation_select(values, annotation, annotation.crate, version_key, cfg_name)
+
+    for crate_map in annotations.values():
+        for version, values in crate_map.items():
+            _fill_select_defaults(values, platform_triples)
+            crate_map[version] = _crate_annotation(**values)
     return annotations
 
 def well_known_annotation_snippet_paths(mctx):
