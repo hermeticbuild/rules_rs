@@ -340,6 +340,7 @@ crate.annotation(
             deps = annotation.deps,
             crate_tags = annotation.tags,
             deps_select = _select(feature_resolutions.deps),
+            link_deps = annotation.link_deps,
             aliases = feature_resolutions.aliases,
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
@@ -1005,6 +1006,9 @@ _annotation = tag_class(
         # ),
         "deps": attr.label_list(
             doc = "A list of labels to add to a crate's `rust_library::deps` attribute.",
+        ),
+        "link_deps": attr.string_list(
+            doc = "Labels to add to a crate's `rust_library::link_deps` attribute.",
         ),
         "tags": attr.string_list(
             doc = "A list of tags to add to a crate's generated targets.",

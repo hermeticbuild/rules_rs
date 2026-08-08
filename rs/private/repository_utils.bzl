@@ -176,6 +176,9 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    deps = [
 {indent}        {deps}
 {indent}    ]{extra_deps}{conditional_deps},
+{indent}    link_deps = [
+{indent}        {link_deps}
+{indent}    ],
 {indent}    data = [
 {indent}        {data}
 {indent}    ],
@@ -220,6 +223,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_legacy_rules_rust_platforms)
     deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_legacy_rules_rust_platforms)
     build_script_env_files = getattr(attr, "build_script_env_files", []) + ["cargo_toml_env_vars.env"]
+    link_deps = getattr(attr, "link_deps", [])
 
     conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_legacy_rules_rust_platforms)
 
@@ -250,6 +254,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         deps = list_indent.join(['"%s"' % d for d in sorted(deps)]),
         extra_deps = extra_deps,
         conditional_deps = " + " + conditional_deps if conditional_deps else "",
+        link_deps = list_indent.join(['"%s"' % d for d in sorted(link_deps)]),
         data = list_indent.join(['"%s"' % str(d) for d in attr.data]),
         extra_compile_data_attr = extra_compile_data_attr,
         crate_features = repr(sorted(crate_features)),
@@ -322,6 +327,7 @@ rust_crate_attrs = {
     "data": attr.label_list(),
     "deps": attr.label_list(),
     "deps_select": _label_list_dict(),
+    "link_deps": attr.string_list(),
     "aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
