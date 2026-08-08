@@ -347,6 +347,55 @@ If you need separate normal and test feature variants, model them as separate Ba
 </details>
 
 <details>
+<summary>Mutation testing with cargo-mutants (experimental)</summary>
+
+`cargo_mutants_test` rebuilds and re-runs a `rust_test` target once per mutant, and fails if any mutant survives.
+
+Bring your own `cargo-mutants` binary — it is used only to enumerate mutants, Bazel does the building and testing:
+
+```bzl
+# MODULE.bazel
+crate.annotation(crate = "cargo-mutants", gen_binaries = ["cargo-mutants"])
+```
+
+```
+# .bazelrc
+build --@rules_rs//rs/experimental/mutants:cargo_mutants_binary=@crates//:cargo-mutants__cargo-mutants
+```
+
+```bzl
+load("@rules_rs//rs/experimental/mutants:cargo_mutants_test.bzl", "cargo_mutants_test")
+
+cargo_mutants_test(
+    name = "mylib_mutants",
+    test = ":mylib_test",
+)
+```
+
+Every mutant is a fresh link plus a test run, so sweeps get slow fast. `jobs` builds and tests that many mutants at once on one machine; the standard `shard_count` attribute splits them across machines. The two compose:
+
+```bzl
+cargo_mutants_test(
+    name = "mylib_mutants",
+    jobs = 4,
+    shard_count = 8,
+    test = ":mylib_test",
+)
+```
+
+The same aspect can be swept over a whole tree without editing `BUILD` files. This only enumerates mutants; it does not run them:
+
+```bash
+bazel build //... \
+  --aspects=@rules_rs//rs/experimental/mutants:cargo_mutants_test.bzl%cargo_mutants_aspect \
+  --output_groups=cargo_mutants
+```
+
+Limitation: only the test target's own `#[cfg(test)]` tests run against each mutant. Integration tests living in a separate crate are not rebuilt.
+
+</details>
+
+<details>
 <summary>Migration from rules_rust loads</summary>
 
 If you import `rules_rust` through the `rules_rs` extension, existing `load("@rules_rust//...")` statements can be kept during migration.

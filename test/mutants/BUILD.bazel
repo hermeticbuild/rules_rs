@@ -1,0 +1,68 @@
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+load("@rules_rs//rs:rust_test.bzl", "rust_test")
+load("@rules_rs//rs/experimental/mutants:cargo_mutants_test.bzl", "cargo_mutants_test")
+
+package(default_visibility = ["//visibility:public"])
+
+NOT_WINDOWS = select({
+    "@platforms//os:windows": ["@platforms//:incompatible"],
+    "//conditions:default": [],
+})
+
+rust_library(
+    name = "well_tested",
+    srcs = ["well_tested.rs"],
+    crate_name = "well_tested",
+    edition = "2024",
+)
+
+rust_test(
+    name = "well_tested_test",
+    crate = ":well_tested",
+)
+
+# Sharded and parallel, so `bazel test //mutants/...` covers both fan-out paths.
+cargo_mutants_test(
+    name = "well_tested_mutants",
+    timeout = "long",
+    jobs = 2,
+    shard_count = 2,
+    target_compatible_with = NOT_WINDOWS,
+    test = ":well_tested_test",
+)
+
+rust_library(
+    name = "under_tested",
+    srcs = ["under_tested.rs"],
+    crate_name = "under_tested",
+    edition = "2024",
+)
+
+rust_test(
+    name = "under_tested_test",
+    crate = ":under_tested",
+)
+
+# Expected to fail: `triple` has no test covering it.
+cargo_mutants_test(
+    name = "under_tested_mutants",
+    timeout = "long",
+    jobs = 2,
+    tags = ["manual"],
+    target_compatible_with = NOT_WINDOWS,
+    test = ":under_tested_test",
+)
+
+rust_test(
+    name = "under_tested_mutants_failure_test",
+    timeout = "long",
+    srcs = ["expect_missed_mutants.rs"],
+    args = [
+        "$(rootpath :under_tested_mutants)",
+        "MISSED under_tested.rs",
+    ],
+    data = [":under_tested_mutants"],
+    edition = "2024",
+    target_compatible_with = NOT_WINDOWS,
+    use_libtest_harness = False,
+)

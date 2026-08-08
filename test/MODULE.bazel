@@ -74,6 +74,19 @@ local_path_override(
     path = "..",
 )
 
+# Any `osx.frameworks` tag replaces the SDK default set, and coreaudio-sys
+# declares one, so restate the defaults here. cargo-mutants -> whoami needs
+# SystemConfiguration; datafusion-macros -> ring needs Security.
+osx = use_extension("@llvm//extensions:osx.bzl", "osx")
+osx.frameworks(names = [
+    "CoreFoundation",
+    "Foundation",
+    "Kernel",
+    "OSLog",
+    "Security",
+    "SystemConfiguration",
+])
+
 rules_rust = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
 use_repo(rules_rust, "rules_rust")
 
@@ -121,6 +134,7 @@ TESTS = [
     "many_workspace_deps",  # Got count 45796 in 20 rounds
     "multiple_versions_for_dependency",
     "multiple_versions_of_optional_dep",
+    "mutants",
     "non_optional_dep_feature",
     "optional_build_deps",
     "platform_dep_features",
@@ -224,6 +238,14 @@ crate.annotation(
         "protoc-gen-prost-extra": "protoc-gen-prost",
     },
     gen_binaries = ["protoc-gen-prost"],
+)
+
+# cargo-mutants enumerates mutants for //mutants tests; rules_rs takes the
+# binary as a label_flag rather than vendoring it.
+crate.annotation(
+    crate = "cargo-mutants",
+    gen_binaries = ["cargo-mutants"],
+    repositories = ["mutants"],
 )
 
 # Test gen_binaries for a binary-only crate (no [lib], no src/lib.rs).

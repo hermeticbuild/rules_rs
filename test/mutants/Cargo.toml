@@ -1,0 +1,9 @@
+[package]
+name = "mutants"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+cargo-mutants = "27.1.0"

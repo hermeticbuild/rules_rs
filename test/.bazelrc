@@ -4,6 +4,8 @@ common --repo_contents_cache=~/bazel_repo_contents_cache
 common --disk_cache=~/bazel_cache
 common --incompatible_disallow_empty_glob=False
 
+common --@rules_rs//rs/experimental/mutants:cargo_mutants_binary=@mutants//:cargo-mutants__cargo-mutants
+
 # For some BCR -sys deps
 common --@rules_python//python/config_settings:bootstrap_impl=script
 
