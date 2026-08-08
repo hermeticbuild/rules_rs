@@ -1,4 +1,4 @@
-"""Converts a parsed Cargo.toml [lints] section into rustc/clippy/rustdoc flags."""
+"""Converts parsed Cargo.toml lint sections into rustc/clippy/rustdoc flags."""
 
 _VALID_LEVELS = ["allow", "warn", "deny", "forbid"]
 
@@ -45,7 +45,7 @@ def _format_flags(lints, prefix):
     return flags
 
 def cargo_toml_lint_flags(cargo_toml_json):
-    """Extracts lint flags from a parsed Cargo.toml JSON dict.
+    """Extracts effective package lint flags from a parsed Cargo.toml.
 
     Args:
         cargo_toml_json: The parsed Cargo.toml as a dict (from toml2json).
@@ -55,6 +55,10 @@ def cargo_toml_lint_flags(cargo_toml_json):
         rustdoc_lint_flags, each a list of strings.
     """
     lints = cargo_toml_json.get("lints", {})
+
+    if lints.get("workspace") == True:
+        lints = cargo_toml_json.get("workspace", {}).get("lints", {})
+
     if not lints:
         return struct(
             rustc_lint_flags = [],
@@ -62,13 +66,30 @@ def cargo_toml_lint_flags(cargo_toml_json):
             rustdoc_lint_flags = [],
         )
 
-    workspace = lints.get("workspace")
-    if workspace == True:
-        # Workspace-inherited lints are resolved by the workspace Cargo.toml
-        # itself, which is what we parse. If a member sets
-        # `lints.workspace = true`, the workspace's lints section is used
-        # directly.
-        lints = {}
+    return struct(
+        rustc_lint_flags = _format_flags(lints.get("rust", {}), ""),
+        clippy_lint_flags = _format_flags(lints.get("clippy", {}), "clippy"),
+        rustdoc_lint_flags = _format_flags(lints.get("rustdoc", {}), "rustdoc"),
+    )
+
+def workspace_cargo_toml_lint_flags(cargo_toml_json):
+    """Extracts workspace lint policy from a parsed Cargo.toml.
+
+    Args:
+        cargo_toml_json: The parsed workspace Cargo.toml as a dict (from toml2json).
+
+    Returns:
+        A struct with rustc_lint_flags, clippy_lint_flags, and
+        rustdoc_lint_flags, each a list of strings.
+    """
+    lints = cargo_toml_json.get("workspace", {}).get("lints", {})
+
+    if not lints:
+        return struct(
+            rustc_lint_flags = [],
+            clippy_lint_flags = [],
+            rustdoc_lint_flags = [],
+        )
 
     return struct(
         rustc_lint_flags = _format_flags(lints.get("rust", {}), ""),

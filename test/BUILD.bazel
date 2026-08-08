@@ -15,6 +15,7 @@ load("@workspace_renamed_path_dep_aliases//:defs.bzl", workspace_renamed_path_de
 load("//:rustdoc_musl_unwind_test.bzl", "rustdoc_musl_unwind_link_flags_test")
 load("//:target_triple_constraints_test.bzl", "target_triple_constraints_test")
 load("//:verify_aliases.bzl", "verify_alias", "verify_alias_absent", "verify_crate_feature_absent", "verify_crate_feature_present", "verify_dep_absent", "verify_dep_present", "verify_dev_dep_absent")
+load("//:workspace_lints_test.bzl", "explicit_workspace_lints_test", "manifest_only_workspace_lints_test", "opted_out_workspace_lints_test")
 
 target_triple_constraints_test()
 
@@ -56,6 +57,43 @@ rust_doc_test(
 rustdoc_musl_unwind_link_flags_test(
     name = "rustdoc_musl_unwind_link_flags_test",
     target_under_test = ":rustdoc_musl_unwind_doctest",
+)
+
+rust_library(
+    name = "workspace_lints_manifest_only",
+    srcs = ["workspace_lints/opted_in/src/lib.rs"],
+    crate_name = "workspace_lints_manifest_only",
+    edition = "2024",
+)
+
+manifest_only_workspace_lints_test(
+    name = "workspace_lints_manifest_only_test",
+    target_under_test = ":workspace_lints_manifest_only",
+)
+
+rust_library(
+    name = "workspace_lints_explicit",
+    srcs = ["workspace_lints/opted_in/src/lib.rs"],
+    crate_name = "workspace_lints_explicit",
+    edition = "2024",
+    lint_config = "@workspace_lints//:workspace_cargo_lints",
+)
+
+explicit_workspace_lints_test(
+    name = "workspace_lints_explicit_test",
+    target_under_test = ":workspace_lints_explicit",
+)
+
+rust_library(
+    name = "workspace_lints_opted_out",
+    srcs = ["workspace_lints/opted_out/src/lib.rs"],
+    crate_name = "workspace_lints_opted_out",
+    edition = "2024",
+)
+
+opted_out_workspace_lints_test(
+    name = "workspace_lints_opted_out_test",
+    target_under_test = ":workspace_lints_opted_out",
 )
 
 DISABLED = [
