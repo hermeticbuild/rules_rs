@@ -1,0 +1,7 @@
+[package]
+name = "registry_dep_rename_demo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+renamed_dep = { path = "../external_dep", package = "external_dep" }

@@ -278,6 +278,7 @@ def _generate_hub_and_spokes(
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
     workspace_dep_labels_by_triple = workspace_resolution.workspace_dep_labels_by_triple
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
+    workspace_dep_rename_versions_by_name = workspace_resolution.workspace_dep_rename_versions_by_name
 
     _date(mctx, "set up initial deps!")
 
@@ -489,6 +490,46 @@ alias(
                     alias_name = alias_name,
                     version = version,
                 ))
+
+    for rename, fqs in workspace_dep_rename_versions_by_name.items():
+        if rename in versions_by_name:
+            # A real crate already owns this name at the hub; don't let a
+            # same-named rename overwrite its alias.
+            continue
+
+        real_name_by_version = {}
+        for fq in sorted(fqs):
+            package = package_by_fq[fq]
+            target_repo_name = package["target_repo_name"]
+            target_package_path = package["target_package_path"]
+            real_name = package["name"]
+            version = package["version"]
+
+            existing_real_name = real_name_by_version.get(version)
+            if existing_real_name and existing_real_name != real_name:
+                fail("Cargo dependency rename %r refers to both %r and %r at version %s; can't alias both to @%s//:%s-%s" % (
+                    rename,
+                    existing_real_name,
+                    real_name,
+                    version,
+                    hub_name,
+                    rename,
+                    version,
+                ))
+            real_name_by_version[version] = real_name
+
+            hub_contents.append("""
+alias(
+    name = "{rename}-{version}",
+    actual = "{actual}",
+)""".format(rename = rename, version = version, actual = _target_label(target_repo_name, target_package_path, real_name)))
+
+        fq = sorted(fqs)[-1]
+        hub_contents.append("""
+alias(
+    name = "{rename}",
+    actual = ":{fq}",
+)""".format(rename = rename, fq = fq))
 
     for package in cargo_metadata["packages"]:
         package_dir = _manifest_package_dir(package["manifest_path"], repo_root)

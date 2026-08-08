@@ -1,0 +1,4 @@
+[workspace]
+members = ["app"]
+exclude = ["external_dep"]
+resolver = "3"
