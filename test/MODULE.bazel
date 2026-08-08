@@ -182,30 +182,36 @@ crate.annotation(
     crate = "rustls",
     # Test for https://github.com/bazelbuild/rules_rust/issues/3626
     crate_features = ["fips"],
-    crate_features_select = {
-        "x86_64-unknown-linux-gnu": ["fips"],
-    },
     repositories = ["annotation_crate_features"],
-    rustc_flags_select = {
-        "x86_64-unknown-linux-gnu": ["--cfg=rules_rs_annotation_smoke"],
-    },
 )
-crate.annotation(
+crate.annotation_select(
+    crate = "rustls",
+    crate_features = ["fips"],
+    repositories = ["annotation_crate_features"],
+    rustc_flags = ["--cfg=rules_rs_annotation_smoke"],
+    triples = ["x86_64-unknown-linux-gnu"],
+)
+crate.annotation_select(
+    build_script_data = ["//:main.rs"],
+    build_script_env = {"OS": "darwin"},
+    build_script_tools = ["//:main.rs"],
     # Smoke test the select attributes.
-    build_script_data_select = {
-        "aarch64-apple-darwin": ["//:main.rs"],
-        "x86_64-unknown-linux-gnu": ["//:dummy_test.sh"],
-    },
-    build_script_env_select = {
-        "aarch64-apple-darwin": '{"OS": "darwin"}',
-        "x86_64-unknown-linux-musl": '{"OS": "linux"}',
-    },
-    build_script_tools_select = {
-        "aarch64-apple-darwin": ["//:main.rs"],
-        "x86_64-unknown-linux-gnu": ["//:dummy_test.sh"],
-    },
     crate = "bitflags",
     repositories = ["build_script_env_select"],
+    triples = ["aarch64-apple-darwin"],
+)
+crate.annotation_select(
+    build_script_data = ["//:dummy_test.sh"],
+    build_script_tools = ["//:dummy_test.sh"],
+    crate = "bitflags",
+    repositories = ["build_script_env_select"],
+    triples = ["x86_64-unknown-linux-gnu"],
+)
+crate.annotation_select(
+    build_script_env = {"OS": "linux"},
+    crate = "bitflags",
+    repositories = ["build_script_env_select"],
+    triples = ["x86_64-unknown-linux-musl"],
 )
 crate.annotation(
     crate = "tokenizers",
