@@ -1,11 +1,14 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_setting")
 load("@rules_rust//rust:rust_stdlib_filegroup.bzl", "rust_stdlib_filegroup")
+load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES")
 load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
 load(":bindgen_test.bzl", "bindgen_tests")
 load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
 load(":cargo_toml_utils_test.bzl", "cargo_toml_utils_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
+load(":cfg_oracle.bzl", "cfg_oracle_data")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
@@ -35,6 +38,19 @@ cargo_toml_utils_tests()
 cargo_workspace_graph_tests()
 
 cfg_parser_tests()
+
+cfg_oracle_data(
+    name = "generated_cfg_target_data",
+    tags = ["manual"],
+    triples = ALL_TARGET_TRIPLES,
+)
+
+write_source_files(
+    name = "update_cfg_target_data",
+    files = {
+        "cfg_target_data.bzl": ":generated_cfg_target_data.bzl",
+    },
+)
 
 lint_flags_tests()
 
@@ -360,6 +376,17 @@ bzl_library(
     name = "cfg_parser",
     srcs = ["cfg_parser.bzl"],
     visibility = ["//rs:__subpackages__"],
+    deps = [":cfg_target_data"],
+)
+
+bzl_library(
+    name = "cfg_target_data",
+    srcs = ["cfg_target_data.bzl"],
+)
+
+bzl_library(
+    name = "cfg_oracle",
+    srcs = ["cfg_oracle.bzl"],
 )
 
 bzl_library(
