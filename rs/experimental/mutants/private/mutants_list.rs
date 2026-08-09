@@ -69,9 +69,13 @@ fn copy_into(root: &Path, src: &Path) -> Result<(), String> {
         fs::create_dir_all(parent)
             .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
     }
-    fs::copy(src, &dest)
-        .map(|_| ())
-        .map_err(|err| format!("failed to copy {} to {}: {err}", src.display(), dest.display()))
+    fs::copy(src, &dest).map(|_| ()).map_err(|err| {
+        format!(
+            "failed to copy {} to {}: {err}",
+            src.display(),
+            dest.display()
+        )
+    })
 }
 
 fn write_manifest(root: &Path, args: &Args) -> Result<(), String> {
@@ -109,7 +113,8 @@ fn run() -> Result<(), String> {
         std::process::id()
     ));
     let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).map_err(|err| format!("failed to create {}: {err}", root.display()))?;
+    fs::create_dir_all(&root)
+        .map_err(|err| format!("failed to create {}: {err}", root.display()))?;
 
     for src in &args.srcs {
         copy_into(&root, src)?;

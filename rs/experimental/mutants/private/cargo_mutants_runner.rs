@@ -67,6 +67,8 @@ struct Manifest {
     crate_root: String,
     output: String,
     srcs: Vec<PathBuf>,
+    compile_data: Vec<PathBuf>,
+    test_args: Vec<String>,
     timeout_multiplier: u32,
     jobs: usize,
 }
@@ -91,6 +93,8 @@ fn parse_manifest() -> Result<Manifest, String> {
     let mut crate_root = None;
     let mut output = None;
     let mut srcs = Vec::new();
+    let mut compile_data = Vec::new();
+    let mut test_args = Vec::new();
     let mut timeout_multiplier = 5;
     let mut jobs = 1;
 
@@ -107,6 +111,8 @@ fn parse_manifest() -> Result<Manifest, String> {
             "--crate-root" => crate_root = Some(value),
             "--output" => output = Some(value),
             "--src" => srcs.push(PathBuf::from(value)),
+            "--compile-data" => compile_data.push(PathBuf::from(value)),
+            "--test-arg" => test_args.push(value),
             "--timeout-multiplier" => {
                 timeout_multiplier = value
                     .parse()
@@ -129,6 +135,8 @@ fn parse_manifest() -> Result<Manifest, String> {
         crate_root: crate_root.ok_or("missing --crate-root")?,
         output: output.ok_or("missing --output")?,
         srcs,
+        compile_data,
+        test_args,
         timeout_multiplier: timeout_multiplier.max(1),
         jobs: jobs.max(1),
     })
@@ -188,6 +196,20 @@ fn write(path: &Path, contents: &str) -> Result<(), String> {
     fs::write(path, contents).map_err(|err| format!("failed to write {}: {err}", path.display()))
 }
 
+fn copy(path: &Path, dest: &Path) -> Result<(), String> {
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
+    }
+    fs::copy(path, dest).map(|_| ()).map_err(|err| {
+        format!(
+            "failed to copy {} to {}: {err}",
+            path.display(),
+            dest.display()
+        )
+    })
+}
+
 fn wait_with_timeout(mut child: Child, timeout: Duration) -> Result<Option<i32>, String> {
     let deadline = Instant::now() + timeout;
     loop {
@@ -210,6 +232,8 @@ struct Replay {
     argv: Vec<String>,
     env: Vec<(String, String)>,
     binary: PathBuf,
+    test_args: Vec<String>,
+    test_working_dir: PathBuf,
 }
 
 impl Replay {
@@ -232,6 +256,8 @@ impl Replay {
 
     fn run_tests(&self, timeout: Duration) -> Result<Option<i32>, String> {
         let child = Command::new(&self.binary)
+            .args(&self.test_args)
+            .current_dir(&self.test_working_dir)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
@@ -303,9 +329,15 @@ fn prepare(
     args: &[String],
     environment: &[(String, String)],
     originals: &BTreeMap<PathBuf, String>,
+    test_working_dir: &Path,
 ) -> Result<Replay, String> {
     for (src, text) in originals {
         write(&scratch.join(src), text)?;
+    }
+    for data in &manifest.compile_data {
+        if !originals.contains_key(data) {
+            copy(data, &scratch.join(data))?;
+        }
     }
     let crate_root = scratch.join(&manifest.crate_root);
     let binary = scratch.join("mutant_test_binary");
@@ -328,6 +360,8 @@ fn prepare(
         argv,
         env: environment.to_vec(),
         binary,
+        test_args: manifest.test_args.clone(),
+        test_working_dir: test_working_dir.to_path_buf(),
     })
 }
 
@@ -390,6 +424,9 @@ fn run() -> Result<(), String> {
     let runfiles = replay_root(&scratch)?;
     env::set_current_dir(&runfiles)
         .map_err(|err| format!("failed to enter {}: {err}", runfiles.display()))?;
+    let test_working_dir = env::var_os("TEST_WORKSPACE")
+        .map(|workspace| runfiles.join(workspace))
+        .unwrap_or_else(|| runfiles.clone());
 
     // Parsed only now: the `@manifest` argument is itself an exec-root path.
     let manifest = parse_manifest()?;
@@ -439,7 +476,16 @@ fn run() -> Result<(), String> {
     let scratches: Vec<PathBuf> = (0..jobs).map(|job| scratch.join(job.to_string())).collect();
     let replays = scratches
         .iter()
-        .map(|scratch| prepare(scratch, &manifest, &args, &environment, &originals))
+        .map(|scratch| {
+            prepare(
+                scratch,
+                &manifest,
+                &args,
+                &environment,
+                &originals,
+                &test_working_dir,
+            )
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     if let Err(stderr) = replays[0].build()? {
@@ -516,7 +562,10 @@ mod tests {
 
     #[test]
     fn replaces_within_a_line() {
-        assert_eq!(span_replace("fn a() -> i32 { 1 }", (1, 15), (1, 20), "{ 0 }"), "fn a() -> i32 { 0 }");
+        assert_eq!(
+            span_replace("fn a() -> i32 { 1 }", (1, 15), (1, 20), "{ 0 }"),
+            "fn a() -> i32 { 0 }"
+        );
     }
 
     #[test]
@@ -528,5 +577,18 @@ mod tests {
     #[test]
     fn replaces_at_end_of_input() {
         assert_eq!(span_replace("ab", (1, 3), (1, 3), "c"), "abc");
+    }
+
+    #[test]
+    fn copies_compile_data_as_bytes() {
+        let root =
+            std::env::temp_dir().join(format!("cargo_mutants_runner_test.{}", std::process::id()));
+        let source = root.join("source");
+        let dest = root.join("dest");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(&source, [0xff, 0x00, b'\n']).unwrap();
+        super::copy(&source, &dest).unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), [0xff, 0x00, b'\n']);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

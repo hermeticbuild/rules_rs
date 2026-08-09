@@ -9,16 +9,27 @@ NOT_WINDOWS = select({
     "//conditions:default": [],
 })
 
+genrule(
+    name = "compile_data",
+    outs = ["compile_data.bin"],
+    cmd = "printf '\\377' > $@",
+    cmd_bat = "powershell -NoProfile -NonInteractive -Command \"[IO.File]::WriteAllBytes('$@', [byte[]](255))\"",
+)
+
 rust_library(
     name = "well_tested",
     srcs = ["well_tested.rs"],
+    compile_data = [":compile_data"],
     crate_name = "well_tested",
     edition = "2024",
 )
 
 rust_test(
     name = "well_tested_test",
+    args = ["--nocapture"],
     crate = ":well_tested",
+    data = ["runtime_data.txt"],
+    env = {"MUTANTS_TEST_ENV": "present"},
 )
 
 # Sharded and parallel, so `bazel test //mutants/...` covers both fan-out paths.

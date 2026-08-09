@@ -35,16 +35,22 @@ def _cargo_mutants_test_impl(ctx):
     # The recorded command line is exec-root relative, so mirror exec paths into
     # the runfiles root; the runner chdirs there and replays it with no rewriting.
     runfiles = ctx.runfiles(
-        files = [ctx.executable._runner],
+        files = [ctx.executable._runner] + ctx.files.data,
         root_symlinks = {file.path: file for file in info.inputs.to_list()},
     ).merge_all(
-        [ctx.attr._runner[DefaultInfo].default_runfiles] +
+        [ctx.attr.test[DefaultInfo].default_runfiles, ctx.attr._runner[DefaultInfo].default_runfiles] +
         [data[DefaultInfo].default_runfiles for data in ctx.attr.data],
     )
 
+    environment = dict(ctx.attr.test[RunEnvironmentInfo].environment)
+    environment.update(ctx.attr.env)
+
     return [
         DefaultInfo(executable = executable, runfiles = runfiles),
-        RunEnvironmentInfo(environment = ctx.attr.env),
+        RunEnvironmentInfo(
+            environment = environment,
+            inherited_environment = ctx.attr.test[RunEnvironmentInfo].inherited_environment,
+        ),
     ]
 
 cargo_mutants_test = rule(

@@ -153,7 +153,11 @@ def _write_manifest(ctx, crate, toolchain, mutants_json, args_files, env_file):
     args.add("--crate-root", crate.root)
     args.add("--output", crate.output)
     args.add_all(crate.srcs, before_each = "--src")
-    args.add_all(crate.compile_data, before_each = "--src")
+    args.add_all(crate.compile_data, before_each = "--compile-data")
+    args.add_all(
+        [ctx.expand_location(arg, targets = getattr(ctx.rule.attr, "data", [])) for arg in getattr(ctx.rule.attr, "args", [])],
+        before_each = "--test-arg",
+    )
     ctx.actions.write(out, args)
     return out
 
@@ -167,6 +171,7 @@ def _cargo_mutants_aspect_impl(target, ctx):
     toolchain = ctx.toolchains[RUST_TOOLCHAIN_TYPE]
     mutants_json = _enumerate(ctx, crate, toolchain)
     args, env, compile_inputs = _record_rustc(ctx, _replayable_crate_info(crate), toolchain)
+
     # construct_arguments already formats rustc_flags; setting it twice fails.
     args_files = [
         _write_args(ctx, index, arg, arg != args.rustc_flags)
