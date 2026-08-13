@@ -1,0 +1,76 @@
+load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+load("@rules_rs//rs:rust_test.bzl", "rust_integration_test_suite", "rust_test_suite", "rust_unit_test_suite")
+load("@rust_crate//:defs.bzl", "aliases", "all_crate_deps", "edition")
+
+package(default_visibility = ["//visibility:public"])
+
+_CARGO_PACKAGE_ENV = {
+    "CARGO_PKG_NAME": "rust-crate-example",
+}
+
+rust_crate(
+    name = "rust-crate-example",
+    aliases = aliases(),
+    build_deps = all_crate_deps(build = True),
+    dev_deps = all_crate_deps(normal_dev = True),
+    edition = edition(),
+    integration_deps = all_crate_deps(
+        normal = True,
+        normal_dev = True,
+    ),
+    version = "0.1.0",
+    deps = all_crate_deps(normal = True),
+)
+
+rust_unit_test_suite(
+    name = "standalone_unit_tests",
+    aliases = aliases(),
+    crates = [
+        ":rust-crate-example",
+        ":extra-tool__bin",
+    ],
+    version = "0.1.0",
+    deps = all_crate_deps(normal_dev = True),
+)
+
+rust_integration_test_suite(
+    name = "standalone_integration_tests",
+    srcs = [
+        "tests/commands.rs",
+        "tests/nested/main.rs",
+    ],
+    aliases = aliases(),
+    binaries = [
+        ":rust-crate-example__bin",
+        ":extra-tool__bin",
+        ":nested-tool__bin",
+    ],
+    edition = edition(),
+    rustc_env = _CARGO_PACKAGE_ENV,
+    shared_srcs = ["tests/common/mod.rs"],
+    version = "0.1.0",
+    deps = [
+        ":rust-crate-example",
+        ":rust-crate-example_build_script",
+    ] + all_crate_deps(
+        normal = True,
+        normal_dev = True,
+    ),
+)
+
+rust_test_suite(
+    name = "upstream_compatible_tests",
+    srcs = ["tests/build_values.rs"],
+    aliases = aliases(),
+    edition = edition(),
+    rustc_env = _CARGO_PACKAGE_ENV,
+    shared_srcs = ["tests/common/mod.rs"],
+    version = "0.1.0",
+    deps = [
+        ":rust-crate-example",
+        ":rust-crate-example_build_script",
+    ] + all_crate_deps(
+        normal = True,
+        normal_dev = True,
+    ),
+)

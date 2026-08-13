@@ -128,6 +128,64 @@ rust_binary(
 )
 ```
 
+### Cargo-style crates and tests
+
+`rust_crate` creates a package's library, binaries, build script, and tests from
+the standard Cargo source layout:
+
+```bzl
+load("@crates//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+
+rust_crate(
+    name = "my_crate",
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True),
+    dev_deps = all_crate_deps(normal_dev = True),
+    build_deps = all_crate_deps(build = True),
+)
+```
+
+`rust_crate` discovers `src/lib.rs`, `src/main.rs`, `src/bin/*.rs`,
+`src/bin/*/main.rs`, `build.rs`, `tests/*.rs`, and `tests/*/main.rs`.
+The library target is `:<name>` and each binary target is `:<binary>__bin`.
+`:<name>_unit_tests` contains individual unit-test targets for the library and
+each binary; `:<name>_integration_tests` contains the integration tests.
+Integration tests can locate generated binaries with Cargo's
+`CARGO_BIN_EXE_<binary-name>` environment variables.
+
+If normal and development dependencies overlap or use platform-dependent
+selection, pass `integration_deps = all_crate_deps(normal = True,
+normal_dev = True)` so integration-test dependencies are deduplicated.
+
+The test suites can also be created independently:
+
+```bzl
+load(
+    "@rules_rs//rs:rust_test.bzl",
+    "rust_integration_test_suite",
+    "rust_unit_test_suite",
+)
+
+rust_unit_test_suite(
+    name = "crate_unit_tests",
+    crates = [":lib", ":app"],
+)
+
+rust_integration_test_suite(
+    name = "crate_integration_tests",
+    srcs = glob(["tests/*.rs", "tests/*/main.rs"]),
+    shared_srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = ["tests/*.rs", "tests/*/main.rs"],
+    ),
+    deps = [":lib"],
+)
+```
+
+`@rules_rs//rs:rust_test.bzl` also exports the upstream-compatible
+`rust_test_suite` integration-test macro.
+
 ## rust-analyzer
 
 See the upstream `rules_rust` rust-analyzer docs for editor setup details:
