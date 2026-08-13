@@ -83,13 +83,6 @@ bzl_library(
     ],
 )
 
-# TODO(zbarsky): Stardoc won't work here
-filegroup(
-    name = "rust_crate",
-    srcs = ["rust_crate.bzl"],
-    visibility = ["//visibility:public"],
-)
-
 bzl_library(
     name = "cargo_build_script",
     srcs = ["cargo_build_script.bzl"],

@@ -211,7 +211,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
-    # See `rust_crate.bzl` for details.
+    # See `rs/private/rust_crate.bzl` for details.
     crate_features, conditional_crate_features = compute_select(
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
@@ -295,7 +295,7 @@ def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
     additive_build_file_content += bazel_metadata.get("additive_build_file_content", "")
 
     return """\
-load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 

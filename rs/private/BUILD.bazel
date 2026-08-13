@@ -47,6 +47,13 @@ rust_repository_utils_tests()
 
 semver_select_tests()
 
+# package_metadata.bzl does not provide a bzl_library for Stardoc.
+filegroup(
+    name = "rust_crate",
+    srcs = ["rust_crate.bzl"],
+    visibility = ["//visibility:public"],
+)
+
 bzl_library(
     name = "all_crate_deps",
     srcs = ["all_crate_deps.bzl"],

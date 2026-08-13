@@ -28,7 +28,7 @@ def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, wo
     )
 
     rctx.file(dest, """\
-load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("{crate_bzl}", "crate")
 
