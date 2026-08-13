@@ -547,6 +547,7 @@ def resolve_cargo_workspace_members(
 
     workspace_fq_deps = compute_workspace_fq_deps(workspace_members, resolver_versions_by_name)
     workspace_dep_versions_by_name = {}
+    workspace_dep_rename_versions_by_name = {}
     workspace_dep_labels_by_triple = {triple: set() for triple in platform_triples}
 
     for package in cargo_metadata["packages"]:
@@ -607,6 +608,14 @@ def resolve_cargo_workspace_members(
                     workspace_dep_versions_by_name[dep_name] = versions
                 versions.add(dep_fq)
 
+                rename = dep.get("rename")
+                if rename:
+                    rename_versions = workspace_dep_rename_versions_by_name.get(rename)
+                    if not rename_versions:
+                        rename_versions = set()
+                        workspace_dep_rename_versions_by_name[rename] = rename_versions
+                    rename_versions.add(dep_fq)
+
             target = dep.get("target")
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
 
@@ -656,6 +665,7 @@ def resolve_cargo_workspace_members(
         platform_cfg_attrs_by_triple = platform_cfg_attrs_by_triple,
         resolver_versions_by_name = resolver_versions_by_name,
         workspace_dep_labels_by_triple = workspace_dep_labels_by_triple,
+        workspace_dep_rename_versions_by_name = workspace_dep_rename_versions_by_name,
         workspace_dep_versions_by_name = workspace_dep_versions_by_name,
         workspace_fq_deps = workspace_fq_deps,
         workspace_member_keys = workspace_member_keys,
