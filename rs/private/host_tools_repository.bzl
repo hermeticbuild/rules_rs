@@ -1,5 +1,13 @@
 def _host_tools_repository_impl(rctx):
-    rctx.file("defs.bzl", 'RS_HOST_CARGO_LABEL = Label("%s")' % rctx.attr.host_cargo)
+    rctx.file(
+        "defs.bzl",
+        """\
+RS_HOST_CARGO_LABEL = Label("{host_cargo}")
+
+def rust_toolchain_component_label(label):
+    return Label(label)
+""".format(host_cargo = rctx.attr.host_cargo),
+    )
     rctx.file("BUILD.bazel", 'exports_files(["defs.bzl"])')
 
     return rctx.repo_metadata(reproducible = True)

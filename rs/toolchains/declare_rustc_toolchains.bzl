@@ -1,5 +1,6 @@
 """Definitions for declaring Rust compiler toolchains."""
 
+load("@rs_rust_host_tools//:defs.bzl", "rust_toolchain_component_label")
 load("@rules_rust//rust:rust_toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES", "triple_to_rust_constraint_set")
@@ -19,21 +20,9 @@ def _rustc_flags_to_select(rustc_flags_by_triple):
         {"//conditions:default": []},
     )
 
-def _component(component, triple, default, alias_name = None):
+def _component(component, triple, default):
     component = component.get(triple) if type(component) == "dict" else component
-    if component != None:
-        return component
-    if alias_name == None:
-        return default
-    if alias_name.startswith("@"):
-        return alias_name
-
-    native.alias(
-        name = alias_name,
-        actual = default,
-        visibility = ["//visibility:public"],
-    )
-    return default
+    return component if component != None else rust_toolchain_component_label(default)
 
 # buildifier: disable=unnamed-macro
 def declare_rustc_toolchains(
@@ -147,11 +136,7 @@ def declare_rustc_toolchains(
 
         default_toolchain_name = triple_suffix + "_" + version_key + "_rust_toolchain"
         rust_toolchain_name = name_prefix + default_toolchain_name
-        component_alias_prefix = (
-            "@default_rust_toolchains//rustc:" if custom else ""
-        ) + default_toolchain_name
-
-        inherited_rust_std = component_alias_prefix + "_rust_std" if component_alias_prefix.startswith("@") else None
+        inherited_rust_std = "@default_rust_toolchains//rustc:" + default_toolchain_name + "_rust_std" if custom else None
         if inherited_rust_std != None and type(rust_std) != "dict":
             rust_std_label = _component(rust_std, triple, inherited_rust_std)
         else:
@@ -167,8 +152,7 @@ def declare_rustc_toolchains(
                 rust_std_select[config_label] = _component(
                     rust_std,
                     target_triple,
-                    default_rust_std,
-                    inherited_rust_std,
+                    inherited_rust_std or default_rust_std,
                 )
 
             rust_std_label = rust_toolchain_name + "_rust_std"
@@ -185,15 +169,14 @@ def declare_rustc_toolchains(
             rust_lld,
             triple,
             rustc_repo_label + "rust-lld",
-            component_alias_prefix + "_rust_lld",
         )
 
         rust_toolchain_kwargs = dict(
-            rust_doc = _component(rust_doc, triple, rustc_repo_label + "rustdoc", component_alias_prefix + "_rust_doc"),
+            rust_doc = _component(rust_doc, triple, rustc_repo_label + "rustdoc"),
             rustc = _component(rustc, triple, rustc_repo_label + "rustc"),
-            cargo = _component(cargo, triple, cargo_repo_label + "cargo", component_alias_prefix + "_cargo"),
-            clippy_driver = _component(clippy_driver, triple, clippy_repo_label + "clippy_driver_bin", component_alias_prefix + "_clippy_driver"),
-            cargo_clippy = _component(cargo_clippy, triple, clippy_repo_label + "cargo_clippy_bin", component_alias_prefix + "_cargo_clippy"),
+            cargo = _component(cargo, triple, cargo_repo_label + "cargo"),
+            clippy_driver = _component(clippy_driver, triple, clippy_repo_label + "clippy_driver_bin"),
+            cargo_clippy = _component(cargo_clippy, triple, clippy_repo_label + "cargo_clippy_bin"),
             llvm_cov = "@llvm//tools:llvm-cov",
             llvm_profdata = "@llvm//tools:llvm-profdata",
             linker = select({
@@ -204,8 +187,8 @@ def declare_rustc_toolchains(
                 "//conditions:default": None,
             }),
             linker_type = "direct",
-            rust_objcopy = _component(rust_objcopy, triple, rustc_repo_label + "rust-objcopy", component_alias_prefix + "_rust_objcopy"),
-            rustc_lib = _component(rustc_lib, triple, rustc_repo_label + "rustc_lib", component_alias_prefix + "_rustc_lib"),
+            rust_objcopy = _component(rust_objcopy, triple, rustc_repo_label + "rust-objcopy"),
+            rustc_lib = _component(rustc_lib, triple, rustc_repo_label + "rustc_lib"),
             allocator_library = None,
             global_allocator_library = None,
             binary_ext = select({
@@ -285,7 +268,6 @@ def declare_rustc_toolchains(
             bpf_linker,
             triple,
             "@%s//:%s" % (bpf_linker_repository_name(triple), bpf_linker_binary_name(triple)),
-            component_alias_prefix + "_bpf_linker",
         )
         rust_toolchain(
             name = rust_toolchain_name + "_bpf",

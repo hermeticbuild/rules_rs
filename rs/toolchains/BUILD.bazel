@@ -44,6 +44,7 @@ bzl_library(
         ":toolchain_utils",
         "//rs/platforms:triples",
         "//rs/private:bpf_linker_repository",
+        "@rs_rust_host_tools//:defs.bzl",
         "@rules_rust//rust:bzl_lib",
         "@rules_rust//rust/platform:bzl_lib",
     ],
