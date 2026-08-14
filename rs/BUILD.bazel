@@ -87,7 +87,10 @@ bzl_library(
     name = "toolchains",
     srcs = ["toolchains.bzl"],
     visibility = ["//visibility:public"],
-    deps = ["//rs/toolchains:declare_rustc_toolchains"],
+    deps = [
+        "//rs/platforms:triples",
+        "//rs/toolchains:declare_rustc_toolchains",
+    ],
 )
 
 bzl_library(

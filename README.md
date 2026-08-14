@@ -142,15 +142,15 @@ upstream instructions with `@rules_rs//tools/rust_analyzer:setup`.
 <details>
 <summary>Register a custom Rust compiler</summary>
 
-`rust_toolchain` accepts a custom compiler and reuses the generated toolchain's
-standard libraries, rustdoc, Cargo, Clippy, and linkers.
+`declare_rustc_toolchains` accepts a custom compiler and reuses the generated
+toolchain's standard libraries, rustdoc, Cargo, Clippy, and linkers.
 
 Create a dedicated `toolchains/BUILD.bazel` package:
 
 ```bzl
-load("@rules_rs//rs:toolchains.bzl", "rust_toolchain")
+load("@rules_rs//rs:toolchains.bzl", "declare_rustc_toolchains")
 
-rust_toolchain(
+declare_rustc_toolchains(
     name = "custom_rust",
     edition = "2024",
     rustc = {
@@ -165,18 +165,17 @@ A `rustc` dictionary selects execution triples automatically. A single compiler
 label can instead be combined with `exec_triples`. Use `target_triples` to limit
 supported target platforms.
 
-Register the custom package before the generated toolchains in `MODULE.bazel`:
+Register the custom package instead of the generated Rust toolchains in
+`MODULE.bazel`:
 
 ```bzl
-register_toolchains(
-    "//toolchains:all",
-    "@default_rust_toolchains//:all",
-    "@llvm//toolchain:all",
-)
+register_toolchains("//toolchains:all", "@llvm//toolchain:all")
 ```
 
-The default toolchains remain available for other platforms. Override
-`rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
+Keep `@default_rust_toolchains` available through `use_repo` for inherited
+compiler components. Register `@default_rust_toolchains//:all` after the custom
+toolchains only when fallback platforms, rustfmt, or rust-analyzer are needed.
+Override `rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
 `rust_objcopy`, `rust_lld`, `bpf_linker`, or `rust_std` when necessary.
 
 </details>
