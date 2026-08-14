@@ -140,6 +140,69 @@ upstream instructions with `@rules_rs//tools/rust_analyzer:setup`.
 ## Advanced Options
 
 <details>
+<summary>Register a custom Rust compiler</summary>
+
+`@rules_rs//rs:toolchains.bzl` exports `rust_toolchain` for compilers supplied
+by your own Bazel targets. The generated `rules_rs` toolchain repository provides
+the matching standard libraries, rustdoc, Cargo, Clippy, compiler libraries,
+rust-lld, rust-objcopy, and bpf-linker.
+
+Create a dedicated `toolchains/BUILD.bazel` package:
+
+```bzl
+load("@rules_rs//rs:toolchains.bzl", "rust_toolchain")
+
+rust_toolchain(
+    name = "custom_rust",
+    edition = "2024",
+    rustc = {
+        "aarch64-apple-darwin": "//tools/rust:rustc_macos_arm64",
+        "x86_64-unknown-linux-gnu": "//tools/rust:rustc_linux_x86_64",
+    },
+    version = "1.92.0",
+)
+```
+
+A `rustc` dictionary declares toolchains only for the listed execution triples.
+Alternatively, pass a single compiler label and use `exec_triples` to choose
+the execution triples. Each compiler target must provide exactly one executable
+file. `target_triples` can restrict the supported target platforms.
+
+Register the custom package before the generated toolchains in `MODULE.bazel`:
+
+```bzl
+toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
+toolchains.toolchain(
+    edition = "2024",
+    version = "1.92.0",
+)
+use_repo(toolchains, "default_rust_toolchains")
+
+register_toolchains(
+    "//toolchains:all",
+    "@default_rust_toolchains//:all",
+    "@llvm//toolchain:all",
+)
+```
+
+The generated toolchains remain available for execution platforms that do not
+have a custom compiler. The custom compiler must be compatible with the chosen
+Rust version's standard libraries and compiler libraries. Override `rustc_lib`,
+`rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`, `rust_objcopy`, `rust_lld`,
+or `bpf_linker` when a custom compiler needs different components. Each override
+accepts one label or a dictionary keyed by execution triple. `rust_std` accepts
+one label or a dictionary keyed by target triple, and `toolchain_attrs` passes
+additional attributes to the upstream `rust_toolchain` rule.
+
+Use `toolchains_repo = "@my_rust_toolchains"` when the module extension creates
+a toolchain repository with a different name. Generated repositories also
+expose public component aliases such as
+`@default_rust_toolchains//:linux_x86_64_1_92_0_rustc` and
+`@default_rust_toolchains//:linux_x86_64_1_92_0_rust_std`.
+
+</details>
+
+<details>
 <summary>Reference targets added by <code>crate.annotation</code></summary>
 
 Label attributes in `crate.annotation` are resolved in `MODULE.bazel`, so a relative label does not refer to the generated crate package. Use `extra_aliased_targets` to expose a public target from the generated crate package under an explicit name in the hub repository, then use that hub label. The repository name is the `name` passed to `crate.from_cargo`.

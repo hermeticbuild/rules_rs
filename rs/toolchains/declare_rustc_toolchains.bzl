@@ -6,6 +6,10 @@ load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES
 load("//rs/private:bpf_linker_repository.bzl", "bpf_linker_binary_name", "bpf_linker_repository_name")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
 
+_RUST_PROCESS_WRAPPER = Label("@rules_rust//util/process_wrapper")
+_BOOTSTRAP_PROCESS_WRAPPER = Label("@rules_rust//util/process_wrapper:bootstrap_process_wrapper")
+_RUST_TOOLCHAIN_TYPE = Label("@rules_rust//rust:toolchain_type")
+
 def _channel(version):
     if version.startswith("nightly"):
         return "nightly"
@@ -19,6 +23,25 @@ def _rustc_flags_to_select(rustc_flags_by_triple):
         {"//conditions:default": []},
     )
 
+def _component_for_exec(component, exec_triple, default):
+    if type(component) == "dict":
+        return component.get(exec_triple, default)
+    return default if component == None else component
+
+def _component_alias_name(exec_triple, version_key, component):
+    return "%s_%s_%s_%s" % (
+        exec_triple.system,
+        exec_triple.arch,
+        version_key,
+        component,
+    )
+
+def _component_label(toolchains_repo, exec_triple, version_key, component):
+    return "%s//:%s" % (
+        toolchains_repo,
+        _component_alias_name(exec_triple, version_key, component),
+    )
+
 # buildifier: disable=unnamed-macro
 def declare_rustc_toolchains(
         *,
@@ -27,7 +50,20 @@ def declare_rustc_toolchains(
         extra_rustc_flags = {},
         extra_exec_rustc_flags = {},
         execs = SUPPORTED_EXEC_TRIPLES,
-        targets = ALL_TARGET_TRIPLES):
+        targets = ALL_TARGET_TRIPLES,
+        name = None,
+        toolchains_repo = None,
+        rustc = None,
+        rust_doc = None,
+        rustc_lib = None,
+        cargo = None,
+        clippy_driver = None,
+        cargo_clippy = None,
+        rust_objcopy = None,
+        rust_lld = None,
+        bpf_linker = None,
+        rust_std = None,
+        toolchain_attrs = {}):
     """Declares Rust compiler toolchains for all supported target platforms.
 
     Args:
@@ -37,10 +73,41 @@ def declare_rustc_toolchains(
       extra_exec_rustc_flags: Additional execution Rust compiler flags keyed by triple.
       execs: Execution platform triples for which to declare toolchains.
       targets: Target platform triples supported by the declared toolchains.
+      name: Optional target-name prefix for independently declared toolchains.
+      toolchains_repo: Existing toolchain repository providing default components.
+      rustc: Optional compiler label or compiler labels keyed by execution triple.
+      rust_doc: Optional rustdoc label or labels keyed by execution triple.
+      rustc_lib: Optional compiler-library label or labels keyed by execution triple.
+      cargo: Optional Cargo label or labels keyed by execution triple.
+      clippy_driver: Optional clippy-driver label or labels keyed by execution triple.
+      cargo_clippy: Optional cargo-clippy label or labels keyed by execution triple.
+      rust_objcopy: Optional rust-objcopy label or labels keyed by execution triple.
+      rust_lld: Optional rust-lld label or labels keyed by execution triple.
+      bpf_linker: Optional bpf-linker label or labels keyed by execution triple.
+      rust_std: Optional standard-library label or labels keyed by target triple.
+      toolchain_attrs: Additional attributes passed to every rust_toolchain target.
     """
 
     version_key = sanitize_version(version)
     channel = _channel(version)
+    name_prefix = "%s_" % name if name else ""
+
+    target_triples_setting = None
+    if name:
+        target_triples_setting = "%starget_triples" % name_prefix
+        target_triple_conditions = {
+            "@rules_rs//rs/platforms/config:" + target_triple: "@rules_rs//rs/platforms/config:" + target_triple
+            for target_triple in targets
+        }
+        target_triple_conditions["//conditions:default"] = "@rules_rs//rs/platforms/config:" + targets[0]
+        native.alias(
+            name = target_triples_setting,
+            actual = select(target_triple_conditions),
+        )
+
+    for attr_name in ["bootstrapping", "name", "process_wrapper", "rust_std"]:
+        if attr_name in toolchain_attrs:
+            fail("toolchain_attrs cannot override %s" % attr_name)
 
     source_stdlib_building_select = {}
     for target_triple in targets:
@@ -48,7 +115,7 @@ def declare_rustc_toolchains(
             continue
 
         target_key = sanitize_triple(target_triple)
-        config_setting = "source_stdlib_building_" + target_key
+        config_setting = "%ssource_stdlib_building_%s" % (name_prefix, target_key)
         native.config_setting(
             name = config_setting,
             constraint_values = triple_to_rust_constraint_set(target_triple),
@@ -65,41 +132,101 @@ def declare_rustc_toolchains(
         rustc_repo_label = "@rustc_{}_{}//:".format(triple_suffix, version_key)
         cargo_repo_label = "@cargo_{}_{}//:".format(triple_suffix, version_key)
         clippy_repo_label = "@clippy_{}_{}//:".format(triple_suffix, version_key)
-        lld_label = rustc_repo_label + "rust-lld"
 
-        rust_toolchain_name = "{}_{}_{}_rust_toolchain".format(
+        rust_toolchain_name = "%s%s_%s_%s_rust_toolchain" % (
+            name_prefix,
             exec_triple.system,
             exec_triple.arch,
             version_key,
         )
-        rust_std = rust_toolchain_name + "_rust_std"
+        rust_std_name = rust_toolchain_name + "_rust_std"
 
         rust_std_select = {}
         target_triple_select = {}
         for target_triple in targets:
             target_key = sanitize_triple(target_triple)
             config_label = "@rules_rs//rs/platforms/config:" + target_triple
-            stdlib_repo = "rust_stdlib_%s_%s" % (target_key, version_key)
-            if target_triple in SUPPORTED_TIER_3_TRIPLES:
-                rust_std_select[config_label] = "@rustc_src_" + version_key + "//src:rust_std"
+
+            if toolchains_repo:
+                default_rust_std = _component_label(
+                    toolchains_repo,
+                    exec_triple,
+                    version_key,
+                    "rust_std",
+                )
             else:
-                rust_std_select[config_label] = "@%s//:rust_std-%s" % (stdlib_repo, target_triple)
+                stdlib_repo = "rust_stdlib_%s_%s" % (target_key, version_key)
+                if target_triple in SUPPORTED_TIER_3_TRIPLES:
+                    default_rust_std = "@rustc_src_%s//src:rust_std" % version_key
+                else:
+                    default_rust_std = "@%s//:rust_std-%s" % (stdlib_repo, target_triple)
+
+            if type(rust_std) == "dict":
+                rust_std_select[config_label] = rust_std.get(target_triple, default_rust_std)
+            elif rust_std == None:
+                rust_std_select[config_label] = default_rust_std
+            else:
+                rust_std_select[config_label] = rust_std
+
             target_triple_select[config_label] = target_triple
 
         native.alias(
-            name = rust_std,
+            name = rust_std_name,
             actual = select(rust_std_select),
+            visibility = ["//visibility:public"],
         )
         toolchain_rust_std = select(source_stdlib_building_select | {
-            "//conditions:default": rust_std,
+            "//conditions:default": rust_std_name,
         })
 
+        default_bpf_linker = "@%s//:%s" % (
+            bpf_linker_repository_name(triple),
+            bpf_linker_binary_name(triple),
+        )
+        default_components = {
+            "rustc": "%srustc" % rustc_repo_label,
+            "rust_doc": "%srustdoc" % rustc_repo_label,
+            "rustc_lib": "%srustc_lib" % rustc_repo_label,
+            "cargo": "%scargo" % cargo_repo_label,
+            "clippy_driver": "%sclippy_driver_bin" % clippy_repo_label,
+            "cargo_clippy": "%scargo_clippy_bin" % clippy_repo_label,
+            "rust_objcopy": "%srust-objcopy" % rustc_repo_label,
+            "rust_lld": "%srust-lld" % rustc_repo_label,
+            "bpf_linker": default_bpf_linker,
+        }
+
+        if toolchains_repo:
+            default_components = {
+                component: _component_label(
+                    toolchains_repo,
+                    exec_triple,
+                    version_key,
+                    component,
+                )
+                for component in default_components
+            }
+        else:
+            for component, component_target in default_components.items():
+                native.alias(
+                    name = _component_alias_name(exec_triple, version_key, component),
+                    actual = component_target,
+                    visibility = ["//visibility:public"],
+                )
+
+            native.alias(
+                name = _component_alias_name(exec_triple, version_key, "rust_std"),
+                actual = rust_std_name,
+                visibility = ["//visibility:public"],
+            )
+
+        lld_label = _component_for_exec(rust_lld, triple, default_components["rust_lld"])
+
         rust_toolchain_kwargs = dict(
-            rust_doc = "{}rustdoc".format(rustc_repo_label),
-            rustc = "{}rustc".format(rustc_repo_label),
-            cargo = "{}cargo".format(cargo_repo_label),
-            clippy_driver = "{}clippy_driver_bin".format(clippy_repo_label),
-            cargo_clippy = "{}cargo_clippy_bin".format(clippy_repo_label),
+            rust_doc = _component_for_exec(rust_doc, triple, default_components["rust_doc"]),
+            rustc = _component_for_exec(rustc, triple, default_components["rustc"]),
+            cargo = _component_for_exec(cargo, triple, default_components["cargo"]),
+            clippy_driver = _component_for_exec(clippy_driver, triple, default_components["clippy_driver"]),
+            cargo_clippy = _component_for_exec(cargo_clippy, triple, default_components["cargo_clippy"]),
             llvm_cov = "@llvm//tools:llvm-cov",
             llvm_profdata = "@llvm//tools:llvm-profdata",
             linker = select({
@@ -110,8 +237,8 @@ def declare_rustc_toolchains(
                 "//conditions:default": None,
             }),
             linker_type = "direct",
-            rust_objcopy = "{}rust-objcopy".format(rustc_repo_label),
-            rustc_lib = "{}rustc_lib".format(rustc_repo_label),
+            rust_objcopy = _component_for_exec(rust_objcopy, triple, default_components["rust_objcopy"]),
+            rustc_lib = _component_for_exec(rustc_lib, triple, default_components["rustc_lib"]),
             allocator_library = None,
             global_allocator_library = None,
             binary_ext = select({
@@ -163,18 +290,21 @@ def declare_rustc_toolchains(
                 ],
                 "//conditions:default": [],
             }),
+            channel = channel,
             default_edition = edition,
             extra_exec_rustc_flags = _rustc_flags_to_select(extra_exec_rustc_flags),
             extra_rustc_flags = _rustc_flags_to_select(extra_rustc_flags),
             exec_triple = triple,
             target_triple = select(target_triple_select),
+            version = version,
             visibility = ["//visibility:public"],
             tags = ["rust_version={}".format(version)],
         )
+        rust_toolchain_kwargs.update(toolchain_attrs)
 
         rust_toolchain(
             name = rust_toolchain_name,
-            process_wrapper = "@rules_rust//util/process_wrapper",
+            process_wrapper = _RUST_PROCESS_WRAPPER,
             rust_std = toolchain_rust_std,
             **rust_toolchain_kwargs
         )
@@ -182,22 +312,26 @@ def declare_rustc_toolchains(
         rust_toolchain(
             name = rust_toolchain_name + "_bootstrap",
             bootstrapping = True,
-            process_wrapper = "@rules_rust//util/process_wrapper:bootstrap_process_wrapper",
-            rust_std = rust_std,
+            process_wrapper = _BOOTSTRAP_PROCESS_WRAPPER,
+            rust_std = rust_std_name,
             **rust_toolchain_kwargs
         )
 
-        bpf_linker = "@%s//:%s" % (bpf_linker_repository_name(triple), bpf_linker_binary_name(triple))
+        bpf_linker_label = _component_for_exec(
+            bpf_linker,
+            triple,
+            default_components["bpf_linker"],
+        )
         rust_toolchain(
             name = rust_toolchain_name + "_bpf",
-            linker_preference = "rust",
-            process_wrapper = "@rules_rust//util/process_wrapper",
+            process_wrapper = _RUST_PROCESS_WRAPPER,
             rust_std = toolchain_rust_std,
             **(rust_toolchain_kwargs | {
                 "linker": select({
-                    "@platforms//cpu:bpfeb": bpf_linker,
-                    "@platforms//cpu:bpfel": bpf_linker,
+                    "@platforms//cpu:bpfeb": bpf_linker_label,
+                    "@platforms//cpu:bpfel": bpf_linker_label,
                 }),
+                "linker_preference": "rust",
             })
         )
 
@@ -208,10 +342,13 @@ def declare_rustc_toolchains(
         ]:
             target_kind = "bpf" if is_bpf else "non_bpf"
             bootstrap_suffix = "_bootstrap" if bootstrapping else ""
-            bootstrap_setting = "@rules_rust//rust/private:" + ("bootstrapping" if bootstrapping else "bootstrapped")
+            bootstrap_setting = Label("@rules_rust//rust/private:%s" % (
+                "bootstrapping" if bootstrapping else "bootstrapped"
+            ))
             toolchain_suffix = "_bpf" if is_bpf else bootstrap_suffix
             native.toolchain(
-                name = "{}_{}_to_{}_targets_{}{}".format(
+                name = "%s%s_%s_to_%s_targets_%s%s" % (
+                    name_prefix,
                     exec_triple.system,
                     exec_triple.arch,
                     target_kind,
@@ -225,9 +362,9 @@ def declare_rustc_toolchains(
                 target_settings = [
                     "@rules_rs//rs/toolchains:bpf_targets" if is_bpf else "@rules_rs//rs/toolchains:non_bpf_targets",
                     bootstrap_setting,
-                    "@rules_rust//rust/toolchain/channel:" + channel,
-                ],
+                    Label("@rules_rust//rust/toolchain/channel:%s" % channel),
+                ] + ([target_triples_setting] if target_triples_setting else []),
                 toolchain = rust_toolchain_name + toolchain_suffix,
-                toolchain_type = "@rules_rust//rust:toolchain_type",
+                toolchain_type = _RUST_TOOLCHAIN_TYPE,
                 visibility = ["//visibility:public"],
             )
