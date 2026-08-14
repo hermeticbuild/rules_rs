@@ -4,7 +4,6 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 load("@rules_rs//rs:rust_test.bzl", "rust_test")
-load("@rules_rs//rs/toolchains:declare_rustc_toolchains.bzl", "declare_rustc_toolchains")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@self_dev_dependency//:data.bzl", self_dev_dependency_dep_data = "DEP_DATA")
@@ -18,17 +17,6 @@ load("//:target_triple_constraints_test.bzl", "target_triple_constraints_test")
 load("//:verify_aliases.bzl", "verify_alias", "verify_alias_absent", "verify_crate_feature_absent", "verify_crate_feature_present", "verify_dep_absent", "verify_dep_present", "verify_dev_dep_absent")
 
 target_triple_constraints_test()
-
-declare_rustc_toolchains(
-    name = "custom_rust",
-    edition = "2024",
-    rustc = {"x86_64-unknown-linux-gnu": ":dummy_test.sh"},
-    target_triples = [
-        "x86_64-unknown-linux-gnu",
-        "bpfel-unknown-none",
-    ],
-    version = "1.96.1",
-)
 
 sh_test(
     name = "custom_registry_test",

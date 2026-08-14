@@ -178,8 +178,7 @@ register_toolchains(
 ```
 
 Keep `@default_rust_toolchains` available through `use_repo` for inherited
-compiler components. Register `@default_rust_toolchains//rustc:all` after the
-custom toolchains only when compiler fallback is needed.
+compiler components.
 Override `rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
 `rust_objcopy`, `rust_lld`, `bpf_linker`, or `rust_std` when necessary.
 

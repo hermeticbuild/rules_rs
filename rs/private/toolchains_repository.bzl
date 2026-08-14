@@ -1,7 +1,4 @@
 def _toolchains_repository_impl(rctx):
-    version = repr(rctx.attr.version)
-    edition = repr(rctx.attr.edition)
-
     rctx.file(
         "rustc/BUILD.bazel",
         """\
@@ -14,8 +11,8 @@ declare_rustc_toolchains(
     extra_exec_rustc_flags = {extra_exec_rustc_flags},
 )
 """.format(
-            version = version,
-            edition = edition,
+            version = repr(rctx.attr.version),
+            edition = repr(rctx.attr.edition),
             extra_rustc_flags = repr(rctx.attr.extra_rustc_flags),
             extra_exec_rustc_flags = repr(rctx.attr.extra_exec_rustc_flags),
         ),
@@ -32,9 +29,9 @@ declare_rustfmt_toolchains(
     edition = {edition},
 )
 """.format(
-            version = version,
+            version = repr(rctx.attr.version),
             rustfmt_version = repr(rctx.attr.rustfmt_version),
-            edition = edition,
+            edition = repr(rctx.attr.edition),
         ),
     )
 
@@ -48,7 +45,7 @@ declare_rust_analyzer_toolchains(
     rust_analyzer_version = {rust_analyzer_version},
 )
 """.format(
-            version = version,
+            version = repr(rctx.attr.version),
             rust_analyzer_version = repr(rctx.attr.rust_analyzer_version),
         ),
     )
