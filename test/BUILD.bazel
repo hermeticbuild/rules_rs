@@ -22,9 +22,8 @@ target_triple_constraints_test()
 
 genrule(
     name = "custom_rustc_binary",
-    srcs = ["@default_rust_toolchains//:linux_x86_64_1_96_1_rustc"],
     outs = ["custom-rustc"],
-    cmd = "cp $(location @default_rust_toolchains//:linux_x86_64_1_96_1_rustc) $@ && chmod +x $@",
+    cmd = "touch $@ && chmod +x $@",
     executable = True,
     tags = ["manual"],
 )
@@ -39,19 +38,6 @@ rust_toolchain(
         "x86_64-unknown-linux-gnu",
         "bpfel-unknown-none",
     ],
-    version = "1.96.1",
-)
-
-rust_toolchain(
-    name = "second_custom_rust",
-    edition = "2024",
-    exec_triples = ["x86_64-unknown-linux-gnu"],
-    rustc = ":custom_rustc_binary",
-    target_triples = [
-        "x86_64-unknown-linux-gnu",
-        "bpfel-unknown-none",
-    ],
-    toolchain_attrs = {"linker_preference": "cc"},
     version = "1.96.1",
 )
 

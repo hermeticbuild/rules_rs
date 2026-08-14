@@ -2,11 +2,11 @@ def _toolchains_repository_impl(rctx):
     rctx.file(
         "BUILD.bazel",
         """\
+load("@rules_rs//rs:toolchains.bzl", "rust_toolchain")
 load("@rules_rs//rs/toolchains:declare_rust_analyzer_toolchains.bzl", "declare_rust_analyzer_toolchains")
-load("@rules_rs//rs/toolchains:declare_rustc_toolchains.bzl", "declare_rustc_toolchains")
 load("@rules_rs//rs/toolchains:declare_rustfmt_toolchains.bzl", "declare_rustfmt_toolchains")
 
-declare_rustc_toolchains(
+rust_toolchain(
     version = {version},
     edition = {edition},
     extra_rustc_flags = {extra_rustc_flags},

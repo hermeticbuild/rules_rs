@@ -142,10 +142,8 @@ upstream instructions with `@rules_rs//tools/rust_analyzer:setup`.
 <details>
 <summary>Register a custom Rust compiler</summary>
 
-`@rules_rs//rs:toolchains.bzl` exports `rust_toolchain` for compilers supplied
-by your own Bazel targets. The generated `rules_rs` toolchain repository provides
-the matching standard libraries, rustdoc, Cargo, Clippy, compiler libraries,
-rust-lld, rust-objcopy, and bpf-linker.
+`rust_toolchain` accepts a custom compiler and reuses the generated toolchain's
+standard libraries, rustdoc, Cargo, Clippy, and linkers.
 
 Create a dedicated `toolchains/BUILD.bazel` package:
 
@@ -163,21 +161,13 @@ rust_toolchain(
 )
 ```
 
-A `rustc` dictionary declares toolchains only for the listed execution triples.
-Alternatively, pass a single compiler label and use `exec_triples` to choose
-the execution triples. Each compiler target must provide exactly one executable
-file. `target_triples` can restrict the supported target platforms.
+A `rustc` dictionary selects execution triples automatically. A single compiler
+label can instead be combined with `exec_triples`. Use `target_triples` to limit
+supported target platforms.
 
 Register the custom package before the generated toolchains in `MODULE.bazel`:
 
 ```bzl
-toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
-toolchains.toolchain(
-    edition = "2024",
-    version = "1.92.0",
-)
-use_repo(toolchains, "default_rust_toolchains")
-
 register_toolchains(
     "//toolchains:all",
     "@default_rust_toolchains//:all",
@@ -185,20 +175,9 @@ register_toolchains(
 )
 ```
 
-The generated toolchains remain available for execution platforms that do not
-have a custom compiler. The custom compiler must be compatible with the chosen
-Rust version's standard libraries and compiler libraries. Override `rustc_lib`,
-`rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`, `rust_objcopy`, `rust_lld`,
-or `bpf_linker` when a custom compiler needs different components. Each override
-accepts one label or a dictionary keyed by execution triple. `rust_std` accepts
-one label or a dictionary keyed by target triple, and `toolchain_attrs` passes
-additional attributes to the upstream `rust_toolchain` rule.
-
-Use `toolchains_repo = "@my_rust_toolchains"` when the module extension creates
-a toolchain repository with a different name. Generated repositories also
-expose public component aliases such as
-`@default_rust_toolchains//:linux_x86_64_1_92_0_rustc` and
-`@default_rust_toolchains//:linux_x86_64_1_92_0_rust_std`.
+The default toolchains remain available for other platforms. Override
+`rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
+`rust_objcopy`, `rust_lld`, `bpf_linker`, or `rust_std` when necessary.
 
 </details>
 
