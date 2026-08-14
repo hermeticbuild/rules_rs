@@ -93,6 +93,7 @@ bzl_library(
         ":rust_library",
         ":rust_proc_macro",
         ":rust_test",
+        "//rs/private:all_crate_deps",
     ],
 )
 

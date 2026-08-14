@@ -118,13 +118,13 @@ rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
     aliases = aliases(),
-    deps = all_crate_deps(normal = True),
+    deps = all_crate_deps(),
 )
 
 rust_binary(
     name = "app",
     srcs = ["src/main.rs"],
-    deps = [":lib"],
+    deps = ["lib"],
 )
 ```
 
@@ -134,15 +134,12 @@ rust_binary(
 the standard Cargo source layout:
 
 ```bzl
-load("@crates//:defs.bzl", "aliases", "all_crate_deps")
+load("@crates//:data.bzl", "DEP_DATA")
 load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
 
 rust_crate(
     name = "my_crate",
-    aliases = aliases(),
-    deps = all_crate_deps(normal = True),
-    dev_deps = all_crate_deps(normal_dev = True),
-    build_deps = all_crate_deps(build = True),
+    dep_data = DEP_DATA,
 )
 ```
 
@@ -153,10 +150,6 @@ The library target is `:<name>` and each binary target is `:<binary>__bin`.
 each binary; `:<name>_integration_tests` contains the integration tests.
 Integration tests can locate generated binaries with Cargo's
 `CARGO_BIN_EXE_<binary-name>` environment variables.
-
-If normal and development dependencies overlap or use platform-dependent
-selection, pass `integration_deps = all_crate_deps(normal = True,
-normal_dev = True)` so integration-test dependencies are deduplicated.
 
 The test suites can also be created independently:
 
@@ -169,7 +162,7 @@ load(
 
 rust_unit_test_suite(
     name = "crate_unit_tests",
-    crates = [":lib", ":app"],
+    crates = ["lib", "app"],
 )
 
 rust_integration_test_suite(
@@ -179,7 +172,7 @@ rust_integration_test_suite(
         ["tests/**/*.rs"],
         exclude = ["tests/*.rs", "tests/*/main.rs"],
     ),
-    deps = [":lib"],
+    deps = ["lib"],
 )
 ```
 

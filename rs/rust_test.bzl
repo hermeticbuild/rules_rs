@@ -20,16 +20,6 @@ def _label_name(label):
         return label.rsplit(":", 1)[1]
     return label.rsplit("/", 1)[-1]
 
-def _test_suite(name, tests, tags, visibility):
-    kwargs = {
-        "name": name,
-        "tags": tags,
-        "tests": tests,
-    }
-    if visibility != None:
-        kwargs["visibility"] = visibility
-    native.test_suite(**kwargs)
-
 def rust_unit_test_suite(name, crates, deps = [], tags = [], visibility = None, **kwargs):
     """Creates one unit-test target for each existing Rust library or binary.
 
@@ -48,7 +38,6 @@ def rust_unit_test_suite(name, crates, deps = [], tags = [], visibility = None, 
             `crate_features`, `data`, `rustc_env`, `args`, and `timeout`.
             `srcs` and `crate_root` cannot be used with `crate`.
     """
-    suite_tags = ["restrict_" + _sanitize_test_name(name)] + tags
     tests = []
     seen = {}
 
@@ -63,21 +52,24 @@ def rust_unit_test_suite(name, crates, deps = [], tags = [], visibility = None, 
                 ))
             continue
 
-        test_kwargs = dict(kwargs)
-        test_kwargs.update({
-            "crate": crate,
-            "deps": deps,
-            "name": test_name,
-            "tags": suite_tags,
-        })
-        if visibility != None:
-            test_kwargs["visibility"] = visibility
-        rust_test(**test_kwargs)
+        rust_test(
+            name = test_name,
+            crate = crate,
+            deps = deps,
+            tags = tags,
+            visibility = visibility,
+            **kwargs
+        )
 
         seen[test_name] = str(crate)
         tests.append(test_name)
 
-    _test_suite(name, tests, suite_tags, visibility)
+    native.test_suite(
+        name = name,
+        tests = tests,
+        tags = tags if tests else tags + ["restrict_" + _sanitize_test_name(name)],
+        visibility = visibility,
+    )
 
 def rust_integration_test_suite(
         name,
@@ -86,6 +78,8 @@ def rust_integration_test_suite(
         deps = [],
         binaries = [],
         data = [],
+        env = {},
+        rustc_env = {},
         tags = [],
         visibility = None,
         **kwargs):
@@ -105,17 +99,16 @@ def rust_integration_test_suite(
         deps: Dependencies for every generated integration test.
         binaries: Binary labels available to integration tests.
         data: Additional runfiles for every generated integration test.
+        env: Runtime environment variables that override generated
+            `CARGO_BIN_EXE_<name>` values.
+        rustc_env: Compiler environment variables that override generated
+            `CARGO_BIN_EXE_<name>` values.
         tags: Tags applied to the generated tests and the generated suite.
         visibility: Optional visibility for the generated tests and suite.
         **kwargs: Additional `rust_test` attributes, such as `aliases`,
-            `edition`, `crate_features`, `compile_data`, `rustc_env`, `env`,
-            `args`, and `timeout`. Explicit `rustc_env` and `env` values
-            override generated `CARGO_BIN_EXE_<name>` values.
+            `edition`, `crate_features`, `compile_data`, `args`, and `timeout`.
     """
-    suite_tags = ["restrict_" + _sanitize_test_name(name)] + tags
-    shared_sources = {}
-    for source in shared_srcs:
-        shared_sources[str(source)] = True
+    shared_sources = {str(source): True for source in shared_srcs}
 
     cargo_binary_env = {}
     for binary in binaries:
@@ -124,13 +117,8 @@ def rust_integration_test_suite(
             binary_name = binary_name[:-len("__bin")]
         cargo_binary_env["CARGO_BIN_EXE_" + binary_name] = "$(rootpath %s)" % binary
 
-    caller_rustc_env = kwargs.pop("rustc_env", {})
-    caller_env = kwargs.pop("env", {})
-
-    rustc_env = dict(cargo_binary_env)
-    rustc_env.update(caller_rustc_env)
-    env = dict(cargo_binary_env)
-    env.update(caller_env)
+    rustc_env = cargo_binary_env | rustc_env
+    env = cargo_binary_env | env
 
     tests = []
     seen = {}
@@ -151,23 +139,26 @@ def rust_integration_test_suite(
                 ))
             continue
 
-        test_kwargs = dict(kwargs)
-        test_kwargs.update({
-            "crate_name": _sanitize_test_name(test_name),
-            "crate_root": source,
-            "data": data + binaries,
-            "deps": deps,
-            "env": env,
-            "name": test_name,
-            "rustc_env": rustc_env,
-            "srcs": [source] + shared_srcs,
-            "tags": suite_tags,
-        })
-        if visibility != None:
-            test_kwargs["visibility"] = visibility
-        rust_test(**test_kwargs)
+        rust_test(
+            name = test_name,
+            crate_name = _sanitize_test_name(test_name),
+            crate_root = source,
+            data = data + binaries,
+            deps = deps,
+            env = env,
+            rustc_env = rustc_env,
+            srcs = [source] + shared_srcs,
+            tags = tags,
+            visibility = visibility,
+            **kwargs
+        )
 
         seen[test_name] = source_name
         tests.append(test_name)
 
-    _test_suite(name, tests, suite_tags, visibility)
+    native.test_suite(
+        name = name,
+        tests = tests,
+        tags = tags if tests else tags + ["restrict_" + _sanitize_test_name(name)],
+        visibility = visibility,
+    )

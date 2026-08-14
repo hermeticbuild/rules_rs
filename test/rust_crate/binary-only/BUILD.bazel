@@ -1,8 +1,8 @@
 load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
-load("@rust_crate//:defs.bzl", "edition")
+load("@rust_crate//:data.bzl", "DEP_DATA")
 
 rust_crate(
     name = "binary-only",
-    edition = edition(),
+    dep_data = DEP_DATA,
     visibility = ["//visibility:public"],
 )
