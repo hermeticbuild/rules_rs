@@ -1,12 +1,13 @@
 """Cargo-style first-party Rust libraries, binaries, and test suites."""
 
+load("//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
 load(":cargo_build_script.bzl", "cargo_build_script")
 load(":rust_binary.bzl", "rust_binary")
 load(":rust_library.bzl", "rust_library")
 load(":rust_proc_macro.bzl", "rust_proc_macro")
 load(":rust_test.bzl", "rust_integration_test_suite", "rust_unit_test_suite")
 
-def _discover_binaries(name, binaries):
+def _discover_binaries(name):
     """Returns Cargo-conventional binary names and their crate roots."""
     discovered = {}
 
@@ -27,8 +28,43 @@ def _discover_binaries(name, binaries):
             ))
         discovered[binary_name] = crate_root
 
-    discovered.update(binaries)
     return discovered
+
+def _package_dep_data(dep_data):
+    """Returns the current package's Cargo metadata record."""
+    if dep_data == None:
+        return None
+
+    if type(dep_data) != "dict":
+        fail("dep_data must be a generated DEP_DATA dictionary or package metadata dictionary")
+
+    if "crate_name" in dep_data and "deps" in dep_data:
+        return dep_data
+
+    package_name = native.package_name()
+    package_dep_data = dep_data.get(package_name)
+    if package_dep_data == None:
+        fail("dep_data does not contain Cargo metadata for package '{}'".format(package_name))
+
+    return package_dep_data
+
+def _package_features(dep_data, extra_features):
+    """Combines Cargo-resolved and explicitly requested crate features."""
+    if dep_data == None:
+        return extra_features
+
+    features = dep_data.get("crate_features", [])
+    features_by_platform = dep_data.get("crate_features_by_platform", {})
+    if features_by_platform:
+        features = features + select(features_by_platform | {"//conditions:default": []})
+
+    return features + extra_features
+
+def _combined_explicit_deps(deps, dev_deps):
+    """Deduplicates non-configurable normal and development dependencies."""
+    if type(deps) == "list" and type(dev_deps) == "list":
+        return list({str(dep): dep for dep in deps + dev_deps}.values())
+    return deps + dev_deps
 
 def _build_script_root(build_script):
     """Returns the selected Cargo build script, or None when disabled."""
@@ -69,13 +105,13 @@ def _binary_alias(name, binary_labels, visibility, tags, target_compatible_with)
 
 def rust_crate(
         name,
+        dep_data = None,
         crate_name = None,
         srcs = None,
         crate_root = None,
         binaries = {},
         deps = [],
         dev_deps = [],
-        integration_deps = None,
         build_deps = [],
         aliases = {},
         edition = None,
@@ -100,13 +136,16 @@ def rust_crate(
     """Creates Cargo-conventional library, binary, and Rust test targets.
 
     A library is generated for ``src/lib.rs`` or an explicit ``crate_root``.
-    Binaries are discovered from ``src/main.rs``, ``src/bin/*.rs``, and
-    ``src/bin/*/main.rs``. Explicit ``binaries`` supplement discovered binaries
-    and replace discovered roots with the same binary name. Integration tests
-    are discovered from ``tests/*.rs`` and ``tests/*/main.rs``.
+    Binaries come from ``dep_data`` when provided; otherwise they are discovered
+    from ``src/main.rs``, ``src/bin/*.rs``, and ``src/bin/*/main.rs``. Explicit
+    ``binaries`` supplement Cargo binaries and replace roots with the same name.
+    Integration tests are discovered from ``tests/*.rs`` and ``tests/*/main.rs``.
 
     Args:
         name: Library target name and default Cargo binary name.
+        dep_data: Optional generated ``DEP_DATA`` dictionary or one package's
+            Cargo metadata record. Cargo dependencies, aliases, binaries,
+            crate name, edition, and features are inferred from the record.
         crate_name: Rust library crate name; defaults to ``name`` normalized
             by replacing hyphens with underscores.
         srcs: Optional explicit Rust sources for library and binary targets.
@@ -115,9 +154,6 @@ def rust_crate(
         deps: Normal dependencies of the library and binary targets.
         dev_deps: Additional dependencies of library, binary, and integration
             test targets.
-        integration_deps: Optional combined normal and development
-            dependencies for integration tests. Use this when dependency
-            categories overlap or contain platform-dependent selections.
         build_deps: Dependencies used to compile ``build.rs``.
         aliases: Rust dependency aliases forwarded to generated targets.
         edition: Rust edition forwarded to generated targets.
@@ -143,7 +179,46 @@ def rust_crate(
         integration_test_args: Integration-test arguments replacing
             ``test_args``.
     """
-    binary_roots = _discover_binaries(name, binaries)
+    package_dep_data = _package_dep_data(dep_data)
+    if package_dep_data != None:
+        aliases = package_dep_data.get("aliases", {}) | aliases
+        if crate_name == None:
+            crate_name = package_dep_data.get("crate_name")
+        if edition == None:
+            edition = package_dep_data.get("edition")
+        metadata_binaries = package_dep_data.get("binaries")
+        binary_roots = dict(metadata_binaries) if metadata_binaries != None else _discover_binaries(name)
+
+        # The empty default prevents sparse platform-specific dependencies
+        # from being promoted to unconditional dependencies.
+        platforms = ["//conditions:default"]
+        normal_deps = _all_crate_deps(package_dep_data, platforms = platforms)
+        development_deps = _all_crate_deps(
+            package_dep_data,
+            platforms = platforms,
+            normal_dev = True,
+        )
+        build_dependencies = _all_crate_deps(
+            package_dep_data,
+            platforms = platforms,
+            build = True,
+        )
+        integration_dependencies = _all_crate_deps(
+            package_dep_data,
+            platforms = platforms,
+            normal = True,
+            normal_dev = True,
+        ) + _combined_explicit_deps(deps, dev_deps)
+
+        deps = normal_deps + deps
+        dev_deps = development_deps + dev_deps
+        build_deps = build_dependencies + build_deps
+    else:
+        binary_roots = _discover_binaries(name)
+        integration_dependencies = _combined_explicit_deps(deps, dev_deps)
+
+    binary_roots.update(binaries)
+    crate_features = _package_features(package_dep_data, crate_features)
     library_root = crate_root
     if library_root == None:
         detected_library = native.glob(["src/lib.rs"], allow_empty = True)
@@ -191,7 +266,7 @@ def rust_crate(
             version = version,
             visibility = visibility,
         )
-        build_script_deps = [":" + build_script_name]
+        build_script_deps = [build_script_name]
 
     library_deps = deps + build_script_deps
     library_labels = []
@@ -215,12 +290,12 @@ def rust_crate(
             version = version,
             visibility = visibility,
         )
-        library_labels = [":" + name]
+        library_labels = [name]
 
     binary_labels = {}
     for binary_name, binary_root in binary_roots.items():
         binary_target = binary_name + "__bin"
-        binary_labels[binary_name] = ":" + binary_target
+        binary_labels[binary_name] = binary_target
 
         resolved_binary_srcs = binary_srcs
         if srcs == None and binary_root not in resolved_binary_srcs:
@@ -249,19 +324,19 @@ def rust_crate(
     if library_root == None:
         _binary_alias(name, binary_labels, visibility, tags, target_compatible_with)
 
-    unit_test_kwargs = {
+    test_kwargs = {
         "aliases": aliases,
         "crate_features": crate_features,
         "compile_data": compile_data,
-        "data": data + test_data,
         "rustc_env": rustc_env,
         "rustc_flags": rustc_flags,
         "target_compatible_with": target_compatible_with,
         "version": version,
     }
     if test_timeout != None:
-        unit_test_kwargs["timeout"] = test_timeout
+        test_kwargs["timeout"] = test_timeout
 
+    unit_test_kwargs = test_kwargs | {"data": data + test_data}
     resolved_unit_test_args = unit_test_args if unit_test_args != None else test_args
     if resolved_unit_test_args != None:
         unit_test_kwargs["args"] = resolved_unit_test_args
@@ -285,34 +360,16 @@ def rust_crate(
         allow_empty = True,
     )
 
-    integration_test_kwargs = {
-        "aliases": aliases,
-        "crate_features": crate_features,
-        "compile_data": compile_data,
-        "edition": edition,
-        "rustc_env": rustc_env,
-        "rustc_flags": rustc_flags,
-        "target_compatible_with": target_compatible_with,
-        "version": version,
-    }
-    if test_timeout != None:
-        integration_test_kwargs["timeout"] = test_timeout
-
+    integration_test_kwargs = test_kwargs | {"edition": edition}
     resolved_integration_test_args = integration_test_args if integration_test_args != None else test_args
     if resolved_integration_test_args != None:
         integration_test_kwargs["args"] = resolved_integration_test_args
-
-    if integration_deps == None:
-        if type(deps) == "list" and type(dev_deps) == "list":
-            integration_deps = list({str(dep): dep for dep in deps + dev_deps}.values())
-        else:
-            integration_deps = deps + dev_deps
 
     rust_integration_test_suite(
         name = name + "_integration_tests",
         srcs = integration_roots,
         shared_srcs = shared_test_srcs,
-        deps = integration_deps + build_script_deps + library_labels,
+        deps = integration_dependencies + build_script_deps + library_labels,
         binaries = binary_labels.values(),
         data = data + test_data,
         tags = tags + test_tags,
