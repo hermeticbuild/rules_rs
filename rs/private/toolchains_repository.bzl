@@ -1,10 +1,11 @@
 def _toolchains_repository_impl(rctx):
+    version = repr(rctx.attr.version)
+    edition = repr(rctx.attr.edition)
+
     rctx.file(
-        "BUILD.bazel",
+        "rustc/BUILD.bazel",
         """\
-load("@rules_rs//rs:toolchains.bzl", "declare_rustc_toolchains")
-load("@rules_rs//rs/toolchains:declare_rust_analyzer_toolchains.bzl", "declare_rust_analyzer_toolchains")
-load("@rules_rs//rs/toolchains:declare_rustfmt_toolchains.bzl", "declare_rustfmt_toolchains")
+load("@rules_rs//rs/toolchains:declare_rustc_toolchains.bzl", "declare_rustc_toolchains")
 
 declare_rustc_toolchains(
     version = {version},
@@ -12,24 +13,43 @@ declare_rustc_toolchains(
     extra_rustc_flags = {extra_rustc_flags},
     extra_exec_rustc_flags = {extra_exec_rustc_flags},
 )
+""".format(
+            version = version,
+            edition = edition,
+            extra_rustc_flags = repr(rctx.attr.extra_rustc_flags),
+            extra_exec_rustc_flags = repr(rctx.attr.extra_exec_rustc_flags),
+        ),
+    )
+
+    rctx.file(
+        "rustfmt/BUILD.bazel",
+        """\
+load("@rules_rs//rs/toolchains:declare_rustfmt_toolchains.bzl", "declare_rustfmt_toolchains")
 
 declare_rustfmt_toolchains(
     version = {version},
     rustfmt_version = {rustfmt_version},
     edition = {edition},
 )
+""".format(
+            version = version,
+            rustfmt_version = repr(rctx.attr.rustfmt_version),
+            edition = edition,
+        ),
+    )
+
+    rctx.file(
+        "rust-analyzer/BUILD.bazel",
+        """\
+load("@rules_rs//rs/toolchains:declare_rust_analyzer_toolchains.bzl", "declare_rust_analyzer_toolchains")
 
 declare_rust_analyzer_toolchains(
     version = {version},
     rust_analyzer_version = {rust_analyzer_version},
 )
 """.format(
-            version = repr(rctx.attr.version),
-            rustfmt_version = repr(rctx.attr.rustfmt_version),
+            version = version,
             rust_analyzer_version = repr(rctx.attr.rust_analyzer_version),
-            edition = repr(rctx.attr.edition),
-            extra_rustc_flags = repr(rctx.attr.extra_rustc_flags),
-            extra_exec_rustc_flags = repr(rctx.attr.extra_exec_rustc_flags),
         ),
     )
 

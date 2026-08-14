@@ -41,7 +41,7 @@ rules_rust = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
 use_repo(rules_rust, "rules_rust")
 
 register_toolchains(
-    "@default_rust_toolchains//:all",
+    "@default_rust_toolchains//...",
     "@llvm//toolchain:all",
 )
 
@@ -148,7 +148,7 @@ toolchain's standard libraries, rustdoc, Cargo, Clippy, and linkers.
 Create a dedicated `toolchains/BUILD.bazel` package:
 
 ```bzl
-load("@rules_rs//rs:toolchains.bzl", "declare_rustc_toolchains")
+load("@rules_rs//rs/toolchains:declare_rustc_toolchains.bzl", "declare_rustc_toolchains")
 
 declare_rustc_toolchains(
     name = "custom_rust",
@@ -165,16 +165,21 @@ A `rustc` dictionary selects execution triples automatically. A single compiler
 label can instead be combined with `exec_triples`. Use `target_triples` to limit
 supported target platforms.
 
-Register the custom package instead of the generated Rust toolchains in
+Register the custom package instead of the generated Rust compiler toolchains in
 `MODULE.bazel`:
 
 ```bzl
-register_toolchains("//toolchains:all", "@llvm//toolchain:all")
+register_toolchains(
+    "//toolchains:all",
+    "@default_rust_toolchains//rustfmt:all",
+    "@default_rust_toolchains//rust-analyzer:all",
+    "@llvm//toolchain:all",
+)
 ```
 
 Keep `@default_rust_toolchains` available through `use_repo` for inherited
-compiler components. Register `@default_rust_toolchains//:all` after the custom
-toolchains only when fallback platforms, rustfmt, or rust-analyzer are needed.
+compiler components. Register `@default_rust_toolchains//rustc:all` after the
+custom toolchains only when compiler fallback is needed.
 Override `rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
 `rust_objcopy`, `rust_lld`, `bpf_linker`, or `rust_std` when necessary.
 
