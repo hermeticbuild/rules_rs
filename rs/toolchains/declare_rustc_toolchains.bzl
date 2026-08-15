@@ -1,6 +1,6 @@
 """Definitions for declaring Rust compiler toolchains."""
 
-load("@rs_rust_host_tools//:defs.bzl", "rust_toolchain_component_label")
+load("@default_rust_toolchains//rustc:component_labels.bzl", "rust_toolchain_component_label")
 load("@rules_rust//rust:rust_toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES", "triple_to_rust_constraint_set")
@@ -71,18 +71,16 @@ def declare_rustc_toolchains(
 
     if not version:
         fail("declare_rustc_toolchains requires a Rust version")
-    if exec_triples == None:
-        exec_triples = list(rustc.keys()) if type(rustc) == "dict" else SUPPORTED_EXEC_TRIPLES
-    if not exec_triples:
-        fail("declare_rustc_toolchains requires at least one execution triple")
+    if type(rustc) == "dict":
+        for exec_triple in rustc:
+            if exec_triple not in SUPPORTED_EXEC_TRIPLES:
+                fail("unsupported Rust execution triple: %s" % exec_triple)
+        if exec_triples == None:
+            exec_triples = list(rustc.keys())
+    elif exec_triples == None:
+        exec_triples = SUPPORTED_EXEC_TRIPLES
     if not target_triples:
         fail("declare_rustc_toolchains requires at least one target triple")
-
-    for exec_triple in exec_triples:
-        if exec_triple not in SUPPORTED_EXEC_TRIPLES:
-            fail("unsupported Rust execution triple: %s" % exec_triple)
-        if type(rustc) == "dict" and exec_triple not in rustc:
-            fail("rustc does not contain a compiler for execution triple %s" % exec_triple)
 
     for target_triple in target_triples:
         if target_triple not in ALL_TARGET_TRIPLES:

@@ -1,8 +1,14 @@
 def _toolchains_repository_impl(rctx):
     rctx.file(
+        "rustc/component_labels.bzl",
+        "def rust_toolchain_component_label(label):\n    return Label(label)\n",
+    )
+    rctx.file(
         "rustc/BUILD.bazel",
         """\
 load("@rules_rs//rs/toolchains:declare_rustc_toolchains.bzl", "declare_rustc_toolchains")
+
+exports_files(["component_labels.bzl"])
 
 declare_rustc_toolchains(
     version = {version},
