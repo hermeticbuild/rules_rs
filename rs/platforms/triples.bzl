@@ -10,10 +10,7 @@ _RISCV_ISA_CONSTRAINTS = {
 }
 
 def triple_to_rust_constraint_set(target_triple):
-    constraints = [
-        Label(constraint) if constraint.startswith("@apple_support//") else constraint
-        for constraint in _triple_to_constraint_set(target_triple)
-    ]
+    constraints = _triple_to_constraint_set(target_triple)
     t = triple(target_triple)
 
     if t.system in ("linux", "nixos"):
