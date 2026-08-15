@@ -67,6 +67,7 @@ rustdoc_musl_unwind_link_flags_test(
 DISABLED = [
     "annotation_crate_features",
     "3rd_party",
+    "platform_feature_resolution",
     "pyo3",
     "prost",
     "wasm_bindgen",
