@@ -163,7 +163,8 @@ declare_rustc_toolchains(
 
 A `rustc` dictionary selects execution triples automatically. A single compiler
 label can instead be combined with `exec_triples`. Use `target_triples` to limit
-supported target platforms.
+supported target platforms. Omit `rustc` to use the generated compiler while
+overriding another component.
 
 Register the custom package instead of the generated Rust compiler toolchains in
 `MODULE.bazel`:

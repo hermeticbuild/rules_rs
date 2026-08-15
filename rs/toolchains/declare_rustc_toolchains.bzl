@@ -49,8 +49,8 @@ def declare_rustc_toolchains(
     Args:
       version: Rust compiler version.
       edition: Default Rust edition; defaults to 2021.
-      name: Target-name prefix, required when supplying a custom compiler.
-      rustc: Custom compiler label or labels keyed by execution triple.
+      name: Target-name prefix for separately declared toolchains.
+      rustc: Optional compiler label or labels keyed by execution triple.
       exec_triples: Supported execution triples; defaults to compiler dictionary
         keys or all supported execution triples.
       target_triples: Supported target triples; defaults to all supported triples.
@@ -66,8 +66,8 @@ def declare_rustc_toolchains(
       bpf_linker: Optional bpf-linker label or labels keyed by execution triple.
       rust_std: Optional standard-library label or labels keyed by target triple.
     """
-    if (name != None or rustc != None) and (not name or rustc == None):
-        fail("custom Rust toolchains require a nonempty name and a rustc label")
+    if name == "" or (rustc != None and name == None):
+        fail("custom Rust compilers require a nonempty toolchain name")
 
     if not version:
         fail("declare_rustc_toolchains requires a Rust version")
@@ -88,25 +88,11 @@ def declare_rustc_toolchains(
 
     version_key = sanitize_version(version)
     channel = _channel(version)
-    custom = rustc != None
-    name_prefix = name + "_" if custom else ""
+    name_prefix = name + "_" if name else ""
     target_triple_select = {
         "@rules_rs//rs/platforms/config:" + target_triple: target_triple
         for target_triple in target_triples
     }
-
-    target_triples_setting = None
-    if target_triples != ALL_TARGET_TRIPLES:
-        target_triples_setting = name_prefix + "target_triples"
-        target_triple_conditions = {
-            config_label: config_label
-            for config_label in target_triple_select
-        }
-        target_triple_conditions["//conditions:default"] = "@rules_rs//rs/platforms/config:" + target_triples[0]
-        native.alias(
-            name = target_triples_setting,
-            actual = select(target_triple_conditions),
-        )
 
     source_stdlib_building_select = {}
     for target_triple in target_triples:
@@ -134,7 +120,7 @@ def declare_rustc_toolchains(
 
         default_toolchain_name = triple_suffix + "_" + version_key + "_rust_toolchain"
         rust_toolchain_name = name_prefix + default_toolchain_name
-        inherited_rust_std = "@default_rust_toolchains//rustc:" + default_toolchain_name + "_rust_std" if custom else None
+        inherited_rust_std = "@default_rust_toolchains//rustc:" + default_toolchain_name + "_rust_std" if name_prefix else None
         if inherited_rust_std != None and type(rust_std) != "dict":
             rust_std_label = _component(rust_std, triple, inherited_rust_std)
         else:
@@ -305,7 +291,7 @@ def declare_rustc_toolchains(
                     "@rules_rs//rs/toolchains:bpf_targets" if is_bpf else "@rules_rs//rs/toolchains:non_bpf_targets",
                     bootstrap_setting,
                     "@rules_rust//rust/toolchain/channel:" + channel,
-                ] + ([target_triples_setting] if target_triples_setting else []),
+                ],
                 toolchain = rust_toolchain_name + toolchain_suffix,
                 toolchain_type = "@rules_rust//rust:toolchain_type",
                 visibility = ["//visibility:public"],
