@@ -11,6 +11,7 @@ load("@rules_rs//rs/toolchains:declare_rustc_toolchains.bzl", "declare_rustc_too
 exports_files(["component_labels.bzl"])
 
 declare_rustc_toolchains(
+    name = "default",
     version = {version},
     edition = {edition},
     extra_rustc_flags = {extra_rustc_flags},
