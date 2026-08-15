@@ -250,6 +250,24 @@ crate.annotation(
     patch_args = ["-p1"],
     patches = ["//:windows-version.patch"],
 )
+crate.annotation(
+    crate = "datafusion-common",
+    patch_args = ["-p1"],
+    patches = ["//:datafusion-common.patch"],
+    repositories = ["many_workspace_deps"],
+)
+crate.annotation(
+    crate = "objc-sys",
+    patch_args = ["-p1"],
+    patches = ["//:objc-sys.patch"],
+    version = "0.3.5",
+)
+crate.annotation(
+    crate = "wasmtime-internal-component-macro",
+    patch_args = ["-p1"],
+    patches = ["//:wasmtime-internal-component-macro.patch"],
+    version = "37.0.3",
+)
 
 # Workaround not parsing `members = ["crates/*"]` yet.
 [
@@ -304,7 +322,6 @@ crate.annotation(
     build_script_tags = ["annotation-build-script-tag-test"],
     build_script_tools = ["@nasm//:nasm"],
     crate = "rav1e",
-    patch_tool = "patch",
     patches = ["//:rav1e-nasm-0.8.1.patch"],
     tags = ["annotation-tag-test"],
     version = "0.8.1",

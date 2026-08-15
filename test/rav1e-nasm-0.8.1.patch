@@ -1,6 +1,6 @@
 --- build.rs
 +++ build.rs
-@@ -134,7 +134,11 @@ fn build_nasm_files() {
+@@ -133,8 +133,15 @@ fn build_nasm_files() {
  
    if let Some((hash, hash_path)) =
      hash_changed(asm_files, &out_dir, &dest_path)
@@ -10,7 +10,29 @@
 +    if let Ok(nasm) = env::var("NASM") {
 +      nasm_build.nasm(nasm);
 +    }
++    let manifest_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
++    env::set_var("CARGO_MANIFEST_DIR", ".");
 +    let obj = nasm_build
++      .debug(false)
        .min_version(2, 15, 0)
        .include(&out_dir)
        .include("src")
+@@ -148,3 +155,4 @@
+     });
++    env::set_var("CARGO_MANIFEST_DIR", manifest_dir);
+-
++
+     // cc is better at finding the correct archiver
+@@ -247,6 +255,11 @@
+ #[allow(unused_variables)]
+ fn main() {
+   built::write_built_file().expect("Failed to acquire build-time information");
++  let built_path = Path::new(&env::var("OUT_DIR").unwrap()).join("built.rs");
++  let built_info = fs::read_to_string(&built_path).unwrap();
++  let rustc = env::var("RUSTC").unwrap();
++  let rustc_name = Path::new(&rustc).file_name().unwrap().to_str().unwrap();
++  fs::write(&built_path, built_info.replace(&rustc, rustc_name)).unwrap();
+-
++
+   let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+   let os = env::var("CARGO_CFG_TARGET_OS").unwrap();

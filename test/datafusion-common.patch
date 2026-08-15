@@ -1,0 +1,13 @@
+diff --git a/src/test_util.rs b/src/test_util.rs
+--- a/src/test_util.rs
++++ b/src/test_util.rs
+@@ -296,7 +296,7 @@
+     // env "CARGO_MANIFEST_DIR" is "the directory containing the manifest of your package",
+     // set by `cargo run` or `cargo test`, see:
+     // https://doc.rust-lang.org/cargo/reference/environment-variables.html
+-    let dir = env!("CARGO_MANIFEST_DIR");
++    let dir = std::env::var("CARGO_MANIFEST_DIR")?;
+-
++
+     let pb = PathBuf::from(dir).join(submodule_data);
+     if pb.is_dir() {

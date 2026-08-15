@@ -1,0 +1,15 @@
+diff --git a/src/bindgen.rs b/src/bindgen.rs
+--- a/src/bindgen.rs
++++ b/src/bindgen.rs
+@@ -39,7 +39,10 @@
+         || std::env::var("WASMTIME_DEBUG_BINDGEN").is_ok()
+     {
+         static INVOCATION: AtomicUsize = AtomicUsize::new(0);
+-        let root = Path::new(env!("DEBUG_OUTPUT_DIR"));
++        let root = env::var_os("DEBUG_OUTPUT_DIR")
++            .or_else(|| env::var_os("OUT_DIR"))
++            .map(PathBuf::from)
++            .unwrap_or_else(env::temp_dir);
+         let world_name = &input.resolve.worlds[input.world].name;
+         let n = INVOCATION.fetch_add(1, Relaxed);
+         let path = root.join(format!("{world_name}{n}.rs"));
