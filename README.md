@@ -82,10 +82,10 @@ toolchains.toolchain(
 )
 ```
 
-`MODULE.bazel.lock` records the selected archive URLs and SHA-256 values for
-each host operating system and architecture. Existing upstream archives remain
-locked to `static.rust-lang.org` after a redistributed release becomes
-available. Update the lockfile to use a newly published release with:
+`MODULE.bazel.lock` records the selected archive filenames and SHA-256 values.
+Existing `.tar.xz` archives remain locked to `static.rust-lang.org` after a
+redistributed release becomes available. Update the lockfile to use the new
+`.tar.zst` archives with:
 
 ```shell
 bazel mod deps --lockfile_mode=update --repo_env=RULES_RS_RUST_REDIST_REFRESH=1
@@ -93,8 +93,7 @@ bazel mod deps --lockfile_mode=update
 ```
 
 The second command restores the normal environment before the updated lockfile
-is committed. Run both commands on each host operating system and architecture
-whose existing toolchain entry should be updated.
+is committed.
 
 ### Global Cargo configuration
 

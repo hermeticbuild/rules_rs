@@ -151,7 +151,7 @@ _miri_toolchains_repository = repository_rule(
 )
 
 def _toolchains_impl(mctx):
-    mctx.getenv("RULES_RS_RUST_REDIST_REFRESH")
+    refresh_rust_redist = bool(mctx.getenv("RULES_RS_RUST_REDIST_REFRESH"))
 
     root_module_name = None
     for mod in mctx.modules:
@@ -222,6 +222,7 @@ def _toolchains_impl(mctx):
     for triple in BPF_LINKER_SUPPORTED_EXEC_TRIPLES:
         declare_bpf_linker_repository(triple)
 
+    existing_facts = getattr(mctx, "facts", {}) or {}
     pending_manifests = {}
     for version in all_versions:
         base_version, iso_date = _parse_version(version)
@@ -231,12 +232,18 @@ def _toolchains_impl(mctx):
         if base_version in pending_manifests:
             continue
 
+        rustc_archive = "rustc-{}-x86_64-unknown-linux-gnu.tar".format(base_version)
+        locked_zstd = bool(existing_facts.get(rustc_archive + ".zst"))
+        locked_upstream = bool(existing_facts.get(rustc_archive + ".xz"))
+        if locked_upstream and not locked_zstd and not refresh_rust_redist:
+            continue
+
         manifest_path = "rust_redist_{}_manifest.json".format(_sanitize_path_fragment(base_version))
         pending_manifests[base_version] = struct(
             token = mctx.download(
                 rust_redist_manifest_url(base_version),
                 manifest_path,
-                allow_fail = True,
+                allow_fail = not locked_zstd,
                 block = False,
             ),
             path = manifest_path,
@@ -271,7 +278,6 @@ def _toolchains_impl(mctx):
             ) in archives
         ]
 
-    existing_facts = getattr(mctx, "facts", {}) or {}
     pending_downloads = {}
     new_facts = {}
 
@@ -281,7 +287,7 @@ def _toolchains_impl(mctx):
 
         archives = rust_redist_archives.get(version) if not iso_date else None
         if archives:
-            sha = archives[archive_path]["sha256"]
+            sha = existing_facts.get(archive_path) or archives[archive_path]["sha256"]
             if not sha:
                 fail("Could not parse sha256 for {}".format(archive_path))
             new_facts[archive_path] = sha
@@ -569,7 +575,7 @@ def _toolchains_impl(mctx):
             direct_deps.append(tag.name)
 
     kwargs = dict(
-        reproducible = False,
+        reproducible = True,
         root_module_direct_deps = direct_deps,
         root_module_direct_dev_deps = direct_dev_deps,
     )
@@ -581,8 +587,6 @@ def _toolchains_impl(mctx):
 
 toolchains = module_extension(
     implementation = _toolchains_impl,
-    os_dependent = True,
-    arch_dependent = True,
     tag_classes = {
         "experimental_miri": _EXPERIMENTAL_MIRI_TAG,
         "toolchain": _TOOLCHAIN_TAG,
