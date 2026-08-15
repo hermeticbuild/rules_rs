@@ -22,7 +22,7 @@ def _rustc_flags_to_select(rustc_flags_by_triple):
 
 def _component(component, triple, default):
     component = component.get(triple) if type(component) == "dict" else component
-    return component if component != None else rust_toolchain_component_label(default)
+    return component or rust_toolchain_component_label(default)
 
 # buildifier: disable=unnamed-macro
 def declare_rustc_toolchains(
