@@ -30,7 +30,7 @@ def declare_rustc_toolchains(
         version,
         edition = "2021",
         rustc = None,
-        exec_triples = None,
+        exec_triples = SUPPORTED_EXEC_TRIPLES,
         target_triples = ALL_TARGET_TRIPLES,
         extra_rustc_flags = {},
         extra_exec_rustc_flags = {},
@@ -69,44 +69,48 @@ def declare_rustc_toolchains(
         for exec_triple in rustc:
             if exec_triple not in SUPPORTED_EXEC_TRIPLES:
                 fail("unsupported Rust execution triple: %s" % exec_triple)
-        if exec_triples == None:
-            exec_triples = rustc.keys()
-    elif exec_triples == None:
-        exec_triples = SUPPORTED_EXEC_TRIPLES
+        exec_triples = rustc.keys()
 
     version_key = sanitize_version(version)
     channel = _channel(version)
-    name_prefix = name + "_"
-    rust_std_label = name_prefix + "rust_std"
-    target_triple_select = {}
-    rust_std_select = {}
-    source_stdlib_building_select = {"//conditions:default": rust_std_label}
+
+    source_stdlib_building_select = {}
     for target_triple in target_triples:
-        config_label = "@rules_rs//rs/platforms/config:" + target_triple
-        target_triple_select[config_label] = target_triple
+        if target_triple not in SUPPORTED_TIER_3_TRIPLES:
+            continue
+
         target_key = sanitize_triple(target_triple)
+        config_setting = name + "_source_stdlib_building_" + target_key
+        native.config_setting(
+            name = config_setting,
+            constraint_values = triple_to_rust_constraint_set(target_triple),
+            flag_values = {
+                "@rules_rs//rs/private:source_stdlib_building": "true",
+            },
+        )
+        source_stdlib_building_select[config_setting] = "@rules_rs//rs/private:empty_stdlib"
+
+    rust_std_label = name + "_rust_std"
+    rust_std_select = {}
+    target_triple_select = {}
+    for target_triple in target_triples:
+        target_key = sanitize_triple(target_triple)
+        config_label = "@rules_rs//rs/platforms/config:" + target_triple
+        stdlib_repo = "rust_stdlib_%s_%s" % (target_key, version_key)
         if target_triple in SUPPORTED_TIER_3_TRIPLES:
             default_rust_std = "@rustc_src_" + version_key + "//src:rust_std"
-            config_setting = name_prefix + "source_stdlib_building_" + target_key
-            native.config_setting(
-                name = config_setting,
-                constraint_values = triple_to_rust_constraint_set(target_triple),
-                flag_values = {
-                    "@rules_rs//rs/private:source_stdlib_building": "true",
-                },
-            )
-            source_stdlib_building_select[config_setting] = "@rules_rs//rs/private:empty_stdlib"
         else:
-            stdlib_repo = "rust_stdlib_%s_%s" % (target_key, version_key)
             default_rust_std = "@%s//:rust_std-%s" % (stdlib_repo, target_triple)
-
         rust_std_select[config_label] = _component(rust_std, target_triple, default_rust_std)
+        target_triple_select[config_label] = target_triple
 
     native.alias(
         name = rust_std_label,
         actual = select(rust_std_select),
     )
-    toolchain_rust_std = select(source_stdlib_building_select)
+    toolchain_rust_std = select(source_stdlib_building_select | {
+        "//conditions:default": rust_std_label,
+    })
 
     for triple in exec_triples:
         exec_triple = _parse_triple(triple)
@@ -115,9 +119,9 @@ def declare_rustc_toolchains(
         rustc_repo_label = "@rustc_{}_{}//:".format(triple_suffix, version_key)
         cargo_repo_label = "@cargo_{}_{}//:".format(triple_suffix, version_key)
         clippy_repo_label = "@clippy_{}_{}//:".format(triple_suffix, version_key)
-
-        rust_toolchain_name = name_prefix + triple_suffix + "_" + version_key + "_rust_toolchain"
         lld_label = _component(rust_lld, triple, rustc_repo_label + "rust-lld")
+
+        rust_toolchain_name = name + "_" + triple_suffix + "_" + version_key + "_rust_toolchain"
 
         rust_toolchain_kwargs = dict(
             rust_doc = _component(rust_doc, triple, rustc_repo_label + "rustdoc"),
@@ -212,11 +216,7 @@ def declare_rustc_toolchains(
             **rust_toolchain_kwargs
         )
 
-        bpf_linker_label = _component(
-            bpf_linker,
-            triple,
-            "@%s//:%s" % (bpf_linker_repository_name(triple), bpf_linker_binary_name(triple)),
-        )
+        bpf_linker_label = _component(bpf_linker, triple, "@%s//:%s" % (bpf_linker_repository_name(triple), bpf_linker_binary_name(triple)))
         rust_toolchain(
             name = rust_toolchain_name + "_bpf",
             linker_preference = "rust",
@@ -240,7 +240,7 @@ def declare_rustc_toolchains(
             bootstrap_setting = "@rules_rust//rust/private:" + ("bootstrapping" if bootstrapping else "bootstrapped")
             toolchain_suffix = "_bpf" if is_bpf else bootstrap_suffix
             native.toolchain(
-                name = name_prefix + "{}_{}_to_{}_targets_{}{}".format(
+                name = name + "_{}_{}_to_{}_targets_{}{}".format(
                     exec_triple.system,
                     exec_triple.arch,
                     target_kind,
