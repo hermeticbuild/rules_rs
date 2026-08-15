@@ -2,13 +2,22 @@
 
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/experimental/miri/private:miri_repository.bzl", "miri_repository")
-load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_AND_2_TRIPLES")
+load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_AND_2_TRIPLES", "SUPPORTED_TIER_3_TRIPLES")
 load("//rs/private:bpf_linker_repository.bzl", "BPF_LINKER_SUPPORTED_EXEC_TRIPLES", "declare_bpf_linker_repository")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
 load("//rs/private:host_tools_repository.bzl", "host_tools_repository")
 load("//rs/private:rust_analyzer_repository.bzl", "rust_analyzer_repository")
-load("//rs/private:rust_repository_utils.bzl", "DEFAULT_STATIC_RUST_URL_TEMPLATES", "check_version_valid", "produce_tool_suburl")
+load(
+    "//rs/private:rust_repository_utils.bzl",
+    "DEFAULT_STATIC_RUST_URL_TEMPLATES",
+    "check_version_valid",
+    "is_valid_sha256",
+    "produce_tool_suburl",
+    "rust_archive_extension",
+    "rust_redist_manifest_url",
+    "rust_redist_url_templates",
+)
 load("//rs/private:rust_src_repository.bzl", "rust_src_repository")
 load("//rs/private:rustc_repository.bzl", "rustc_repository")
 load("//rs/private:rustc_src_repository.bzl", "rustc_src_repository")
@@ -40,23 +49,70 @@ def _normalize_arch_name(arch):
 def _sanitize_path_fragment(path):
     return path.replace("/", "_").replace(":", "_")
 
-def _tool_extension(urls):
-    url = urls[0] if urls else ""
-    if url.endswith(".tar.gz"):
-        return ".tar.gz"
-    if url.endswith(".tar.xz"):
-        return ".tar.xz"
-    return ""
-
-def _archive_path(tool_name, target_triple, version, iso_date):
-    return produce_tool_suburl(tool_name, target_triple, version, iso_date) + _tool_extension(DEFAULT_STATIC_RUST_URL_TEMPLATES)
+def _archive_path(tool_name, target_triple, version, iso_date, urls):
+    return produce_tool_suburl(tool_name, target_triple, version, iso_date) + rust_archive_extension(urls)
 
 def _rustc_src_tool_suburl(version, iso_date = None):
     path = "rustc-{}-src".format(version)
     return iso_date + "/" + path if (iso_date and version in ("beta", "nightly")) else path
 
-def _rustc_src_archive_path(version, iso_date):
-    return _rustc_src_tool_suburl(version, iso_date) + _tool_extension(DEFAULT_STATIC_RUST_URL_TEMPLATES)
+def _rustc_src_archive_path(version, iso_date, urls):
+    return _rustc_src_tool_suburl(version, iso_date) + rust_archive_extension(urls)
+
+def _validate_rust_redist_manifest(version, manifest):
+    if type(manifest) != "dict":
+        fail("Rust redistribution manifest for {} must be a JSON object".format(version))
+
+    if manifest.get("format_version") != 1:
+        fail("Rust redistribution manifest for {} has an unsupported format_version".format(version))
+
+    if manifest.get("rust_version") != version:
+        fail("Rust redistribution manifest version does not match {}".format(version))
+
+    release_date = manifest.get("release_date")
+    if type(release_date) != "string" or not release_date:
+        fail("Rust redistribution manifest for {} has no release_date".format(version))
+
+    compression = manifest.get("compression")
+    if type(compression) != "dict":
+        fail("Rust redistribution manifest for {} has no compression metadata".format(version))
+
+    if (
+        compression.get("format") != "zstd" or
+        compression.get("level") != 22 or
+        compression.get("arguments") != ["--ultra", "-22", "-T2"]
+    ):
+        fail("Rust redistribution manifest for {} does not use maximum zstd compression".format(version))
+
+    archives = manifest.get("archives")
+    if type(archives) != "dict" or not archives:
+        fail("Rust redistribution manifest for {} has no archives".format(version))
+
+    for archive_path, archive in archives.items():
+        if type(archive_path) != "string" or not archive_path.endswith(".tar.zst"):
+            fail("Rust redistribution manifest for {} has an invalid archive name".format(version))
+
+        if type(archive) != "dict":
+            fail("Rust redistribution archive {} has invalid metadata".format(archive_path))
+
+        for sha_field in ["sha256", "source_sha256"]:
+            if not is_valid_sha256(archive.get(sha_field)):
+                fail("Rust redistribution archive {} has invalid {}".format(archive_path, sha_field))
+
+        if type(archive.get("size")) != "int" or archive["size"] <= 0:
+            fail("Rust redistribution archive {} has invalid size".format(archive_path))
+
+        for string_field in ["component", "source_url"]:
+            value = archive.get(string_field)
+            if type(value) != "string" or not value:
+                fail("Rust redistribution archive {} has invalid {}".format(archive_path, string_field))
+
+        if "target" not in archive:
+            fail("Rust redistribution archive {} has no target".format(archive_path))
+
+        target = archive["target"]
+        if target != None and (type(target) != "string" or not target):
+            fail("Rust redistribution archive {} has invalid target".format(archive_path))
 
 _TOOLCHAIN_TAG = tag_class(
     attrs = {
@@ -200,16 +256,81 @@ def _toolchains_impl(mctx):
                 miri_versions.add(tag.version)
 
     rust_versions = versions | miri_versions
+    all_versions = rust_versions | rustfmt_versions | rust_analyzer_versions
 
     for triple in BPF_LINKER_SUPPORTED_EXEC_TRIPLES:
         declare_bpf_linker_repository(triple)
+
+    pending_manifests = {}
+    for version in all_versions:
+        base_version, iso_date = _parse_version(version)
+        if iso_date or base_version in ("beta", "nightly"):
+            continue
+
+        if base_version in pending_manifests:
+            continue
+
+        manifest_path = "rust_redist_{}_manifest.json".format(_sanitize_path_fragment(base_version))
+        pending_manifests[base_version] = struct(
+            token = mctx.download(
+                rust_redist_manifest_url(base_version),
+                manifest_path,
+                allow_fail = True,
+                block = False,
+            ),
+            path = manifest_path,
+        )
+
+    rust_redist_manifests = {}
+    for version, request in pending_manifests.items():
+        result = request.token.wait()
+        if not result.success:
+            continue
+
+        manifest = json.decode(mctx.read(request.path))
+        _validate_rust_redist_manifest(version, manifest)
+        rust_redist_manifests[version] = manifest
+
+    def _urls_for_version(version, iso_date):
+        if not iso_date and version in rust_redist_manifests:
+            return rust_redist_url_templates(version)
+        return DEFAULT_STATIC_RUST_URL_TEMPLATES
+
+    stdlib_targets_by_version = {}
+    for version in rust_versions:
+        base_version, iso_date = _parse_version(version)
+        manifest = rust_redist_manifests.get(base_version) if not iso_date else None
+        if not manifest:
+            stdlib_targets_by_version[version] = SUPPORTED_TIER_1_AND_2_TRIPLES
+            continue
+
+        urls = _urls_for_version(base_version, iso_date)
+        stdlib_targets_by_version[version] = [
+            target_triple
+            for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES
+            if _archive_path(
+                "rust-std",
+                _parse_triple(target_triple),
+                base_version,
+                iso_date,
+                urls,
+            ) in manifest["archives"]
+        ]
 
     existing_facts = getattr(mctx, "facts", {}) or {}
     pending_downloads = {}
     new_facts = {}
 
-    def _request_archive_sha(archive_path, suburl):
+    def _request_archive_sha(archive_path, suburl, version, iso_date):
         if archive_path in new_facts or archive_path in pending_downloads:
+            return
+
+        manifest = rust_redist_manifests.get(version) if not iso_date else None
+        if manifest:
+            archive = manifest["archives"].get(archive_path)
+            if not archive:
+                fail("Rust redistribution manifest for {} does not contain {}".format(version, archive_path))
+            new_facts[archive_path] = archive["sha256"]
             return
 
         existing = existing_facts.get(archive_path)
@@ -229,8 +350,10 @@ def _toolchains_impl(mctx):
 
     def _request_sha(tool_name, version, iso_date, target_triple):
         _request_archive_sha(
-            _archive_path(tool_name, target_triple, version, iso_date),
+            _archive_path(tool_name, target_triple, version, iso_date, _urls_for_version(version, iso_date)),
             produce_tool_suburl(tool_name, target_triple, version, iso_date),
+            version,
+            iso_date,
         )
 
     # First pass: enqueue all sha downloads we don't already have.
@@ -246,10 +369,15 @@ def _toolchains_impl(mctx):
             if version in miri_versions:
                 _request_sha("miri", base_version, iso_date, exec_triple)
 
-        for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES:
+        for target_triple in stdlib_targets_by_version[version]:
             _request_sha("rust-std", base_version, iso_date, _parse_triple(target_triple))
 
-        _request_archive_sha(_rustc_src_archive_path(base_version, iso_date), _rustc_src_tool_suburl(base_version, iso_date))
+        _request_archive_sha(
+            _rustc_src_archive_path(base_version, iso_date, _urls_for_version(base_version, iso_date)),
+            _rustc_src_tool_suburl(base_version, iso_date),
+            base_version,
+            iso_date,
+        )
 
     for version in rustfmt_versions:
         base_version, iso_date = _parse_version(version)
@@ -282,7 +410,7 @@ def _toolchains_impl(mctx):
         new_facts[archive_path] = sha
 
     def _sha_for(tool_name, version, iso_date, target_triple):
-        archive_path = _archive_path(tool_name, target_triple, version, iso_date)
+        archive_path = _archive_path(tool_name, target_triple, version, iso_date, _urls_for_version(version, iso_date))
         return new_facts[archive_path]
 
     host_os = _normalize_os_name(mctx.os.name)
@@ -290,9 +418,10 @@ def _toolchains_impl(mctx):
     host_cargo_repos = {}
     host_rustc_repos = {}
 
-    for version in rust_versions | rustfmt_versions | rust_analyzer_versions:
+    for version in all_versions:
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
+        urls = _urls_for_version(base_version, iso_date)
 
         for triple in SUPPORTED_EXEC_TRIPLES:
             exec_triple = _parse_triple(triple)
@@ -306,6 +435,7 @@ def _toolchains_impl(mctx):
                 version = base_version,
                 iso_date = iso_date,
                 sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                urls = urls,
             )
 
             if version in rust_versions:
@@ -320,6 +450,7 @@ def _toolchains_impl(mctx):
                     version = base_version,
                     iso_date = iso_date,
                     sha256 = _sha_for("cargo", base_version, iso_date, exec_triple),
+                    urls = urls,
                 )
 
             if version in versions:
@@ -330,6 +461,7 @@ def _toolchains_impl(mctx):
                     iso_date = iso_date,
                     sha256 = _sha_for("clippy", base_version, iso_date, exec_triple),
                     rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                    urls = urls,
                 )
 
             if version in miri_versions:
@@ -340,21 +472,24 @@ def _toolchains_impl(mctx):
                     iso_date = iso_date,
                     sha256 = _sha_for("miri", base_version, iso_date, exec_triple),
                     rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                    urls = urls,
                 )
 
         if version in rust_versions:
-            for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES:
+            for target_triple in stdlib_targets_by_version[version]:
                 stdlib_repository(
                     name = "rust_stdlib_{}_{}".format(sanitize_triple(target_triple), version_key),
                     triple = target_triple,
                     version = base_version,
                     iso_date = iso_date,
                     sha256 = _sha_for("rust-std", base_version, iso_date, _parse_triple(target_triple)),
+                    urls = urls,
                 )
 
     for version in rustfmt_versions:
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
+        urls = _urls_for_version(base_version, iso_date)
 
         for triple in SUPPORTED_EXEC_TRIPLES:
             exec_triple = _parse_triple(triple)
@@ -367,17 +502,20 @@ def _toolchains_impl(mctx):
                 iso_date = iso_date,
                 sha256 = _sha_for("rustfmt", base_version, iso_date, exec_triple),
                 rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                urls = urls,
             )
 
     for version in rust_analyzer_versions:
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
+        urls = _urls_for_version(base_version, iso_date)
 
         rust_src_repository(
             name = "rust_src_{}".format(version_key),
             version = base_version,
             iso_date = iso_date,
             sha256 = _sha_for("rust-src", base_version, iso_date, None),
+            urls = urls,
         )
 
         for triple in SUPPORTED_EXEC_TRIPLES:
@@ -391,6 +529,7 @@ def _toolchains_impl(mctx):
                 iso_date = iso_date,
                 sha256 = _sha_for("rust-analyzer", base_version, iso_date, exec_triple),
                 rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                urls = urls,
             )
 
     if len(host_cargo_repos) != len(rust_versions):
@@ -403,13 +542,15 @@ def _toolchains_impl(mctx):
     for version in rust_versions:
         version_key = sanitize_version(version)
         base_version, iso_date = _parse_version(version)
+        urls = _urls_for_version(base_version, iso_date)
         rustc_src_repository(
             name = "rustc_src_{}".format(version_key),
             version = base_version,
             iso_date = iso_date,
-            sha256 = new_facts[_rustc_src_archive_path(base_version, iso_date)],
+            sha256 = new_facts[_rustc_src_archive_path(base_version, iso_date, urls)],
             cargo = "@{}//:bin/cargo{}".format(host_cargo_repos[version], host_exe_suffix),
             rustc = "@{}//:bin/rustc{}".format(host_rustc_repos[version], host_exe_suffix),
+            urls = urls,
         )
 
     host_tools_repository(
@@ -448,6 +589,7 @@ def _toolchains_impl(mctx):
                 edition = tag.edition,
                 extra_rustc_flags = tag.extra_rustc_flags,
                 extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
+                target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES,
             )
         is_dev_dependency = had_tags and mctx.is_dev_dependency(tag)
         if is_dev_dependency:
