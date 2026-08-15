@@ -83,7 +83,7 @@ def declare_rustc_toolchains(
         config_setting = name + "_source_stdlib_building_" + target_key
         native.config_setting(
             name = config_setting,
-            constraint_values = triple_to_rust_constraint_set(target_triple),
+            constraint_values = [Label(constraint) for constraint in triple_to_rust_constraint_set(target_triple)],
             flag_values = {
                 "@rules_rs//rs/private:source_stdlib_building": "true",
             },
