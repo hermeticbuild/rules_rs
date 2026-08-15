@@ -69,13 +69,6 @@ def rust_redist_manifest_url(version):
 def rust_redist_url_templates(version):
     return [RUST_REDIST_RELEASE_URL_TEMPLATE.format(version) + "{}.tar.zst"]
 
-def is_valid_sha256(value):
-    return (
-        type(value) == "string" and
-        len(value) == 64 and
-        all([character in "0123456789abcdefABCDEF" for character in value.elems()])
-    )
-
 def rust_archive_extension(urls):
     url = urls[0] if urls else ""
     if url.endswith(".tar.gz"):

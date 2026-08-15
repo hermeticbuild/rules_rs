@@ -6,7 +6,6 @@ load(
     ":rust_repository_utils.bzl",
     "DEFAULT_STATIC_RUST_URL_TEMPLATES",
     "includes_rust_analyzer_proc_macro_srv",
-    "is_valid_sha256",
     "produce_tool_path",
     "produce_tool_suburl",
     "rust_archive_extension",
@@ -45,11 +44,6 @@ def _rust_archive_urls_test_impl(ctx):
     asserts.equals(env, ".tar.xz", rust_archive_extension(DEFAULT_STATIC_RUST_URL_TEMPLATES))
     asserts.equals(env, ".tar.gz", rust_archive_extension(["https://static.rust-lang.org/dist/{}.tar.gz"]))
     asserts.equals(env, "", rust_archive_extension([]))
-    asserts.true(env, is_valid_sha256("0123456789abcdef" * 4))
-    asserts.true(env, is_valid_sha256("0123456789ABCDEF" * 4))
-    asserts.false(env, is_valid_sha256("0123456789abcdef"))
-    asserts.false(env, is_valid_sha256("g" * 64))
-    asserts.false(env, is_valid_sha256(None))
 
     return unittest.end(env)
 

@@ -64,6 +64,38 @@ use_repo(crate, "crates")
 
 `platform_triples` should include every exec and target triple that can participate in the build. For the common case, include the host triples you use locally and in CI plus the target triples you build for.
 
+### Rust toolchain archives
+
+Stable Rust toolchains use Zstandard-compressed archives from
+[hermeticbuild/rust-redist](https://github.com/hermeticbuild/rust-redist) when
+available. Other stable versions and nightly toolchains continue to use
+`static.rust-lang.org`.
+
+Set `use_rust_redist = False` to download a toolchain and its configured
+rustfmt and rust-analyzer versions directly from `static.rust-lang.org`:
+
+```bzl
+toolchains.toolchain(
+    edition = "2024",
+    version = "1.97.1",
+    use_rust_redist = False,
+)
+```
+
+`MODULE.bazel.lock` records the selected archive URLs and SHA-256 values for
+each host operating system and architecture. Existing upstream archives remain
+locked to `static.rust-lang.org` after a redistributed release becomes
+available. Update the lockfile to use a newly published release with:
+
+```shell
+bazel mod deps --lockfile_mode=update --repo_env=RULES_RS_RUST_REDIST_REFRESH=1
+bazel mod deps --lockfile_mode=update
+```
+
+The second command restores the normal environment before the updated lockfile
+is committed. Run both commands on each host operating system and architecture
+whose existing toolchain entry should be updated.
+
 ### Global Cargo configuration
 
 The root module can configure a shared Cargo configuration file for every Cargo closure, including closures declared by dependencies:
