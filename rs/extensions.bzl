@@ -432,11 +432,12 @@ crate.annotation(
             target_repo_name = package["target_repo_name"]
             target_package_path = package["target_package_path"]
 
+            actual = annotation.override_target_lib or _target_label(target_repo_name, target_package_path, name)
             hub_contents.append("""
 alias(
     name = "{name}-{version}",
     actual = "{actual}",
-)""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
+)""".format(name = name, version = version, actual = actual))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""
@@ -1028,9 +1029,9 @@ _annotation = tag_class(
         # "override_target_build_script": attr.label(
         #     doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
         # ),
-        # "override_target_lib": attr.label(
-        #     doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
-        # ),
+        "override_target_lib": attr.label(
+            doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
+        ),
         # "override_target_proc_macro": attr.label(
         #     doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
         # ),

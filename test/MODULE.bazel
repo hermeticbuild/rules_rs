@@ -184,6 +184,11 @@ crate.annotation(
     crate_features = ["fips"],
     repositories = ["annotation_crate_features"],
 )
+crate.annotation(
+    crate = "itoa",
+    override_target_lib = "//:override_itoa",
+    repositories = ["cfg_feature_target_dep"],
+)
 crate.annotation_select(
     crate = "rustls",
     crate_features = ["fips"],
