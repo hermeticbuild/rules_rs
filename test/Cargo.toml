@@ -6,3 +6,6 @@ publish = false
 
 [lib]
 path = "lib.rs"
+
+[lints.rust]
+unused_imports = "warn"

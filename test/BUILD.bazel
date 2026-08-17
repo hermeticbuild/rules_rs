@@ -1,5 +1,6 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
+load("@root_package//:defs.bzl", root_package_lint_config = "lint_config")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
@@ -15,6 +16,7 @@ load("@workspace_renamed_path_dep_aliases//:defs.bzl", workspace_renamed_path_de
 load("//:rustdoc_musl_unwind_test.bzl", "rustdoc_musl_unwind_link_flags_test")
 load("//:target_triple_constraints_test.bzl", "target_triple_constraints_test")
 load("//:verify_aliases.bzl", "verify_alias", "verify_alias_absent", "verify_crate_feature_absent", "verify_crate_feature_present", "verify_dep_absent", "verify_dep_present", "verify_dev_dep_absent")
+load("//:workspace_lints_test.bzl", "inherited_workspace_lints_test", "opted_out_workspace_lints_test", "package_lints_test")
 
 target_triple_constraints_test()
 
@@ -56,6 +58,34 @@ rust_doc_test(
 rustdoc_musl_unwind_link_flags_test(
     name = "rustdoc_musl_unwind_link_flags_test",
     target_under_test = ":rustdoc_musl_unwind_doctest",
+)
+
+rust_library(
+    name = "root_package_lints",
+    srcs = ["lib.rs"],
+    crate_name = "root_pkg",
+    edition = "2021",
+    lint_config = root_package_lint_config(),
+)
+
+package_lints_test(
+    name = "root_package_lints_test",
+    target_under_test = ":root_package_lints",
+)
+
+inherited_workspace_lints_test(
+    name = "workspace_lints_inherited_test",
+    target_under_test = "//workspace_lints/opted_in",
+)
+
+opted_out_workspace_lints_test(
+    name = "workspace_lints_opted_out_test",
+    target_under_test = "//workspace_lints/opted_out",
+)
+
+package_lints_test(
+    name = "workspace_package_lints_test",
+    target_under_test = "//workspace_lints/package_lints",
 )
 
 DISABLED = [
@@ -365,6 +395,7 @@ filegroup(
         "@binaries//:protoc-gen-prost-extra",
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
         "@binary_only//:b3sum__b3sum",
+        "@build_script_aliases//:workspace_cargo_lints",
         "@root_package//:_workspace_deps",
     ] + select({
         "@platforms//os:windows": [],

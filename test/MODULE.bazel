@@ -133,6 +133,7 @@ TESTS = [
     "workspace_git_dep",
     "workspace_path_dependency",
     "workspace_hyphen_dep_aliases",
+    "workspace_lints",
     "workspace_renamed_path_dep_aliases",
     "binaries",
     "binary_only",
@@ -147,6 +148,7 @@ TESTS = [
         # cargo_config = "//:.cargo/config.toml",
         # use_home_cargo_credentials = True,
         debug = True,
+        generate_lint_config = test == "workspace_lints",
         platform_triples = [
             "aarch64-unknown-linux-gnu",
             "aarch64-apple-darwin",
@@ -167,6 +169,7 @@ crate.from_cargo(
     cargo_lock = "//:Cargo.lock",
     cargo_toml = "//:Cargo.toml",
     debug = True,
+    generate_lint_config = True,
     platform_triples = [
         "aarch64-unknown-linux-gnu",
         "aarch64-apple-darwin",
@@ -221,6 +224,14 @@ crate.annotation(
     crate = "member_foo",
     crate_features = ["json"],
     repositories = ["workspace_member_annotation_features"],
+)
+crate.annotation(
+    crate = "wasmtime-internal-jit-debug",
+    extra_aliased_targets = {
+        "workspace_cargo_lints": "wasmtime-internal-jit-debug",
+    },
+    repositories = ["build_script_aliases"],
+    version = "37.0.0",
 )
 
 # Test gen_binaries

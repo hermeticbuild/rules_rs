@@ -1,0 +1,11 @@
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+load("@workspace_lints//:defs.bzl", "lint_config")
+
+rust_library(
+    name = "opted_out",
+    srcs = ["src/lib.rs"],
+    crate_name = "opted_out",
+    edition = "2024",
+    lint_config = lint_config(),
+    visibility = ["//:__pkg__"],
+)
