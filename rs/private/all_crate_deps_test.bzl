@@ -57,6 +57,31 @@ def _merge_structured_dep_specs_applies_filter_prefix_impl(ctx):
 
     return unittest.end(env)
 
+def _merge_structured_dep_specs_default_platform_preserves_sparse_deps_impl(ctx):
+    env = unittest.begin(ctx)
+
+    shared, per_platform = merge_structured_dep_specs(
+        [
+            (
+                ["//:shared"],
+                {"//cfg:darwin": ["//:darwin_only", "//:shared"]},
+            ),
+            (
+                ["//:shared"],
+                {"//cfg:darwin": ["//:darwin_only", "//:dev_only"]},
+            ),
+        ],
+        ["//conditions:default"],
+        None,
+    )
+
+    asserts.equals(env, ["//:shared"], shared)
+    asserts.equals(env, {
+        "//cfg:darwin": ["//:darwin_only", "//:dev_only"],
+    }, per_platform)
+
+    return unittest.end(env)
+
 def _all_crate_deps_defaults_to_normal_impl(ctx):
     env = unittest.begin(ctx)
 
@@ -103,6 +128,7 @@ def _all_crate_deps_dedupes_across_selected_kinds_impl(ctx):
 
 merge_structured_dep_specs_dedupes_and_promotes_test = unittest.make(_merge_structured_dep_specs_dedupes_and_promotes_impl)
 merge_structured_dep_specs_applies_filter_prefix_test = unittest.make(_merge_structured_dep_specs_applies_filter_prefix_impl)
+merge_structured_dep_specs_default_platform_preserves_sparse_deps_test = unittest.make(_merge_structured_dep_specs_default_platform_preserves_sparse_deps_impl)
 all_crate_deps_defaults_to_normal_test = unittest.make(_all_crate_deps_defaults_to_normal_impl)
 all_crate_deps_dedupes_across_selected_kinds_test = unittest.make(_all_crate_deps_dedupes_across_selected_kinds_impl)
 
@@ -111,6 +137,7 @@ def all_crate_deps_tests():
         "all_crate_deps_tests",
         merge_structured_dep_specs_dedupes_and_promotes_test,
         merge_structured_dep_specs_applies_filter_prefix_test,
+        merge_structured_dep_specs_default_platform_preserves_sparse_deps_test,
         all_crate_deps_defaults_to_normal_test,
         all_crate_deps_dedupes_across_selected_kinds_test,
     )

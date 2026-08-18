@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "rust-crate-example",
+    "normal-dependency",
+    "dev-dependency",
+    "build-dependency",
+    "binary-only",
+]
+resolver = "3"
