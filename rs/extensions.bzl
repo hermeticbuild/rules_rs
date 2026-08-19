@@ -320,13 +320,13 @@ def _generate_hub_and_spokes(
 
         if suggested_annotation:
             print("""
-WARNING: A well-known crate annotation exists for {crate}! Apply the following to your MODULE.bazel:
+WARNING: A well-known crate annotation exists to make builds of {crate} more hermetic! Apply the following to your MODULE.bazel:
 
 ```
 {formatted_well_known_annotation}
 ```
 
-You can disable this warning by configuring your MODULE.bazel like so:
+If non-hermetic builds of {crate} are acceptable, then you can disable this warning by configuring your MODULE.bazel like so:
 
 ```
 crate.annotation(
