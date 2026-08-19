@@ -159,6 +159,51 @@ rust_binary(
 )
 ```
 
+### Cargo lint configuration
+
+Enable Cargo lint configuration for a dependency closure through its
+`crate.from_cargo` tag:
+
+```bzl
+crate.from_cargo(
+    name = "crates",
+    cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
+    generate_lint_config = True,
+    platform_triples = [...],
+)
+```
+
+When enabled, the crate extension parses each workspace member's `Cargo.toml`
+and exposes its effective Cargo lint configuration through the generated
+`lint_config()` helper. A member with `[lints] workspace = true` receives
+`[workspace.lints]`, a member with package lints receives those lints, and a
+member without a `[lints]` table receives no lint configuration.
+
+Pass the generated helper to the existing Rust rule alongside the other
+`DEP_DATA` helpers:
+
+```bzl
+load(
+    "@crates//:defs.bzl",
+    "aliases",
+    "all_crate_deps",
+    "lint_config",
+)
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+
+rust_library(
+    name = "lib",
+    srcs = ["src/lib.rs"],
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True),
+    lint_config = lint_config(),
+)
+```
+
+The selection follows each member manifest for both virtual and non-virtual
+workspaces. Workspace lints are not applied to members that do not opt in.
+
 ## rust-analyzer
 
 See the upstream `rules_rust` rust-analyzer docs for editor setup details:
@@ -472,4 +517,3 @@ See https://registry.bazel.build/docs/rules_rs
 - [Aya](https://github.com/aya-rs/aya) and [bpf-linker](https://github.com/aya-rs/bpf-linker)
 - [Xybrid](https://github.com/xybrid-ai/xybrid)
 - [Drake](https://github.com/RobotLocomotion/drake)
-

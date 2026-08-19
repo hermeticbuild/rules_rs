@@ -670,7 +670,8 @@ def workspace_dep_data(
         cfg_match_cache,
         repo_root,
         workspace_package,
-        use_legacy_rules_rust_platforms):
+        use_legacy_rules_rust_platforms,
+        lint_configs = {}):
     dep_data = {}
     for package in cargo_metadata["packages"]:
         aliases = {}
@@ -753,7 +754,7 @@ def workspace_dep_data(
         build_deps, build_deps_by_platform = shared_and_per_platform(build_deps, use_legacy_rules_rust_platforms)
         dev_deps, dev_deps_by_platform = shared_and_per_platform(dev_deps, use_legacy_rules_rust_platforms)
 
-        dep_data[bazel_package] = {
+        package_dep_data = {
             "aliases": aliases,
             "binaries": binaries,
             "build_deps": build_deps,
@@ -768,6 +769,10 @@ def workspace_dep_data(
             "edition": package.get("edition", "2015"),
             "shared_libraries": shared_libraries,
         }
+        lint_config = lint_configs.get(bazel_package)
+        if lint_config:
+            package_dep_data["lint_config"] = lint_config
+        dep_data[bazel_package] = package_dep_data
 
     return dep_data
 

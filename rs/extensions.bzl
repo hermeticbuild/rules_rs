@@ -22,7 +22,7 @@ load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repos
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_repository")
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
-load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
+load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
 load("//rs/private:repository_utils.bzl", "render_select")
@@ -49,7 +49,27 @@ def _git_crate_purl(name, version, remote, commit):
 
 def _render_ordered_string_list(items):
     """Like _render_string_list but preserves insertion order."""
-    return ",\n        ".join(['"%s"' % item for item in items])
+    return ",\n        ".join([repr(item) for item in items])
+
+def _render_cargo_lints_target(name, lint_flags):
+    return """
+cargo_lints(
+    name = {name},
+    rustc_lint_flags = [
+        {rustc}
+    ],
+    clippy_lint_flags = [
+        {clippy}
+    ],
+    rustdoc_lint_flags = [
+        {rustdoc}
+    ],
+)""".format(
+        name = repr(name),
+        rustc = _render_ordered_string_list(lint_flags.rustc_lint_flags),
+        clippy = _render_ordered_string_list(lint_flags.clippy_lint_flags),
+        rustdoc = _render_ordered_string_list(lint_flags.rustdoc_lint_flags),
+    )
 
 def _date(ctx, label):
     return
@@ -99,6 +119,7 @@ def _generate_hub_and_spokes(
         cargo_config,
         validate_lockfile,
         debug,
+        generate_lint_config,
         use_legacy_rules_rust_platforms,
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
@@ -117,6 +138,7 @@ def _generate_hub_and_spokes(
         cargo_config (label): .cargo/config.toml file
         validate_lockfile (bool): If true, validate we have appropriate versions in Cargo.lock
         debug (bool): Enable debug logging
+        generate_lint_config (bool): Generate per-package Cargo lint configuration.
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
     """
     _date(mctx, "start")
@@ -424,6 +446,35 @@ crate.annotation(
     repo_root = _normalize_path(cargo_metadata["workspace_root"])
     workspace_package = _label_directory(cargo_lock_path)
 
+    workspace_lints_present = generate_lint_config and "lints" in workspace_cargo_toml_json.get("workspace", {})
+    workspace_manifest_path = paths.join(repo_root, "Cargo.toml")
+    lint_configs = {}
+    package_lint_targets = []
+    lint_packages = cargo_metadata["packages"] if generate_lint_config else []
+    for index, package in enumerate(lint_packages):
+        manifest_path = _normalize_path(package["manifest_path"])
+        if manifest_path == workspace_manifest_path:
+            cargo_toml_json = workspace_cargo_toml_json
+        else:
+            cargo_toml_json = run_toml2json(mctx, package["manifest_path"])
+        lints = cargo_toml_json.get("lints", {})
+        package_dir = _manifest_package_dir(manifest_path, repo_root)
+        bazel_package = paths.join(workspace_package, package_dir) if package_dir else workspace_package
+
+        if lints.get("workspace") == True:
+            if workspace_lints_present:
+                lint_configs[bazel_package] = "@%s//:workspace_cargo_lints" % hub_name
+        elif lints.get("rust") or lints.get("clippy") or lints.get("rustdoc"):
+            if manifest_path == workspace_manifest_path:
+                lint_configs[bazel_package] = "@%s//:cargo_lints" % hub_name
+            else:
+                target_name = "_cargo_lints_%d" % index
+                lint_configs[bazel_package] = "@%s//:%s" % (hub_name, target_name)
+                package_lint_targets.append((
+                    target_name,
+                    cargo_toml_lint_flags(cargo_toml_json),
+                ))
+
     hub_contents = []
     for name, versions in versions_by_name.items():
         for version in versions:
@@ -530,28 +581,21 @@ filegroup(
         ),
     )
 
-    lint_flags = cargo_toml_lint_flags(workspace_cargo_toml_json)
-    hub_contents.append(
-        """
-load("@rules_rs//rs/private:cargo_lints.bzl", "cargo_lints")
+    hub_contents.append("""load("@rules_rs//rs/private:cargo_lints.bzl", "cargo_lints")""")
 
-cargo_lints(
-    name = "cargo_lints",
-    rustc_lint_flags = [
-        {rustc}
-    ],
-    clippy_lint_flags = [
-        {clippy}
-    ],
-    rustdoc_lint_flags = [
-        {rustdoc}
-    ],
-)""".format(
-            rustc = _render_ordered_string_list(lint_flags.rustc_lint_flags),
-            clippy = _render_ordered_string_list(lint_flags.clippy_lint_flags),
-            rustdoc = _render_ordered_string_list(lint_flags.rustdoc_lint_flags),
-        ),
-    )
+    hub_contents.append(_render_cargo_lints_target(
+        "cargo_lints",
+        cargo_toml_lint_flags(workspace_cargo_toml_json),
+    ))
+
+    if workspace_lints_present:
+        hub_contents.append(_render_cargo_lints_target(
+            "workspace_cargo_lints",
+            workspace_cargo_toml_lint_flags(workspace_cargo_toml_json),
+        ))
+
+    for target_name, lint_flags in package_lint_targets:
+        hub_contents.append(_render_cargo_lints_target(target_name, lint_flags))
 
     resolved_platforms = []
     for triple in platform_triples:
@@ -587,6 +631,13 @@ def edition(package_name = None):
         return None
 
     return dep_data["edition"]
+
+def lint_config(package_name = None):
+    dep_data = DEP_DATA.get(package_name or native.package_name())
+    if not dep_data:
+        return None
+
+    return dep_data.get("lint_config")
 
 def all_crate_deps(
         normal = False,
@@ -629,6 +680,7 @@ RESOLVED_PLATFORMS = select({{
         repo_root = repo_root,
         workspace_package = workspace_package,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        lint_configs = lint_configs,
     ))
 
     if dry_run:
@@ -773,9 +825,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms)
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
@@ -889,6 +941,10 @@ _from_cargo = tag_class(
         ),
         "cargo_lock": attr.label(),
         "cargo_config": attr.label(),
+        "generate_lint_config": attr.bool(
+            doc = "If true, generate per-package Cargo lint configuration by reading workspace member manifests.",
+            default = False,
+        ),
         "use_home_cargo_credentials": attr.bool(
             doc = "If set, the ruleset will load `~/cargo/credentials.toml` and attach those credentials to registry requests.",
         ),
