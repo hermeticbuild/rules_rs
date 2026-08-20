@@ -1,0 +1,20 @@
+load("@default_rust_toolchains//rustc:component_labels.bzl", "rust_toolchain_component_label")
+load("@rules_rs//rs/toolchains:declare_rustc_toolchains.bzl", "declare_rustc_toolchains")
+load(":version_test.bzl", "toolchain_version_test")
+
+declare_rustc_toolchains(
+    name = "inherited",
+    exec_triples = ["x86_64-unknown-linux-gnu"],
+)
+
+toolchain_version_test(
+    name = "version_test",
+    expected_rustc = rust_toolchain_component_label("@rustc_linux_x86_64_1_96_1//:rustc"),
+    target_under_test = ":inherited_linux_x86_64_1_96_1_rust_toolchain",
+)
+
+toolchain_version_test(
+    name = "json_version_test",
+    expected_rustc = rust_toolchain_component_label("@rustc_linux_x86_64_1_95_0//:rustc"),
+    target_under_test = "@json_rust_toolchains//rustc:default_linux_x86_64_1_95_0_rust_toolchain",
+)

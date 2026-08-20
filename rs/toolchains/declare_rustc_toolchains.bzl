@@ -1,6 +1,7 @@
 """Definitions for declaring Rust compiler toolchains."""
 
 load("@default_rust_toolchains//rustc:component_labels.bzl", "rust_toolchain_component_label")
+load("@default_rust_toolchains//rustc:version.bzl", "RUST_VERSION")
 load("@rules_rust//rust:rust_toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES", "triple_to_rust_constraint_set")
@@ -27,7 +28,7 @@ def _component(component, triple, default):
 def declare_rustc_toolchains(
         name,
         *,
-        version,
+        version = RUST_VERSION,
         edition = "2021",
         rustc = None,
         exec_triples = SUPPORTED_EXEC_TRIPLES,
@@ -47,7 +48,8 @@ def declare_rustc_toolchains(
 
     Args:
       name: Target-name prefix for separately declared toolchains.
-      version: Rust compiler version.
+      version: Rust compiler version; defaults to the version selected by
+        @default_rust_toolchains.
       edition: Default Rust edition; defaults to 2021.
       rustc: Optional compiler label or labels keyed by execution triple.
       exec_triples: Supported execution triples; defaults to compiler dictionary

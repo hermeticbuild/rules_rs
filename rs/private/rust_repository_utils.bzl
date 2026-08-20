@@ -28,6 +28,46 @@ def check_version_valid(version, iso_date, param_prefix = ""):
     if version in ("beta", "nightly") and not iso_date:
         fail("{param_prefix}iso_date must be specified if version is 'beta' or 'nightly'".format(param_prefix = param_prefix))
 
+def normalize_rust_version(version):
+    """Converts dated rustup toolchain names to rules_rs version syntax.
+
+    Args:
+      version: A Rust release or dated channel name.
+
+    Returns:
+      The version with a slash separating a prerelease channel and its date.
+    """
+    for channel in ("beta", "nightly"):
+        prefix = channel + "-"
+        if version.startswith(prefix):
+            return channel + "/" + version.removeprefix(prefix)
+    return version
+
+def is_pinned_rust_version(version):
+    """Checks whether a canonical Rust version identifies an immutable release.
+
+    Args:
+      version: A version returned by normalize_rust_version.
+
+    Returns:
+      Whether the version is X.Y.Z or a valid dated beta/nightly.
+    """
+    parts = version.split("/")
+    if len(parts) == 1:
+        numbers = version.split(".")
+        return len(numbers) == 3 and all([number.isdigit() and (number == "0" or not number.startswith("0")) for number in numbers])
+    if len(parts) != 2 or parts[0] not in ("beta", "nightly"):
+        return False
+    date = parts[1].split("-")
+    if len(date) != 3 or [len(part) for part in date] != [4, 2, 2] or not all([part.isdigit() for part in date]):
+        return False
+    year, month, day = [int(part) for part in date]
+    if year == 0 or month < 1 or month > 12:
+        return False
+    leap_year = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+    month_days = [31, 29 if leap_year else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    return day >= 1 and day <= month_days[month - 1]
+
 def produce_tool_path(tool_name, version, target_triple = None):
     if not tool_name:
         fail("No tool name was provided")

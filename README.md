@@ -64,6 +64,29 @@ use_repo(crate, "crates")
 
 `platform_triples` should include every exec and target triple that can participate in the build. For the common case, include the host triples you use locally and in CI plus the target triples you build for.
 
+### Experimental Rust toolchain version files
+
+Use `experimental_version_file` and `experimental_version_path` to share a
+JSON version pin with other build or CI tools. For example, given
+`{"nightly": {"rust": "nightly-2026-04-20"}}`:
+
+```bzl
+toolchains.toolchain(
+    edition = "2024",
+    experimental_version_file = "//:rust-toolchains.json",
+    experimental_version_path = ["nightly", "rust"],
+)
+```
+
+The path is a list of JSON object keys; omit it when the file contains just a
+JSON string. The selected value must be a full numbered release or a dated
+beta/nightly. `version` and `experimental_version_file` are mutually exclusive.
+Dated rustup names such as `nightly-2026-04-20` are normalized to
+`nightly/2026-04-20`.
+The selected version is available to BUILD files as `RUST_VERSION` from
+`@default_rust_toolchains//rustc:version.bzl` (or the corresponding named
+toolchain repository).
+
 ### Rust toolchain archives
 
 Stable Rust toolchains use Zstandard-compressed archives from
@@ -246,7 +269,6 @@ declare_rustc_toolchains(
         "aarch64-apple-darwin": "//tools/rust:rustc_macos_arm64",
         "x86_64-unknown-linux-gnu": "//tools/rust:rustc_linux_x86_64",
     },
-    version = "1.92.0",
 )
 ```
 
@@ -254,6 +276,8 @@ A `rustc` dictionary selects execution triples automatically. A single compiler
 label can instead be combined with `exec_triples`. Use `target_triples` to limit
 supported target platforms. Omit `rustc` to use the generated compiler while
 overriding another component.
+The compiler version defaults to the version selected in `MODULE.bazel`; pass
+`version` explicitly only when the custom compiler needs a different version.
 
 Register the custom package instead of the generated Rust compiler toolchains in
 `MODULE.bazel`:

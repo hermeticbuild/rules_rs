@@ -87,8 +87,16 @@ toolchains.toolchain(
     edition = "2024",
     version = "1.96.1",
 )
+toolchains.toolchain(
+    name = "json_rust_toolchains",
+    experimental_version_file = "//toolchains:rust-toolchains.json",
+    experimental_version_path = [
+        "stable",
+        "rust",
+    ],
+)
 toolchains.experimental_miri(version = "nightly/2026-04-20")
-use_repo(toolchains, "default_rust_toolchains", "miri_toolchains")
+use_repo(toolchains, "default_rust_toolchains", "json_rust_toolchains", "miri_toolchains")
 
 register_toolchains("@default_rust_toolchains//...")
 

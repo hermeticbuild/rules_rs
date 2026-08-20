@@ -6,6 +6,8 @@ load(
     ":rust_repository_utils.bzl",
     "DEFAULT_STATIC_RUST_URL_TEMPLATES",
     "includes_rust_analyzer_proc_macro_srv",
+    "is_pinned_rust_version",
+    "normalize_rust_version",
     "produce_tool_path",
     "produce_tool_suburl",
     "rust_archive_extension",
@@ -24,6 +26,17 @@ def _rust_tool_archive_names_test_impl(ctx):
     asserts.equals(env, "rustc-1.92.0-x86_64-unknown-linux-gnu", produce_tool_suburl("rustc", linux_triple, "1.92.0", "2026-04-20"))
     asserts.equals(env, "2026-04-20/rustc-nightly-x86_64-unknown-linux-gnu", produce_tool_suburl("rustc", linux_triple, "nightly", "2026-04-20"))
     asserts.equals(env, "2026-04-20/rust-src-beta", produce_tool_suburl("rust-src", None, "beta", "2026-04-20"))
+
+    for rustup, canonical in [
+        ("1.96.1", "1.96.1"),
+        ("beta-2026-04-20", "beta/2026-04-20"),
+        ("nightly-2026-04-20", "nightly/2026-04-20"),
+        ("nightly/2026-04-20", "nightly/2026-04-20"),
+    ]:
+        asserts.equals(env, canonical, normalize_rust_version(rustup))
+        asserts.true(env, is_pinned_rust_version(canonical))
+    for mutable_or_invalid in ["stable", "stable/2026-04-20", "1.96", "nightly/2026-02-30"]:
+        asserts.false(env, is_pinned_rust_version(mutable_or_invalid))
 
     return unittest.end(env)
 

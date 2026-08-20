@@ -12,6 +12,8 @@ load(
     "//rs/private:rust_repository_utils.bzl",
     "DEFAULT_STATIC_RUST_URL_TEMPLATES",
     "check_version_valid",
+    "is_pinned_rust_version",
+    "normalize_rust_version",
     "produce_tool_suburl",
     "rust_archive_extension",
     "rust_redist_manifest_url",
@@ -70,8 +72,13 @@ _TOOLCHAIN_TAG = tag_class(
             default = _DEFAULT_TOOLCHAIN_REPO_NAME,
         ),
         "version": attr.string(
-            doc = "Rust version (e.g. 1.86.0 or nightly/2025-04-03)",
-            default = _DEFAULT_RUSTC_VERSION,
+            doc = "Rust version (e.g. 1.86.0 or nightly/2025-04-03). Defaults to {} when experimental_version_file is unset.".format(_DEFAULT_RUSTC_VERSION),
+        ),
+        "experimental_version_file": attr.label(
+            doc = "JSON file containing the Rust version. Mutually exclusive with version.",
+        ),
+        "experimental_version_path": attr.string_list(
+            doc = "JSON object keys leading to the version string in experimental_version_file.",
         ),
         "use_rust_redist": attr.bool(
             doc = "Use redistributed Rust toolchain archives when available.",
@@ -106,6 +113,28 @@ def _parse_version(version):
     check_version_valid(base_version, iso_date)
 
     return base_version, iso_date
+
+def _toolchain_version(mctx, tag):
+    if tag.experimental_version_file:
+        if tag.version:
+            fail("toolchain.version and toolchain.experimental_version_file are mutually exclusive")
+        version = json.decode(mctx.read(tag.experimental_version_file))
+        for key in tag.experimental_version_path:
+            if type(version) != "dict" or key not in version:
+                fail("{} has no version at {}".format(tag.experimental_version_file, tag.experimental_version_path))
+            version = version[key]
+        if type(version) != "string" or not version:
+            fail("{} at {} must contain a Rust version string".format(tag.experimental_version_file, tag.experimental_version_path))
+    else:
+        if tag.experimental_version_path:
+            fail("toolchain.experimental_version_path requires toolchain.experimental_version_file")
+        version = tag.version or _DEFAULT_RUSTC_VERSION
+
+    version = normalize_rust_version(version)
+    if tag.experimental_version_file and not is_pinned_rust_version(version):
+        fail("{} at {} must contain a numbered Rust release or dated beta/nightly, got {}".format(tag.experimental_version_file, tag.experimental_version_path, repr(version)))
+    _parse_version(version)
+    return version
 
 _EXPERIMENTAL_MIRI_TAG = tag_class(
     attrs = {
@@ -160,13 +189,22 @@ def _toolchains_impl(mctx):
             break
 
     version_tags = []
-    had_tags = True
     for mod in mctx.modules:
         for tag in mod.tags.toolchain:
-            version_tags.append(tag)
+            version_tags.append(struct(
+                name = tag.name,
+                version = _toolchain_version(mctx, tag),
+                use_rust_redist = tag.use_rust_redist,
+                rustfmt_version = tag.rustfmt_version,
+                rust_analyzer_version = tag.rust_analyzer_version,
+                edition = tag.edition,
+                extra_rustc_flags = tag.extra_rustc_flags,
+                extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
+                # Bazel requires the original tag here, not the normalized struct.
+                is_dev_dependency = mctx.is_dev_dependency(tag),
+            ))
 
     if not version_tags:
-        had_tags = False
         version_tags.append(struct(
             name = _DEFAULT_TOOLCHAIN_REPO_NAME,
             version = _DEFAULT_RUSTC_VERSION,
@@ -176,6 +214,7 @@ def _toolchains_impl(mctx):
             edition = _DEFAULT_EDITION,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
+            is_dev_dependency = False,
         ))
 
     versions = set([])
@@ -551,8 +590,7 @@ def _toolchains_impl(mctx):
                 extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
                 target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES,
             )
-        is_dev_dependency = had_tags and mctx.is_dev_dependency(tag)
-        if is_dev_dependency:
+        if tag.is_dev_dependency:
             if repo_name not in direct_dev_deps:
                 direct_dev_deps.append(repo_name)
         elif repo_name not in direct_deps:
