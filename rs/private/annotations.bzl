@@ -16,7 +16,13 @@ def _crate_annotation(
         build_script_tags = [],
         data = [],
         deps = [],
+        deps_select = {},
         link_deps = [],
+        link_deps_select = {},
+        remove_deps = [],
+        remove_build_script_deps = [],
+        target_compatible_with = [],
+        target_compatible_with_select = {},
         tags = [],
         crate_features = [],
         crate_features_select = {},
@@ -45,7 +51,13 @@ def _crate_annotation(
         build_script_tags = build_script_tags,
         data = data,
         deps = deps,
+        deps_select = deps_select,
         link_deps = link_deps,
+        link_deps_select = link_deps_select,
+        remove_deps = remove_deps,
+        remove_build_script_deps = remove_build_script_deps,
+        target_compatible_with = target_compatible_with,
+        target_compatible_with_select = target_compatible_with_select,
         tags = tags,
         crate_features = crate_features,
         crate_features_select = crate_features_select,
@@ -61,6 +73,25 @@ def _crate_annotation(
     )
 
 _DEFAULT_CRATE_ANNOTATION = _crate_annotation()
+
+def apply_dependency_annotation(generated_deps_select, added_deps_select = {}, removed_deps = []):
+    """Applies dependency additions and removals to generated per-platform dependencies.
+
+    Args:
+        generated_deps_select: Generated dependency labels keyed by platform triple.
+        added_deps_select: Additional dependency labels keyed by platform triple.
+        removed_deps: Exact generated dependency labels to remove from every triple.
+
+    Returns:
+        A new dependency map. The input maps and their lists are not mutated.
+    """
+    deps_select = {
+        triple: [dep for dep in deps if dep not in removed_deps]
+        for triple, deps in generated_deps_select.items()
+    }
+    for triple, deps in added_deps_select.items():
+        deps_select[triple] = deps_select.get(triple, []) + deps
+    return deps_select
 
 _WINDOWS_GNULLVM_ADDITIVE_BUILD_FILE_CONTENT = """
 load("@rules_cc//cc:defs.bzl", "cc_import")
@@ -124,7 +155,10 @@ _SELECTABLE_ANNOTATION_FIELDS = {
     "build_script_env": "build_script_env_select",
     "build_script_tools": "build_script_tools_select",
     "crate_features": "crate_features_select",
+    "deps": "deps_select",
+    "link_deps": "link_deps_select",
     "rustc_flags": "rustc_flags_select",
+    "target_compatible_with": "target_compatible_with_select",
 }
 
 _LIST_SELECT_FIELDS = [

@@ -1,5 +1,5 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":annotations.bzl", "annotation_for", "build_annotation_map")
+load(":annotations.bzl", "annotation_for", "apply_dependency_annotation", "build_annotation_map")
 
 _TRIPLES = [
     "aarch64-apple-darwin",
@@ -34,9 +34,12 @@ _ANNOTATION_DEFAULTS = {
     "patch_args": [],
     "patch_tool": "",
     "patches": [],
+    "remove_build_script_deps": [],
+    "remove_deps": [],
     "rustc_flags": [],
     "strip_prefix": "",
     "tags": [],
+    "target_compatible_with": [],
     "workspace_cargo_toml": "Cargo.toml",
 }
 
@@ -45,7 +48,10 @@ _ANNOTATION_SELECT_DEFAULTS = {
     "build_script_env": {},
     "build_script_tools": [],
     "crate_features": [],
+    "deps": [],
+    "link_deps": [],
     "rustc_flags": [],
+    "target_compatible_with": [],
 }
 
 def _annotation(crate, version = "*", **kwargs):
@@ -111,14 +117,20 @@ def _wildcard_and_exact_select_payloads_compose_impl(ctx):
                     "example",
                     ["x86_64-unknown-linux-gnu"],
                     build_script_env = {"COMMON": "wildcard", "OVERRIDE": "wildcard"},
+                    deps = ["//:wildcard_dep"],
+                    link_deps = ["//:wildcard_link_dep"],
                     rustc_flags = ["--cfg=wildcard"],
+                    target_compatible_with = ["//:wildcard_constraint"],
                 ),
                 _annotation_select(
                     "example",
                     ["x86_64-unknown-linux-gnu"],
                     version = "1.0.0",
                     build_script_env = {"EXACT": "exact", "OVERRIDE": "exact"},
+                    deps = ["//:exact_dep"],
+                    link_deps = ["//:exact_link_dep"],
                     rustc_flags = ["--cfg=exact"],
+                    target_compatible_with = ["//:exact_constraint"],
                 ),
             ],
         ),
@@ -136,6 +148,18 @@ def _wildcard_and_exact_select_payloads_compose_impl(ctx):
         "aarch64-apple-darwin": [],
         "x86_64-unknown-linux-gnu": ["--cfg=wildcard", "--cfg=exact"],
     }, annotation.rustc_flags_select)
+    asserts.equals(env, {
+        "aarch64-apple-darwin": [],
+        "x86_64-unknown-linux-gnu": ["//:wildcard_dep", "//:exact_dep"],
+    }, annotation.deps_select)
+    asserts.equals(env, {
+        "aarch64-apple-darwin": [],
+        "x86_64-unknown-linux-gnu": ["//:wildcard_link_dep", "//:exact_link_dep"],
+    }, annotation.link_deps_select)
+    asserts.equals(env, {
+        "aarch64-apple-darwin": [],
+        "x86_64-unknown-linux-gnu": ["//:wildcard_constraint", "//:exact_constraint"],
+    }, annotation.target_compatible_with_select)
 
     return unittest.end(env)
 
@@ -198,10 +222,33 @@ def _selected_windows_gnullvm_annotation_keeps_implicit_values_impl(ctx):
 
     return unittest.end(env)
 
+def _apply_dependency_annotation_removes_generated_and_adds_selected_impl(ctx):
+    env = unittest.begin(ctx)
+    deps_select = apply_dependency_annotation(
+        {
+            "aarch64-apple-darwin": ["@repo//:common", "@repo//:macos_only"],
+            "x86_64-unknown-linux-gnu": ["@repo//:common", "@repo//:linux_only"],
+        },
+        {
+            "x86_64-unknown-linux-gnu": ["//:replacement"],
+            "x86_64-pc-windows-msvc": ["//:windows_only"],
+        },
+        ["@repo//:common", "@repo//:linux_only"],
+    )
+
+    asserts.equals(env, {
+        "aarch64-apple-darwin": ["@repo//:macos_only"],
+        "x86_64-pc-windows-msvc": ["//:windows_only"],
+        "x86_64-unknown-linux-gnu": ["//:replacement"],
+    }, deps_select)
+
+    return unittest.end(env)
+
 exact_annotation_replaces_wildcard_and_composes_with_select_test = unittest.make(_exact_annotation_replaces_wildcard_and_composes_with_select_impl)
 wildcard_and_exact_select_payloads_compose_test = unittest.make(_wildcard_and_exact_select_payloads_compose_impl)
 wildcard_select_composes_with_exact_annotation_test = unittest.make(_wildcard_select_composes_with_exact_annotation_impl)
 selected_windows_gnullvm_annotation_keeps_implicit_values_test = unittest.make(_selected_windows_gnullvm_annotation_keeps_implicit_values_impl)
+apply_dependency_annotation_removes_generated_and_adds_selected_test = unittest.make(_apply_dependency_annotation_removes_generated_and_adds_selected_impl)
 
 def annotations_tests():
     return unittest.suite(
@@ -210,4 +257,5 @@ def annotations_tests():
         wildcard_and_exact_select_payloads_compose_test,
         wildcard_select_composes_with_exact_annotation_test,
         selected_windows_gnullvm_annotation_keeps_implicit_values_test,
+        apply_dependency_annotation_removes_generated_and_adds_selected_test,
     )

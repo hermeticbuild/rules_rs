@@ -178,7 +178,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    ]{extra_deps}{conditional_deps},
 {indent}    link_deps = [
 {indent}        {link_deps}
-{indent}    ],
+{indent}    ]{conditional_link_deps},
 {indent}    data = [
 {indent}        {data}
 {indent}    ],
@@ -189,7 +189,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    edition = {edition},
 {rustc_env_attr}{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
 {indent}    tags = {tags},
-{indent}    target_compatible_with = RESOLVED_PLATFORMS,
+{indent}    target_compatible_with = RESOLVED_PLATFORMS + {target_compatible_with}{conditional_target_compatible_with},
 {indent}    links = {links},
 {indent}    build_script = {build_script},
 {indent}    build_script_data = {build_script_data}{conditional_build_script_data},
@@ -222,8 +222,9 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_legacy_rules_rust_platforms)
     rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_legacy_rules_rust_platforms)
     deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_legacy_rules_rust_platforms)
+    link_deps, conditional_link_deps = render_select(getattr(attr, "link_deps", []), getattr(attr, "link_deps_select", {}), use_legacy_rules_rust_platforms)
+    target_compatible_with, conditional_target_compatible_with = render_select(getattr(attr, "target_compatible_with", []), getattr(attr, "target_compatible_with_select", {}), use_legacy_rules_rust_platforms)
     build_script_env_files = getattr(attr, "build_script_env_files", []) + ["cargo_toml_env_vars.env"]
-    link_deps = getattr(attr, "link_deps", [])
 
     conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_legacy_rules_rust_platforms)
 
@@ -255,6 +256,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         extra_deps = extra_deps,
         conditional_deps = " + " + conditional_deps if conditional_deps else "",
         link_deps = list_indent.join(['"%s"' % d for d in sorted(link_deps)]),
+        conditional_link_deps = " + " + conditional_link_deps if conditional_link_deps else "",
         data = list_indent.join(['"%s"' % str(d) for d in attr.data]),
         extra_compile_data_attr = extra_compile_data_attr,
         crate_features = repr(sorted(crate_features)),
@@ -266,6 +268,8 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         rustc_flags = repr(rustc_flags),
         conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),
+        target_compatible_with = repr(sorted(target_compatible_with)),
+        conditional_target_compatible_with = " + " + conditional_target_compatible_with if conditional_target_compatible_with else "",
         links = values["links"],
         build_script = values["build_script"],
         build_script_data = repr(build_script_data),
@@ -327,7 +331,10 @@ rust_crate_attrs = {
     "data": attr.label_list(),
     "deps": attr.label_list(),
     "deps_select": _label_list_dict(),
-    "link_deps": attr.string_list(),
+    "link_deps": attr.label_list(),
+    "link_deps_select": _label_list_dict(),
+    "target_compatible_with": attr.label_list(),
+    "target_compatible_with_select": _label_list_dict(),
     "aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),

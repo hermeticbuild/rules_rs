@@ -41,6 +41,18 @@ cc_library(
     srcs = ["rustdoc_musl_unwind.cc"],
 )
 
+cc_library(
+    name = "annotation_select_native_dep",
+    srcs = ["annotation_select_native_dep.cc"],
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "annotation_select_rust_dep",
+    srcs = ["annotation_select_rust_dep.rs"],
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "rustdoc_musl_unwind",
     srcs = ["rustdoc_musl_unwind.rs"],
@@ -194,6 +206,52 @@ genquery(
     name = "cfg_feature_target_dep_inner_deps",
     expression = "deps(@cfg_feature_target_dep//:inner-0.1.0)",
     scope = ["@cfg_feature_target_dep//:inner-0.1.0"],
+)
+
+genquery(
+    name = "annotation_select_deps",
+    expression = "deps(@build_script_env_select//:bitflags-2.9.4)",
+    scope = ["@build_script_env_select//:bitflags-2.9.4"],
+)
+
+genquery(
+    name = "annotation_build_dependency_removal_deps",
+    expression = "deps(@annotation_dependency_removals//:wasmtime-internal-jit-debug-37.0.0)",
+    scope = ["@annotation_dependency_removals//:wasmtime-internal-jit-debug-37.0.0"],
+)
+
+genquery(
+    name = "annotation_normal_dependency_removal_deps",
+    expression = "deps(@annotation_dependency_removals//:proc-macro2-1.0.101)",
+    scope = ["@annotation_dependency_removals//:proc-macro2-1.0.101"],
+)
+
+genrule(
+    name = "verify_annotation_platform_controls",
+    srcs = [
+        ":annotation_build_dependency_removal_deps",
+        ":annotation_normal_dependency_removal_deps",
+        ":annotation_select_deps",
+    ],
+    outs = ["verify_annotation_platform_controls.txt"],
+    cmd = """
+        grep 'annotation_select_rust_dep' $(location :annotation_select_deps)
+        grep 'annotation_select_native_dep' $(location :annotation_select_deps)
+        grep 'platforms.*os:linux' $(location :annotation_select_deps)
+        if grep -q 'unicode-ident-1.0.12' $(location :annotation_normal_dependency_removal_deps); then
+            echo 'remove_deps did not remove unicode-ident' >&2
+            exit 1
+        fi
+        if grep -q 'cc-1.2.38' $(location :annotation_build_dependency_removal_deps); then
+            echo 'remove_build_script_deps did not remove cc' >&2
+            exit 1
+        fi
+        echo ok > $@
+    """,
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 genrule(
@@ -400,6 +458,7 @@ filegroup(
     ] + select({
         "@platforms//os:windows": [],
         "//conditions:default": [
+            ":verify_annotation_platform_controls",
             ":verify_annotation_tags",
             ":verify_cfg_feature_target_dep",
             ":verify_first_party_feature_propagation",

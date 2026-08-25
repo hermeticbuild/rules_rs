@@ -281,6 +281,20 @@ Label attributes in `crate.annotation` are resolved in `MODULE.bazel`, so a rela
 
 See [`3rd_party/apriltag-sys/include.MODULE.bazel`](3rd_party/apriltag-sys/include.MODULE.bazel) for an example.
 
+Use `crate.annotation_select` to add dependencies, native link dependencies, or compatibility constraints only for selected target triples:
+
+```bzl
+crate.annotation_select(
+    crate = "example-sys",
+    deps = ["//native:shim"],
+    link_deps = ["@native_libs//:example"],
+    target_compatible_with = ["@platforms//os:linux"],
+    triples = ["x86_64-unknown-linux-gnu"],
+)
+```
+
+`remove_deps` and `remove_build_script_deps` on `crate.annotation` remove generated Cargo dependency edges by exact label. Use the hub name and versioned target emitted by `crate.from_cargo`, for example `@my_crates//:cc-1.2.0`. Removal applies only to generated dependencies; it does not remove dependencies added by the same annotation.
+
 </details>
 
 <details>
