@@ -100,6 +100,7 @@
     "https://bcr.bazel.build/modules/llvm/0.8.18/MODULE.bazel": "56d507d49c02498731fa5a95fa48a778368f2d23c0f6184a578d057e58830458",
     "https://bcr.bazel.build/modules/llvm/0.8.18/source.json": "ca45abf06bdd842e88acdda4a077038bbecddd3e90050951c2aff5f89b1b522e",
     "https://bcr.bazel.build/modules/nlohmann_json/3.6.1/MODULE.bazel": "6f7b417dcc794d9add9e556673ad25cb3ba835224290f4f848f8e2db1e1fca74",
+    "https://bcr.bazel.build/modules/nlohmann_json/3.6.1/source.json": "f448c6e8963fdfa7eb831457df83ad63d3d6355018f6574fb017e8169deb43a9",
     "https://bcr.bazel.build/modules/package_metadata/0.0.3/MODULE.bazel": "77890552ecea9e284b5424c9de827a58099348763a4359e975c359a83d4faa83",
     "https://bcr.bazel.build/modules/package_metadata/0.0.5/MODULE.bazel": "ef4f9439e3270fdd6b9fd4dbc3d2f29d13888e44c529a1b243f7a31dfbc2e8e4",
     "https://bcr.bazel.build/modules/package_metadata/0.0.7/MODULE.bazel": "7adb03933fc8401f495800cf4eafcff0edc6da0ff55c7db223ef69d19f689486",
@@ -128,8 +129,7 @@
     "https://bcr.bazel.build/modules/protobuf/3.19.6/MODULE.bazel": "9233edc5e1f2ee276a60de3eaa47ac4132302ef9643238f23128fea53ea12858",
     "https://bcr.bazel.build/modules/protobuf/32.1/MODULE.bazel": "89cd2866a9cb07fee9ff74c41ceace11554f32e0d849de4e23ac55515cfada4d",
     "https://bcr.bazel.build/modules/protobuf/33.4/MODULE.bazel": "114775b816b38b6d0ca620450d6b02550c60ceedfdc8d9a229833b34a223dc42",
-    "https://bcr.bazel.build/modules/protobuf/34.0.bcr.1/MODULE.bazel": "74e541b0ba877813da786a11707d4e394433c157841d5111a36be0d44b907931",
-    "https://bcr.bazel.build/modules/protobuf/34.0.bcr.1/source.json": "fc174b3d6215aa14197d1bd779f98bb72d9fd666ee5ec0d6bba6ae986baa4535",
+    "https://bcr.bazel.build/modules/protobuf/33.4/source.json": "555f8686b4c7d6b5ba731fbea13bf656b4bfd9a7ff629c1d9d3f6e1d6155de79",
     "https://bcr.bazel.build/modules/pybind11_bazel/2.11.1/MODULE.bazel": "88af1c246226d87e65be78ed49ecd1e6f5e98648558c14ce99176da041dc378e",
     "https://bcr.bazel.build/modules/pybind11_bazel/2.12.0/MODULE.bazel": "e6f4c20442eaa7c90d7190d8dc539d0ab422f95c65a57cc59562170c58ae3d34",
     "https://bcr.bazel.build/modules/pybind11_bazel/2.12.0/source.json": "6900fdc8a9e95866b8c0d4ad4aba4d4236317b5c1cd04c502df3f0d33afed680",
@@ -141,6 +141,7 @@
     "https://bcr.bazel.build/modules/rules_android/0.1.1/source.json": "e6986b41626ee10bdc864937ffb6d6bf275bb5b9c65120e6137d56e6331f089e",
     "https://bcr.bazel.build/modules/rules_apple/3.16.0/MODULE.bazel": "0d1caf0b8375942ce98ea944be754a18874041e4e0459401d925577624d3a54a",
     "https://bcr.bazel.build/modules/rules_apple/4.1.0/MODULE.bazel": "76e10fd4a48038d3fc7c5dc6e63b7063bbf5304a2e3bd42edda6ec660eebea68",
+    "https://bcr.bazel.build/modules/rules_apple/4.1.0/source.json": "8ee81e1708756f81b343a5eb2b2f0b953f1d25c4ab3d4a68dc02754872e80715",
     "https://bcr.bazel.build/modules/rules_cc/0.0.1/MODULE.bazel": "cb2aa0747f84c6c3a78dad4e2049c154f08ab9d166b1273835a8174940365647",
     "https://bcr.bazel.build/modules/rules_cc/0.0.10/MODULE.bazel": "ec1705118f7eaedd6e118508d3d26deba2a4e76476ada7e0e3965211be012002",
     "https://bcr.bazel.build/modules/rules_cc/0.0.13/MODULE.bazel": "0e8529ed7b323dad0775ff924d2ae5af7640b23553dfcd4d34344c7e7a867191",
@@ -232,6 +233,7 @@
     "https://bcr.bazel.build/modules/rules_swift/2.1.1/MODULE.bazel": "494900a80f944fc7aa61500c2073d9729dff0b764f0e89b824eb746959bc1046",
     "https://bcr.bazel.build/modules/rules_swift/2.4.0/MODULE.bazel": "1639617eb1ede28d774d967a738b4a68b0accb40650beadb57c21846beab5efd",
     "https://bcr.bazel.build/modules/rules_swift/3.1.2/MODULE.bazel": "72c8f5cf9d26427cee6c76c8e3853eb46ce6b0412a081b2b6db6e8ad56267400",
+    "https://bcr.bazel.build/modules/rules_swift/3.1.2/source.json": "e85761f3098a6faf40b8187695e3de6d97944e98abd0d8ce579cb2daf6319a66",
     "https://bcr.bazel.build/modules/stardoc/0.5.1/MODULE.bazel": "1a05d92974d0c122f5ccf09291442580317cdd859f07a8655f1db9a60374f9f8",
     "https://bcr.bazel.build/modules/stardoc/0.5.3/MODULE.bazel": "c7f6948dae6999bf0db32c1858ae345f112cacf98f174c7a8bb707e41b974f1c",
     "https://bcr.bazel.build/modules/stardoc/0.7.0/MODULE.bazel": "05e3d6d30c099b6770e97da986c53bd31844d7f13d41412480ea265ac9e8079c",
@@ -239,6 +241,7 @@
     "https://bcr.bazel.build/modules/stardoc/0.7.2/source.json": "58b029e5e901d6802967754adf0a9056747e8176f017cfe3607c0851f4d42216",
     "https://bcr.bazel.build/modules/swift_argument_parser/1.3.1.1/MODULE.bazel": "5e463fbfba7b1701d957555ed45097d7f984211330106ccd1352c6e0af0dcf91",
     "https://bcr.bazel.build/modules/swift_argument_parser/1.3.1.2/MODULE.bazel": "75aab2373a4bbe2a1260b9bf2a1ebbdbf872d3bd36f80bff058dccd82e89422f",
+    "https://bcr.bazel.build/modules/swift_argument_parser/1.3.1.2/source.json": "5fba48bbe0ba48761f9e9f75f92876cafb5d07c0ce059cc7a8027416de94a05b",
     "https://bcr.bazel.build/modules/tar.bzl/0.10.4/MODULE.bazel": "e8f9ff79199e8d9eaad7f1b0a77ad74b30bb82d794b87d8ca942bead5de83ae9",
     "https://bcr.bazel.build/modules/tar.bzl/0.10.4/source.json": "20143442376c03426f6135292ba02d825cb75308aa47e6bf42dd4cc5a435c2ff",
     "https://bcr.bazel.build/modules/upb/0.0.0-20220923-a547704/MODULE.bazel": "7298990c00040a0e2f121f6c32544bab27d4452f80d9ce51349b1a28f3005c43",
@@ -386,21 +389,6 @@
         }
       }
     },
-    "@@protobuf+//python/dist:system_python.bzl%system_python_extension": {
-      "general": {
-        "bzlTransitiveDigest": "pmsA+awieucfllLc2n7k8xEoPp0i5LF9Hw6mGX0cqSQ=",
-        "usagesDigest": "A+RWmbKdBBwZcBbNGNvfPbqG2vYZRjVrFp6x1iRUrAk=",
-        "recordedInputs": [],
-        "generatedRepoSpecs": {
-          "system_python": {
-            "repoRuleId": "@@protobuf+//python/dist:system_python.bzl%system_python",
-            "attributes": {
-              "minimum_python_version": "3.9"
-            }
-          }
-        }
-      }
-    },
     "@@pybind11_bazel+//:internal_configure.bzl%internal_configure_extension": {
       "general": {
         "bzlTransitiveDigest": "06cynZ1bCvvy8zHPrrDlXq+Z68xmjctHpfFxi+zEpJY=",
@@ -482,8 +470,8 @@
     },
     "@@rules_python+//python/extensions:config.bzl%config": {
       "general": {
-        "bzlTransitiveDigest": "2hLgIvNVTLgxus0ZuXtleBe70intCfo0cHs8qvt6cdM=",
-        "usagesDigest": "ZVSXMAGpD+xzVNPuvF1IoLBkty7TROO0+akMapt1pAg=",
+        "bzlTransitiveDigest": "wUM/eFwo5Zy7rn36nZ9ZxN9tXhmcWMVGXIExerGg6gM=",
+        "usagesDigest": "EocbSr4I3/Shk4QaFool8b8navUiUFqgzF9bOaaYfFk=",
         "recordedInputs": [
           "REPO_MAPPING:rules_python+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_python+,pypi__build rules_python++config+pypi__build",
@@ -651,7 +639,7 @@
     "@@rules_python+//python/uv:uv.bzl%uv": {
       "general": {
         "bzlTransitiveDigest": "ijW9KS7qsIY+yBVvJ+Nr1mzwQox09j13DnE3iIwaeTM=",
-        "usagesDigest": "H8dQoNZcoqP+Mu0tHZTi4KHATzvNkM5ePuEqoQdklIU=",
+        "usagesDigest": "yXvWfXAzpBeW71mWgwU3AqAzXX/dFACnx12eYvBsJ8w=",
         "recordedInputs": [
           "REPO_MAPPING:rules_python+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_python+,platforms platforms"
@@ -791,6 +779,7 @@
       "jiff_0.2.23": "{\"dependencies\":[{\"kind\":\"dev\",\"name\":\"anyhow\",\"req\":\"^1.0.81\"},{\"features\":[\"serde\"],\"kind\":\"dev\",\"name\":\"chrono\",\"req\":\"^0.4.38\"},{\"kind\":\"dev\",\"name\":\"chrono-tz\",\"req\":\"^0.10.0\"},{\"kind\":\"dev\",\"name\":\"hifitime\",\"req\":\"^3.9.0\",\"target\":\"cfg(not(target_family = \\\"wasm\\\"))\"},{\"kind\":\"dev\",\"name\":\"humantime\",\"req\":\"^2.1.0\"},{\"kind\":\"dev\",\"name\":\"insta\",\"req\":\"^1.39.0\"},{\"name\":\"jiff-static\",\"req\":\"=0.2.23\",\"target\":\"cfg(any())\"},{\"name\":\"jiff-static\",\"optional\":true,\"req\":\"^0.2\"},{\"name\":\"jiff-tzdb\",\"optional\":true,\"req\":\"^0.1.6\"},{\"name\":\"jiff-tzdb-platform\",\"optional\":true,\"req\":\"^0.1.3\",\"target\":\"cfg(any(windows, target_family = \\\"wasm\\\"))\"},{\"name\":\"js-sys\",\"optional\":true,\"req\":\"^0.3.50\",\"target\":\"cfg(all(any(target_arch = \\\"wasm32\\\", target_arch = \\\"wasm64\\\"), target_os = \\\"unknown\\\"))\"},{\"default_features\":false,\"name\":\"log\",\"optional\":true,\"req\":\"^0.4.21\"},{\"kind\":\"dev\",\"name\":\"log\",\"req\":\"^0.4.21\"},{\"default_features\":false,\"name\":\"portable-atomic\",\"req\":\"^1.10.0\",\"target\":\"cfg(not(target_has_atomic = \\\"ptr\\\"))\"},{\"default_features\":false,\"name\":\"portable-atomic-util\",\"req\":\"^0.2.4\",\"target\":\"cfg(not(target_has_atomic = \\\"ptr\\\"))\"},{\"default_features\":false,\"kind\":\"dev\",\"name\":\"quickcheck\",\"req\":\"^1.0.3\"},{\"features\":[\"derive\"],\"kind\":\"dev\",\"name\":\"serde\",\"req\":\"^1.0.203\"},{\"default_features\":false,\"name\":\"serde_core\",\"optional\":true,\"req\":\"^1.0.221\"},{\"kind\":\"dev\",\"name\":\"serde_json\",\"req\":\"^1.0.117\"},{\"kind\":\"dev\",\"name\":\"serde_yaml\",\"req\":\"^0.9.34\"},{\"kind\":\"dev\",\"name\":\"tabwriter\",\"req\":\"^1.4.0\"},{\"features\":[\"local-offset\",\"macros\",\"parsing\"],\"kind\":\"dev\",\"name\":\"time\",\"req\":\"^0.3.36\"},{\"kind\":\"dev\",\"name\":\"time-tz\",\"req\":\"^2.0.0\"},{\"kind\":\"dev\",\"name\":\"tzfile\",\"req\":\"^0.1.3\"},{\"kind\":\"dev\",\"name\":\"walkdir\",\"req\":\"^2.5.0\"},{\"name\":\"wasm-bindgen\",\"optional\":true,\"req\":\"^0.2.70\",\"target\":\"cfg(all(any(target_arch = \\\"wasm32\\\", target_arch = \\\"wasm64\\\"), target_os = \\\"unknown\\\"))\"},{\"default_features\":false,\"features\":[\"Win32_Foundation\",\"Win32_System_Time\"],\"name\":\"windows-sys\",\"optional\":true,\"req\":\">=0.52.0, <=0.61\",\"target\":\"cfg(windows)\"}],\"features\":{\"alloc\":[\"serde_core?/alloc\",\"portable-atomic-util/alloc\"],\"default\":[\"std\",\"tz-system\",\"tz-fat\",\"tzdb-bundle-platform\",\"tzdb-zoneinfo\",\"tzdb-concatenated\",\"perf-inline\"],\"js\":[\"dep:wasm-bindgen\",\"dep:js-sys\"],\"logging\":[\"dep:log\"],\"perf-inline\":[],\"serde\":[\"dep:serde_core\"],\"static\":[\"static-tz\",\"jiff-static?/tzdb\"],\"static-tz\":[\"dep:jiff-static\"],\"std\":[\"alloc\",\"log?/std\",\"serde_core?/std\"],\"tz-fat\":[\"jiff-static?/tz-fat\"],\"tz-system\":[\"std\",\"dep:windows-sys\"],\"tzdb-bundle-always\":[\"dep:jiff-tzdb\",\"alloc\"],\"tzdb-bundle-platform\":[\"dep:jiff-tzdb-platform\",\"alloc\"],\"tzdb-concatenated\":[\"std\"],\"tzdb-zoneinfo\":[\"std\"]}}",
       "jiff_0.2.24": "{\"dependencies\":[{\"kind\":\"dev\",\"name\":\"anyhow\",\"req\":\"^1.0.81\"},{\"features\":[\"serde\"],\"kind\":\"dev\",\"name\":\"chrono\",\"req\":\"^0.4.38\"},{\"kind\":\"dev\",\"name\":\"chrono-tz\",\"req\":\"^0.10.0\"},{\"kind\":\"dev\",\"name\":\"hifitime\",\"req\":\"^3.9.0\",\"target\":\"cfg(not(target_family = \\\"wasm\\\"))\"},{\"kind\":\"dev\",\"name\":\"humantime\",\"req\":\"^2.1.0\"},{\"kind\":\"dev\",\"name\":\"insta\",\"req\":\"^1.39.0\"},{\"name\":\"jiff-static\",\"req\":\"=0.2.24\",\"target\":\"cfg(any())\"},{\"name\":\"jiff-static\",\"optional\":true,\"req\":\"^0.2\"},{\"name\":\"jiff-tzdb\",\"optional\":true,\"req\":\"^0.1.6\"},{\"name\":\"jiff-tzdb-platform\",\"optional\":true,\"req\":\"^0.1.3\",\"target\":\"cfg(any(windows, target_family = \\\"wasm\\\"))\"},{\"name\":\"js-sys\",\"optional\":true,\"req\":\"^0.3.50\",\"target\":\"cfg(all(any(target_arch = \\\"wasm32\\\", target_arch = \\\"wasm64\\\"), target_os = \\\"unknown\\\"))\"},{\"default_features\":false,\"name\":\"log\",\"optional\":true,\"req\":\"^0.4.21\"},{\"kind\":\"dev\",\"name\":\"log\",\"req\":\"^0.4.21\"},{\"default_features\":false,\"name\":\"portable-atomic\",\"req\":\"^1.10.0\",\"target\":\"cfg(not(target_has_atomic = \\\"ptr\\\"))\"},{\"default_features\":false,\"name\":\"portable-atomic-util\",\"req\":\"^0.2.4\",\"target\":\"cfg(not(target_has_atomic = \\\"ptr\\\"))\"},{\"default_features\":false,\"kind\":\"dev\",\"name\":\"quickcheck\",\"req\":\"^1.0.3\"},{\"features\":[\"derive\"],\"kind\":\"dev\",\"name\":\"serde\",\"req\":\"^1.0.203\"},{\"default_features\":false,\"name\":\"serde_core\",\"optional\":true,\"req\":\"^1.0.221\"},{\"kind\":\"dev\",\"name\":\"serde_json\",\"req\":\"^1.0.117\"},{\"kind\":\"dev\",\"name\":\"serde_yaml\",\"req\":\"^0.9.34\"},{\"kind\":\"dev\",\"name\":\"tabwriter\",\"req\":\"^1.4.0\"},{\"features\":[\"local-offset\",\"macros\",\"parsing\"],\"kind\":\"dev\",\"name\":\"time\",\"req\":\"^0.3.36\"},{\"kind\":\"dev\",\"name\":\"time-tz\",\"req\":\"^2.0.0\"},{\"kind\":\"dev\",\"name\":\"tzfile\",\"req\":\"^0.1.3\"},{\"kind\":\"dev\",\"name\":\"walkdir\",\"req\":\"^2.5.0\"},{\"name\":\"wasm-bindgen\",\"optional\":true,\"req\":\"^0.2.70\",\"target\":\"cfg(all(any(target_arch = \\\"wasm32\\\", target_arch = \\\"wasm64\\\"), target_os = \\\"unknown\\\"))\"},{\"default_features\":false,\"features\":[\"Win32_Foundation\",\"Win32_System_Time\"],\"name\":\"windows-sys\",\"optional\":true,\"req\":\">=0.52.0, <=0.61\",\"target\":\"cfg(windows)\"}],\"features\":{\"alloc\":[\"serde_core?/alloc\",\"portable-atomic-util/alloc\"],\"default\":[\"std\",\"tz-system\",\"tz-fat\",\"tzdb-bundle-platform\",\"tzdb-zoneinfo\",\"tzdb-concatenated\",\"perf-inline\"],\"js\":[\"dep:wasm-bindgen\",\"dep:js-sys\"],\"logging\":[\"dep:log\"],\"perf-inline\":[],\"serde\":[\"dep:serde_core\"],\"static\":[\"static-tz\",\"jiff-static?/tzdb\"],\"static-tz\":[\"dep:jiff-static\"],\"std\":[\"alloc\",\"log?/std\",\"serde_core?/std\"],\"tz-fat\":[\"jiff-static?/tz-fat\"],\"tz-system\":[\"std\",\"dep:windows-sys\"],\"tzdb-bundle-always\":[\"dep:jiff-tzdb\",\"alloc\"],\"tzdb-bundle-platform\":[\"dep:jiff-tzdb-platform\",\"alloc\"],\"tzdb-concatenated\":[\"std\"],\"tzdb-zoneinfo\":[\"std\"]}}",
       "js-sys_0.3.82": "{\"dependencies\":[{\"default_features\":false,\"name\":\"once_cell\",\"req\":\"^1.12\"},{\"default_features\":false,\"name\":\"wasm-bindgen\",\"req\":\"=0.2.105\"}],\"features\":{\"default\":[\"std\"],\"std\":[\"wasm-bindgen/std\"]}}",
+      "jsonc-parser_0.26.2": "{\"dependencies\":[{\"name\":\"indexmap\",\"optional\":true,\"req\":\"^2.2.6\"},{\"kind\":\"dev\",\"name\":\"pretty_assertions\",\"req\":\"^1.0.0\"},{\"name\":\"serde_json\",\"optional\":true,\"req\":\"^1.0\"},{\"name\":\"unicode-width\",\"optional\":true,\"req\":\"^0.2.0\"}],\"features\":{\"cst\":[],\"error_unicode_width\":[\"unicode-width\"],\"preserve_order\":[\"indexmap\",\"serde_json/preserve_order\"],\"serde\":[\"serde_json\"]}}",
       "leb128_0.2.6": "{\"dependencies\":[{\"kind\":\"dev\",\"name\":\"quickcheck\",\"req\":\"^1.1\"}],\"features\":{\"nightly\":[]}}",
       "leb128fmt_0.1.0": "{\"dependencies\":[],\"features\":{\"alloc\":[],\"default\":[\"std\"],\"std\":[]}}",
       "libc_0.2.183": "{\"dependencies\":[{\"name\":\"rustc-std-workspace-core\",\"optional\":true,\"req\":\"^1.0.1\"}],\"features\":{\"align\":[],\"const-extern-fn\":[],\"default\":[\"std\"],\"extra_traits\":[],\"rustc-dep-of-std\":[\"align\",\"rustc-std-workspace-core\"],\"std\":[],\"use_std\":[\"std\"]}}",

@@ -56,6 +56,11 @@ rust_binary(
     ],
 )
 
+rust_test(
+    name = "flycheck_test",
+    crate = ":flycheck",
+)
+
 rust_binary(
     name = "launcher",
     srcs = ["@rules_rust//tools/rust_analyzer:bin/launcher.rs"],
@@ -67,11 +72,11 @@ rust_binary(
     name = "setup",
     srcs = ["@rules_rust//tools/rust_analyzer:bin/setup.rs"],
     data = [
-        "@rules_rust//rust/toolchain:current_rust_analyzer_toolchain",
-        "@rules_rust//rust/toolchain:current_rustfmt_toolchain",
         ":discover_bazel_rust_project",
         ":flycheck",
         ":launcher",
+        "@rules_rust//rust/toolchain:current_rust_analyzer_toolchain",
+        "@rules_rust//rust/toolchain:current_rustfmt_toolchain",
     ],
     edition = "2021",
     rustc_env = {
