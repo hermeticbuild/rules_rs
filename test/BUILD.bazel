@@ -49,6 +49,14 @@ rust_library(
     deps = [":rustdoc_musl_unwind_cc"],
 )
 
+rust_library(
+    name = "override_itoa",
+    srcs = ["override_itoa.rs"],
+    crate_name = "itoa",
+    edition = "2024",
+    visibility = ["//visibility:public"],
+)
+
 rust_doc_test(
     name = "rustdoc_musl_unwind_doctest",
     crate = ":rustdoc_musl_unwind",
@@ -202,6 +210,21 @@ genrule(
     outs = ["verify_cfg_feature_target_dep.txt"],
     cmd = """
         grep '@@rules_rs++crate+cfg_feature_target_dep//:itoa-1.0.15' $(location :cfg_feature_target_dep_inner_deps)
+        echo ok > $@
+    """,
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)
+
+genrule(
+    name = "verify_override_target_lib",
+    srcs = [":cfg_feature_target_dep_inner_deps"],
+    outs = ["verify_override_target_lib.txt"],
+    cmd = """
+        grep '//:override_itoa' $(location :cfg_feature_target_dep_inner_deps)
+        ! grep '@@rules_rs++crate+cfg_feature_target_dep__itoa-1.0.15//:itoa' $(location :cfg_feature_target_dep_inner_deps)
         echo ok > $@
     """,
     target_compatible_with = select({
@@ -403,6 +426,7 @@ filegroup(
             ":verify_annotation_tags",
             ":verify_cfg_feature_target_dep",
             ":verify_first_party_feature_propagation",
+            ":verify_override_target_lib",
             ":verify_rust_analyzer_toolchain",
             ":verify_vendored_workspace_dep",
             ":verify_workspace_member_annotation_features",
