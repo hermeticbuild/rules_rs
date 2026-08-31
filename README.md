@@ -498,7 +498,7 @@ The script rewrites common `@rules_rust` Rust loads to `@rules_rs//rs:*` wrapper
 
 ## Public API
 
-See https://registry.bazel.build/docs/rules_rs
+See https://registry.bazel.build/modules/rules_rs/latest/docs
 
 ## Users
 
