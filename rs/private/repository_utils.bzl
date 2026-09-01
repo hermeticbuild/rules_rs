@@ -321,6 +321,7 @@ rust_crate_attrs = {
     "build_script_tools": attr.label_list(),
     "build_script_tools_select": _label_list_dict(),
     "build_script_tags": attr.string_list(),
+    "rustc_env": attr.string_dict(),
     "rustc_flags": attr.string_list(),
     "rustc_flags_select": attr.string_list_dict(),
     "crate_tags": attr.string_list(),
