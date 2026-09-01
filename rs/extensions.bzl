@@ -353,6 +353,7 @@ crate.annotation(
             build_script_tags = annotation.build_script_tags,
             build_script_tools_select = annotation.build_script_tools_select,
             build_script_env_select = annotation.build_script_env_select,
+            rustc_env = annotation.rustc_env,
             rustc_flags = annotation.rustc_flags,
             rustc_flags_select = annotation.rustc_flags_select,
             data = annotation.data,
@@ -1099,9 +1100,9 @@ _annotation = tag_class(
         "patches": attr.label_list(
             doc = "The `patches` attribute of a Bazel repository rule. See [http_archive.patches](https://docs.bazel.build/versions/main/repo/http.html#http_archive-patches)",
         ),
-        # "rustc_env": attr.string_dict(
-        #     doc = "Additional variables to set on a crate's `rust_library::rustc_env` attribute.",
-        # ),
+        "rustc_env": attr.string_dict(
+            doc = "Additional variables to set on a crate's `rust_library::rustc_env` attribute.",
+        ),
         # "rustc_env_files": attr.label_list(
         #     doc = "A list of labels to set on a crate's `rust_library::rustc_env_files` attribute.",
         # ),

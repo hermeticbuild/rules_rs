@@ -34,6 +34,7 @@ _ANNOTATION_DEFAULTS = {
     "patch_args": [],
     "patch_tool": "",
     "patches": [],
+    "rustc_env": {},
     "rustc_flags": [],
     "strip_prefix": "",
     "tags": [],
@@ -75,6 +76,7 @@ def _exact_annotation_replaces_wildcard_and_composes_with_select_impl(ctx):
                     version = "1.0.0",
                     link_deps = ["//:exact_link_dep"],
                     patches = ["//:exact.patch"],
+                    rustc_env = {"RUSTC_ENV": "1"},
                 ),
             ],
             annotation_selects = [
@@ -99,6 +101,7 @@ def _exact_annotation_replaces_wildcard_and_composes_with_select_impl(ctx):
         "aarch64-apple-darwin": [],
         "x86_64-unknown-linux-gnu": ["--cfg=exact"],
     }, annotation.rustc_flags_select)
+    asserts.equals(env, {"RUSTC_ENV": "1"}, annotation.rustc_env)
 
     return unittest.end(env)
 
