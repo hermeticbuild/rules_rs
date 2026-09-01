@@ -1,6 +1,6 @@
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "llvm", version = "0.8.18")
-bazel_dep(name = "apple_support", version = "1.24.2")
+bazel_dep(name = "apple_support", version = "2.6.1")
 
 # SBOM
 bazel_dep(name = "package_metadata", version = "0.0.7")
@@ -44,13 +44,13 @@ git_override(
 register_toolchains("@llvm//toolchain:all")
 
 bazel_dep(name = "rules_python", version = "2.0.1")
-bazel_dep(name = "rules_shell", version = "0.6.1")
+bazel_dep(name = "rules_shell", version = "0.8.0")
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "bazel_lib", version = "3.2.2")
 bazel_dep(name = "protobuf", version = "34.0.bcr.1", repo_name = "com_google_protobuf")
-bazel_dep(name = "rules_cc", version = "0.2.20")
+bazel_dep(name = "rules_cc", version = "0.2.22")
 bazel_dep(name = "nasm", version = "2.16.03.bcr.2")
 single_version_override(
     module_name = "nasm",
