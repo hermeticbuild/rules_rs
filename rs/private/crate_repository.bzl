@@ -1,5 +1,5 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
-load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
+load("@bazel_tools//tools/build_defs/repo:utils.bzl", "get_auth", "patch")
 load(":cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
 load(":registry_utils.bzl", "registry_download_url_from_template")
 load(":repository_utils.bzl", "cargo_build_file_values", "common_attrs", "render_build_file_content")
@@ -43,6 +43,10 @@ def _crate_repository_impl(rctx):
 
     url = registry_download_url_from_template(dl, crate_name, version, sha256)
 
+    auth = {}
+    if not headers:
+        auth = get_auth(rctx, [url])
+
     rctx.download_and_extract(
         url,
         type = "tar.gz",
@@ -50,6 +54,7 @@ def _crate_repository_impl(rctx):
         headers = headers,
         strip_prefix = "%s-%s" % (crate_name, version),
         sha256 = sha256,
+        auth = auth,
     )
 
     patch(rctx)
