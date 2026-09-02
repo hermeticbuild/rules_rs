@@ -1,0 +1,8 @@
+load("//rs:rust_binary.bzl", "rust_binary")
+
+rust_binary(
+    name = "cfg_oracle_generator",
+    srcs = ["main.rs"],
+    edition = "2021",
+    visibility = ["//rs/private:__pkg__"],
+)
