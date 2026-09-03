@@ -95,6 +95,12 @@ bazel mod deps --lockfile_mode=update
 The second command restores the normal environment before the updated lockfile
 is committed.
 
+On Linux, rustc's bundled LLVM needs zlib at runtime. By default, the toolchain
+downloads a pinned Ubuntu package. Pass
+`--@rules_rs//rs/private:rustc_zlib_from_source=true` to build zlib from source
+using the Bazel Central Registry module instead. This is a global build flag and
+can also be set in `.bazelrc`.
+
 ### Global Cargo configuration
 
 The root module can configure a shared Cargo configuration file for every Cargo closure, including closures declared by dependencies:
