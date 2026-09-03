@@ -51,6 +51,19 @@ filegroup(
 )
 """
 
+_linux_zlib_build_file_tmpl = """\
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+
+copy_file(
+    name = "libz",
+    src = select({{
+        "@rules_rs//rs/private:rustc_zlib_from_source_enabled": "@rules_rs//rs/private:libz.so.1",
+        "//conditions:default": "@rustc_zlib_linux_{arch}//:libz.so.1",
+    }}),
+    out = "lib/libz.so.1",
+)
+"""
+
 _LINUX_ZLIB = {
     "aarch64": struct(
         libdir = "usr/lib/aarch64-linux-gnu",
@@ -80,12 +93,17 @@ def _extract_deb_payload(rctx, url, sha256, output, strip_prefix):
     rctx.extract(data_archive, output = output, stripPrefix = strip_prefix)
     rctx.delete(deb_dir)
 
-def _add_linux_zlib(rctx, exec_triple):
-    if exec_triple.system != "linux":
-        return
-
-    zlib = _LINUX_ZLIB[exec_triple.arch]
+def _rustc_zlib_repository_impl(rctx):
+    zlib = _LINUX_ZLIB[rctx.attr.arch]
     _extract_deb_payload(rctx, zlib.url, zlib.sha256, "lib", zlib.libdir)
+    rctx.file("BUILD.bazel", "exports_files([\"lib/libz.so.1\"], visibility = [\"//visibility:public\"])\n")
+
+rustc_zlib_repository = repository_rule(
+    implementation = _rustc_zlib_repository_impl,
+    attrs = {
+        "arch": attr.string(mandatory = True, values = _LINUX_ZLIB.keys()),
+    },
+)
 
 def _symlink_rust_objcopy_shared_libraries(rctx, exec_triple):
     top_level_lib = rctx.path("lib")
@@ -104,9 +122,9 @@ def _rustc_repository_impl(rctx):
     download_and_extract(rctx, "rustc", "rustc", exec_triple)
 
     # Upstream Linux rustc bundles libLLVM, which dynamically links against libz.so.1.
-    _add_linux_zlib(rctx, exec_triple)
+    build_content = _linux_zlib_build_file_tmpl.format(arch = exec_triple.arch) if exec_triple.system == "linux" else ""
     _symlink_rust_objcopy_shared_libraries(rctx, exec_triple)
-    build_content = _build_file_tmpl.format(
+    build_content += _build_file_tmpl.format(
         binary_ext = binary_ext,
         rustc_lib = rustc_lib_build_file(exec_triple),
         target_triple = exec_triple.str,
