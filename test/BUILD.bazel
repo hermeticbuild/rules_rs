@@ -4,7 +4,7 @@ load("@root_package//:defs.bzl", root_package_lint_config = "lint_config")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
-load("@rules_rs//rs:rust_test.bzl", "rust_test")
+load("@rules_rs//rs:rust_test.bzl", "rust_test", "rust_test_suite")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@self_dev_dependency//:data.bzl", self_dev_dependency_dep_data = "DEP_DATA")
@@ -158,6 +158,15 @@ rust_test(
         "@many_workspace_deps//:aws-lc-rs-1.17.1",
         "@many_workspace_deps//:aws-lc-sys-0.42.0",
     ],
+)
+
+rust_test_suite(
+    name = "rust_test_suite_smoke",
+    srcs = [
+        "rust_test_suite_a.rs",
+        "rust_test_suite_b.rs",
+    ],
+    shared_srcs = ["rust_test_suite_shared.rs"],
 )
 
 rust_binary(
