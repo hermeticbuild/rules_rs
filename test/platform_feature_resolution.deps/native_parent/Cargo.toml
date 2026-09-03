@@ -1,0 +1,9 @@
+[package]
+name = "native_parent"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+shared = { path = "../shared", default-features = false, features = ["native"] }
