@@ -1,6 +1,5 @@
 """Definitions for declaring Rust compiler toolchains."""
 
-load("@bazel_skylib//lib:versions.bzl", "versions")
 load("@default_rust_toolchains//rustc:component_labels.bzl", "rust_toolchain_component_label")
 load("@rules_rust//rust:rust_toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
@@ -113,11 +112,6 @@ def declare_rustc_toolchains(
         "//conditions:default": rust_std_label,
     })
 
-    default_linux_flags = select({
-        "@rules_rs//rs/platforms/config:x86_64-unknown-linux-gnu": ["-Clink-self-contained=no"],
-        "//conditions:default": [],
-    }) if versions.is_at_least("1.90.0", version) else []
-
     for triple in exec_triples:
         exec_triple = _parse_triple(triple)
         triple_suffix = exec_triple.system + "_" + exec_triple.arch
@@ -199,8 +193,8 @@ def declare_rustc_toolchains(
                 "//conditions:default": [],
             }),
             default_edition = edition,
-            extra_exec_rustc_flags = default_linux_flags + _rustc_flags_to_select(extra_exec_rustc_flags),
-            extra_rustc_flags = default_linux_flags + _rustc_flags_to_select(extra_rustc_flags),
+            extra_exec_rustc_flags = _rustc_flags_to_select(extra_exec_rustc_flags),
+            extra_rustc_flags = _rustc_flags_to_select(extra_rustc_flags),
             exec_triple = triple,
             target_triple = select(target_triple_select),
             visibility = ["//visibility:public"],
