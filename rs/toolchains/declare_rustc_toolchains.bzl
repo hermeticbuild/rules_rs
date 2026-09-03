@@ -1,5 +1,6 @@
 """Definitions for declaring Rust compiler toolchains."""
 
+load("@bazel_skylib//lib:versions.bzl", "versions")
 load("@default_rust_toolchains//rustc:component_labels.bzl", "rust_toolchain_component_label")
 load("@rules_rust//rust:rust_toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
@@ -112,6 +113,11 @@ def declare_rustc_toolchains(
         "//conditions:default": rust_std_label,
     })
 
+    default_linux_flags = select({
+        "@rules_rs//rs/platforms/config:x86_64-unknown-linux-gnu": ["-Clink-self-contained=no"],
+        "//conditions:default": [],
+    }) if versions.is_at_least("1.90.0", version) else []
+
     for triple in exec_triples:
         exec_triple = _parse_triple(triple)
         triple_suffix = exec_triple.system + "_" + exec_triple.arch
@@ -138,13 +144,7 @@ def declare_rustc_toolchains(
                 "@platforms//cpu:wasm64": lld_label,
                 "//conditions:default": None,
             }),
-            linker_type = select({
-                "@rules_rs//rs/platforms/config:riscv32imac-unknown-none-elf": "direct",
-                "@rules_rs//rs/platforms/config:riscv32imc-unknown-none-elf": "direct",
-                "@platforms//cpu:wasm32": "direct",
-                "@platforms//cpu:wasm64": "direct",
-                "//conditions:default": "indirect",
-            }),
+            linker_type = "direct",
             rust_objcopy = _component(rust_objcopy, triple, rustc_repo_label + "rust-objcopy"),
             rustc_lib = _component(rustc_lib, triple, rustc_repo_label + "rustc_lib"),
             allocator_library = None,
@@ -199,14 +199,8 @@ def declare_rustc_toolchains(
                 "//conditions:default": [],
             }),
             default_edition = edition,
-            extra_exec_rustc_flags = select({
-                "@rules_rs//rs/platforms/config:x86_64-unknown-linux-gnu": ["-Clink-self-contained=no"],
-                "//conditions:default": [],
-            }) + _rustc_flags_to_select(extra_exec_rustc_flags),
-            extra_rustc_flags = select({
-                "@rules_rs//rs/platforms/config:x86_64-unknown-linux-gnu": ["-Clink-self-contained=no"],
-                "//conditions:default": [],
-            }) + _rustc_flags_to_select(extra_rustc_flags),
+            extra_exec_rustc_flags = default_linux_flags + _rustc_flags_to_select(extra_exec_rustc_flags),
+            extra_rustc_flags = default_linux_flags + _rustc_flags_to_select(extra_rustc_flags),
             exec_triple = triple,
             target_triple = select(target_triple_select),
             visibility = ["//visibility:public"],
