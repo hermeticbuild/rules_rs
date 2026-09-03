@@ -136,6 +136,7 @@ def declare_rustc_toolchains(
                 "@rules_rs//rs/platforms/config:riscv32imc-unknown-none-elf": lld_label,
                 "@platforms//cpu:wasm32": lld_label,
                 "@platforms//cpu:wasm64": lld_label,
+                "@platforms//os:linux": lld_label,
                 "//conditions:default": None,
             }),
             linker_type = "direct",
