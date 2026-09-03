@@ -14,6 +14,7 @@ load("@workspace_default_features//:data.bzl", workspace_default_features_dep_da
 load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
 load("@workspace_renamed_path_dep_aliases//:defs.bzl", workspace_renamed_path_dep_aliases_aliases = "aliases")
 load("//:rustdoc_musl_unwind_test.bzl", "rustdoc_musl_unwind_link_flags_test")
+load("//:self_contained_linker_test.bzl", "self_contained_linker_aarch64_test", "self_contained_linker_x86_64_test")
 load("//:target_triple_constraints_test.bzl", "target_triple_constraints_test")
 load("//:verify_aliases.bzl", "verify_alias", "verify_alias_absent", "verify_crate_feature_absent", "verify_crate_feature_present", "verify_dep_absent", "verify_dep_present", "verify_dev_dep_absent")
 load("//:workspace_lints_test.bzl", "inherited_workspace_lints_test", "opted_out_workspace_lints_test", "package_lints_test")
@@ -34,6 +35,23 @@ sh_test(
         "@platforms//os:windows": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
+)
+
+rust_binary(
+    name = "self_contained_linker_sample_bin",
+    srcs = ["main.rs"],
+    edition = "2021",
+    tags = ["manual"],
+)
+
+self_contained_linker_x86_64_test(
+    name = "self_contained_linker_x86_64_test",
+    target_under_test = ":self_contained_linker_sample_bin",
+)
+
+self_contained_linker_aarch64_test(
+    name = "self_contained_linker_aarch64_test",
+    target_under_test = ":self_contained_linker_sample_bin",
 )
 
 cc_library(
