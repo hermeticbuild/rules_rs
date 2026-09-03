@@ -60,8 +60,35 @@ crate(
         package_metadata_bazel_additive_build_file_content = cargo.bazel_metadata.get("additive_build_file_content", ""),
     ))
 
+_GITHUB_PREFIX = "https://github.com/"
+
+def _download_github_tarball(rctx):
+    """Downloads the crate sources from the GitHub archive.
+
+    Returns `False` when the caller must fall back to `git`.
+    """
+    repo_path = rctx.attr.remote.removeprefix(_GITHUB_PREFIX).removesuffix(".git")
+    rctx.download_and_extract(
+        url = "https://github.com/%s/archive/%s.tar.gz" % (repo_path, rctx.attr.commit),
+        type = "tar.gz",
+        stripPrefix = "%s-%s" % (repo_path.split("/")[-1], rctx.attr.commit),
+        canonical_id = "%s@%s" % (rctx.attr.remote, rctx.attr.commit),
+        # No checksum: GitHub does not promise a byte-stable archive. The commit pins the content.
+    )
+
+    # A GitHub archive holds no submodule.
+    if rctx.path(".gitmodules").exists:
+        rctx.report_progress("%s uses a submodule, falling back to git" % repo_path)
+        return False
+
+    return True
+
 def _git_cargo_workspace_repository_impl(rctx):
-    git_repo(rctx, rctx.path("."))
+    # The archive goes through the Bazel downloader. The downloader retries a failed request and it
+    # obeys `--downloader_config`. The `git` subprocess does neither. `git_repo` deletes the
+    # directory first, so it can still take over after the archive lands.
+    if not rctx.attr.remote.startswith(_GITHUB_PREFIX) or not _download_github_tarball(rctx):
+        git_repo(rctx, rctx.path("."))
 
     patch(rctx)
     rctx.delete(rctx.path(".git"))
