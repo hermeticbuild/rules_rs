@@ -223,10 +223,12 @@ def declare_rustc_toolchains(
             process_wrapper = "@rules_rust//util/process_wrapper",
             rust_std = toolchain_rust_std,
             **(rust_toolchain_kwargs | {
-                "linker": select({
-                    "@platforms//cpu:bpfeb": bpf_linker_label,
-                    "@platforms//cpu:bpfel": bpf_linker_label,
-                }),
+                # Both branches of the former select held this same label, and
+                # a select with no default cannot be analyzed for any other
+                # CPU -- which breaks `bazel cquery` over the generated
+                # package.  BPF targets are already gated by the toolchain's
+                # target_settings.
+                "linker": bpf_linker_label,
             })
         )
 
