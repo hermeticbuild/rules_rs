@@ -20,6 +20,26 @@ rust_stdlib_filegroup(
     visibility = ["//visibility:public"],
 )
 
+# The same stdlib without the libc and CRT archives rustc bundles beside it.
+# rustc searches `self-contained` ahead of the CC toolchain's -L, so dropping
+# the archives there lets `-lc` fall through to the platform sysroot.  The CRT
+# objects stay: rustc names bare crt files the driver cannot find when the
+# directory is absent altogether.
+rust_stdlib_filegroup(
+    name = "rust_std-{target_triple}-external-libc",
+    srcs = glob(
+        [
+            "lib/rustlib/{target_triple}/lib/*.rlib",
+            "lib/rustlib/{target_triple}/lib/*.rmeta",
+            "lib/rustlib/{target_triple}/lib/*{dylib_ext}*",
+            "lib/rustlib/{target_triple}/lib/*{staticlib_ext}",
+            "lib/rustlib/{target_triple}/lib/self-contained/*.o",
+        ],
+        allow_empty = True,
+    ),
+    visibility = ["//visibility:public"],
+)
+
 alias(
     name = "rust_lib-{target_triple}",
     actual = "rust_std-{target_triple}",
