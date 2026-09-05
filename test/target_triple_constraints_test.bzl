@@ -47,6 +47,8 @@ def target_triple_constraints_test(name = "target_triple_constraints_test"):
     rust_library(
         name = "target_triple_constraints_rust_library",
         srcs = ["target_triple_constraints_test.rs"],
+        # Analyze target-triple selection without compiling allocator libraries.
+        allocator_libraries = "@rules_rust//ffi/rs:empty_allocator_libraries",
         crate_name = "target_triple_constraints_test",
         tags = ["manual"],
     )
