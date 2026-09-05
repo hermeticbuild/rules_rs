@@ -8,8 +8,10 @@ bcr_test_module:
       name: "Run tests"
       platform: ${{ platform }}
       bazel: ${{ bazel }}
-      test_flags:
-        - "--experimental_remote_downloader="
+      shell_commands:
+        # bazelci runs bazel info before applying test_flags.
+        - |
+          printf '\ncommon --experimental_remote_downloader=\ncommon --remote_cache=\n' >> .bazelrc
       test_targets:
         - "//..."
 
