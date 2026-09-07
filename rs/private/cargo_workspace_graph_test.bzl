@@ -1,5 +1,5 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_fq_deps", "new_feature_resolutions", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages")
+load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_fq_deps", "new_feature_resolutions", "resolve_cargo_workspace_members", "resolve_package_facts", "select_package_fq_dep", "split_lockfile_packages")
 load(":resolver.bzl", "resolve")
 
 def _select_package_fq_dep_uses_package_name_impl(ctx):
@@ -307,12 +307,78 @@ def _resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl(ctx
 
 resolve_handles_dependency_chains_deeper_than_previous_round_limit_test = unittest.make(_resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl)
 
+def _resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_impl(ctx):
+    env = unittest.begin(ctx)
+
+    triple = "x86_64-unknown-linux-gnu"
+    packages = [{
+        "dependencies": [],
+        "name": "flate2",
+        "version": "1.0.0",
+    }]
+    package_resolution = resolve_package_facts(
+        packages,
+        {
+            "flate2-1.0.0": {
+                "dependencies": [{
+                    "default_features": False,
+                    "name": "zlib-rs",
+                    "optional": True,
+                    "req": "1",
+                }],
+                "features": {
+                    "runtime_detection": ["zlib-rs?/std"],
+                },
+            },
+        },
+        [triple],
+    )
+
+    resolve_cargo_workspace_members(
+        None,
+        cargo_metadata = {
+            "packages": [{
+                "dependencies": [{
+                    "features": ["runtime_detection"],
+                    "name": "flate2",
+                    "req": "1",
+                    "source": "registry+https://github.com/rust-lang/crates.io-index",
+                    "uses_default_features": False,
+                }],
+                "features": {},
+                "manifest_path": "/workspace/Cargo.toml",
+                "name": "consumer",
+                "version": "0.1.0",
+            }],
+            "workspace_root": "/workspace",
+        },
+        packages = packages,
+        workspace_members = [{
+            "dependencies": ["flate2 1.0.0"],
+            "name": "consumer",
+            "version": "0.1.0",
+        }],
+        versions_by_name = package_resolution.versions_by_name,
+        feature_resolutions_by_fq_crate = package_resolution.feature_resolutions_by_fq_crate,
+        annotations = {},
+        platform_triples = [triple],
+        materialize_workspace_members = False,
+    )
+
+    flate2_resolution = package_resolution.feature_resolutions_by_fq_crate["flate2-1.0.0"]
+    asserts.equals(env, ["runtime_detection"], sorted(flate2_resolution.features_enabled[triple]))
+    asserts.equals(env, [], sorted(flate2_resolution.deps[triple]))
+    return unittest.end(env)
+
+resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_test = unittest.make(_resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_impl)
+
 def cargo_workspace_graph_tests():
     return unittest.suite(
         "cargo_workspace_graph_tests",
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
         resolve_handles_dependency_chains_deeper_than_previous_round_limit_test,
+        resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_test,
         resolve_package_facts_attaches_feature_resolutions_test,
         select_package_fq_dep_uses_package_name_test,
         select_package_fq_dep_uses_req_for_duplicate_versions_test,

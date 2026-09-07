@@ -154,6 +154,8 @@ def _propagate_feature_enablement(
 
                 found = False
                 for dep in feature_resolutions.possible_deps:
+                    if "feature_resolutions" not in dep:
+                        continue
                     if dep_name == dep["name"] and _dep_target_matches_triple(dep, triple, feature_set, cfg_attrs_by_triple):
                         found = True
                         dep_optional = dep.get("optional", False)
