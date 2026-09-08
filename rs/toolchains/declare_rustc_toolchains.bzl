@@ -1,5 +1,6 @@
 """Definitions for declaring Rust compiler toolchains."""
 
+load("@bazel_skylib//lib:versions.bzl", "versions")
 load("@default_rust_toolchains//rustc:component_labels.bzl", "rust_toolchain_component_label")
 load("@rules_rust//rust:rust_toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
@@ -19,6 +20,23 @@ def _rustc_flags_to_select(rustc_flags_by_triple):
         {"@rules_rs//rs/platforms/config:" + triple: flags for triple, flags in rustc_flags_by_triple.items()} |
         {"//conditions:default": []},
     )
+
+def _default_rustc_flags(version):
+    # Rust >= 1.90 defaults to self-contained LLD for x86_64-unknown-linux-gnu.
+    # When linking via Bazel C++ toolchain wrappers (e.g. cc_wrapper.sh), rustc
+    # fails to recognize the wrapper as a C compiler driver and attempts to invoke
+    # its bundled gcc-ld/rust-lld, failing in hermetic/sandboxed environments where
+    # the undeclared linker is not in the sandbox, or overriding the C++ toolchain's
+    # configured linker. Disabling the LLD linker feature leaves linking entirely to
+    # the Bazel C++ toolchain.
+    # Prior to 1.90, rustc did not default to LLD and the -Clinker-features option did not exist.
+    if _channel(version) == "stable" and not versions.is_at_least("1.90.0", version):
+        return []
+
+    return select({
+        "@rules_rs//rs/platforms/config:x86_64-unknown-linux-gnu": ["-Clinker-features=-lld"],
+        "//conditions:default": [],
+    })
 
 def _component(component, triple, default):
     component = component.get(triple) if type(component) == "dict" else component
@@ -193,8 +211,8 @@ def declare_rustc_toolchains(
                 "//conditions:default": [],
             }),
             default_edition = edition,
-            extra_exec_rustc_flags = _rustc_flags_to_select(extra_exec_rustc_flags),
-            extra_rustc_flags = _rustc_flags_to_select(extra_rustc_flags),
+            extra_exec_rustc_flags = _default_rustc_flags(version) + _rustc_flags_to_select(extra_exec_rustc_flags),
+            extra_rustc_flags = _default_rustc_flags(version) + _rustc_flags_to_select(extra_rustc_flags),
             exec_triple = triple,
             target_triple = select(target_triple_select),
             visibility = ["//visibility:public"],
