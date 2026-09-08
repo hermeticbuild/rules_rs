@@ -18,7 +18,7 @@ load(
     "rust_redist_url_templates",
 )
 load("//rs/private:rust_src_repository.bzl", "rust_src_repository")
-load("//rs/private:rustc_repository.bzl", "rustc_repository")
+load("//rs/private:rustc_repository.bzl", "rustc_repository", "rustc_zlib_repository")
 load("//rs/private:rustc_src_repository.bzl", "rustc_src_repository")
 load("//rs/private:rustfmt_repository.bzl", "rustfmt_repository")
 load("//rs/private:stdlib_repository.bzl", "stdlib_repository")
@@ -377,6 +377,14 @@ def _toolchains_impl(mctx):
     host_arch = _normalize_arch_name(mctx.os.arch)
     host_cargo_repos = {}
     host_rustc_repos = {}
+
+    for triple in SUPPORTED_EXEC_TRIPLES:
+        exec_triple = _parse_triple(triple)
+        if exec_triple.system == "linux":
+            rustc_zlib_repository(
+                name = "rustc_zlib_linux_{}".format(exec_triple.arch),
+                arch = exec_triple.arch,
+            )
 
     for version in all_versions:
         version_key = sanitize_version(version)

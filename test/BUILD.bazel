@@ -2,6 +2,7 @@ load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
 load("@root_package//:defs.bzl", root_package_lint_config = "lint_config")
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_test")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 load("@rules_rs//rs:rust_test.bzl", "rust_test")
@@ -25,6 +26,19 @@ sh_test(
     size = "medium",
     srcs = ["custom_registry_test.py"],
     local = True,
+)
+
+py_test(
+    name = "rustc_zlib_from_source_test",
+    size = "large",
+    srcs = ["rustc_zlib_from_source_test.py"],
+    env_inherit = ["PATH"],
+    local = True,
+    tags = ["external"],
+    target_compatible_with = select({
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
 )
 
 sh_test(

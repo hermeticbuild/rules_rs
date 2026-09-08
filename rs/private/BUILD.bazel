@@ -1,5 +1,6 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
-load("@bazel_skylib//rules:common_settings.bzl", "bool_setting")
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "bool_setting")
+load("@rules_cc//cc:defs.bzl", "cc_shared_library")
 load("@rules_rust//rust:rust_stdlib_filegroup.bzl", "rust_stdlib_filegroup")
 load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
 load(":annotations_test.bzl", "annotations_tests")
@@ -19,9 +20,28 @@ bool_setting(
     visibility = ["//visibility:public"],
 )
 
+bool_flag(
+    name = "rustc_zlib_from_source",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "rustc_zlib_from_source_enabled",
+    flag_values = {":rustc_zlib_from_source": "true"},
+    visibility = ["//visibility:public"],
+)
+
 rust_stdlib_filegroup(
     name = "empty_stdlib",
     srcs = [],
+    visibility = ["//visibility:public"],
+)
+
+cc_shared_library(
+    name = "libz.so.1",
+    deps = ["@zlib//:z"],
+    shared_lib_name = "libz.so.1",
     visibility = ["//visibility:public"],
 )
 
