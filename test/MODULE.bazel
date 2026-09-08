@@ -74,6 +74,18 @@ local_path_override(
     path = "..",
 )
 
+bazel_dep(name = "crate_coalescing_bar", version = "0.1.0")
+local_path_override(
+    module_name = "crate_coalescing_bar",
+    path = "crate_coalescing_fixture/library_bar",
+)
+
+bazel_dep(name = "crate_coalescing_baz", version = "0.1.0")
+local_path_override(
+    module_name = "crate_coalescing_baz",
+    path = "crate_coalescing_fixture/library_baz",
+)
+
 rules_rust = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
 use_repo(rules_rust, "rules_rust")
 
@@ -181,6 +193,43 @@ crate.from_cargo(
 )
 use_repo(crate, "root_package")
 
+# The root application is Linux-only while library_bar is multi-OS. The shared
+# crates must expose one canonical target whose platform universe is their union.
+# Two independently named root hubs also exercise same-module facade aliases.
+crate.from_cargo(
+    name = "crate_coalescing_a",
+    cargo_lock = "//:crate_coalescing_fixture/Cargo.lock",
+    cargo_toml = "//:crate_coalescing_fixture/Cargo.toml",
+    platform_triples = [
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+crate.from_cargo(
+    name = "crate_coalescing_b",
+    cargo_lock = "//:crate_coalescing_fixture/Cargo.lock",
+    cargo_toml = "//:crate_coalescing_fixture/Cargo.toml",
+    platform_triples = [
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+crate.from_cargo(
+    name = "crate_link_validation_class",
+    cargo_lock = "//:crate_coalescing_fixture/Cargo.lock",
+    cargo_toml = "//:crate_coalescing_fixture/Cargo.toml",
+    platform_triples = [
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+use_repo(crate, "crate_coalescing_a", "crate_coalescing_b", "crate_link_validation_class")
+
+crate.annotation(
+    crate = "log",
+    repositories = ["crate_link_validation_class"],
+    rustc_flags = ["--cfg=cargo_link_validation_class"],
+)
 crate.annotation(
     crate = "rustls",
     # Test for https://github.com/bazelbuild/rules_rust/issues/3626
@@ -277,6 +326,7 @@ crate.annotation(
     crate = "wasmtime-internal-component-macro",
     patch_args = ["-p1"],
     patches = ["//:wasmtime-internal-component-macro.patch"],
+    repositories = ["many_workspace_deps"],
     version = "37.0.3",
 )
 

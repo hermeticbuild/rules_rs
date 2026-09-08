@@ -3195,7 +3195,7 @@ dependencies = [
 [[package]]
 name = "serde_derive"
 version = "1.0.228"
-source = "git+ssh://git@github.com/serde-rs/serde.git?rev=4e278703c62428b0a72e4ecec434a99c0e8576a3#4e278703c62428b0a72e4ecec434a99c0e8576a3"
+source = "git+https://github.com/serde-rs/serde.git?rev=4e278703c62428b0a72e4ecec434a99c0e8576a3#4e278703c62428b0a72e4ecec434a99c0e8576a3"
 dependencies = [
  "proc-macro2",
  "quote",

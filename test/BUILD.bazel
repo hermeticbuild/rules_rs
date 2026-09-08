@@ -2,6 +2,7 @@ load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
 load("@root_package//:defs.bzl", root_package_lint_config = "lint_config")
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_test")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 load("@rules_rs//rs:rust_test.bzl", "rust_test")
@@ -94,6 +95,8 @@ DISABLED = [
     "pyo3",
     "prost",
     "wasm_bindgen",
+    "cargo_link_validation",
+    "crate_coalescing_fixture",
     #"binaries",
     #"build_script_aliases",
     #"build_script_env_select",
@@ -201,7 +204,7 @@ genrule(
     srcs = [":cfg_feature_target_dep_inner_deps"],
     outs = ["verify_cfg_feature_target_dep.txt"],
     cmd = """
-        grep '@@rules_rs++crate+cfg_feature_target_dep//:itoa-1.0.15' $(location :cfg_feature_target_dep_inner_deps)
+        grep -E '@@rules_rs\\+\\+crate\\+rs_pkg__itoa-1\\.0\\.15__registry_[^/]+//:itoa' $(location :cfg_feature_target_dep_inner_deps)
         echo ok > $@
     """,
     target_compatible_with = select({
@@ -221,8 +224,8 @@ genrule(
     srcs = [":first_party_feature_propagation_dep_leaf_deps"],
     outs = ["verify_first_party_feature_propagation.txt"],
     cmd = """
-        grep '@@rules_rs++crate+first_party_feature_propagation//:itoa-1.0.17' $(location :first_party_feature_propagation_dep_leaf_deps)
-        grep '@@rules_rs++crate+first_party_feature_propagation//:ryu-1.0.23' $(location :first_party_feature_propagation_dep_leaf_deps)
+        grep -E '@@rules_rs\\+\\+crate\\+rs_pkg__itoa-1\\.0\\.17__registry_[^/]+//:itoa' $(location :first_party_feature_propagation_dep_leaf_deps)
+        grep -E '@@rules_rs\\+\\+crate\\+rs_pkg__ryu-1\\.0\\.23__registry_[^/]+//:ryu' $(location :first_party_feature_propagation_dep_leaf_deps)
         echo ok > $@
     """,
     target_compatible_with = select({
@@ -301,7 +304,7 @@ genrule(
     srcs = [":workspace_member_annotation_features_dep_leaf_deps"],
     outs = ["verify_workspace_member_annotation_features.txt"],
     cmd = """
-        grep '@@rules_rs++crate+workspace_member_annotation_features//:ryu-1.0.20' $(location :workspace_member_annotation_features_dep_leaf_deps)
+        grep -E '@@rules_rs\\+\\+crate\\+rs_pkg__ryu-1\\.0\\.20__registry_[^/]+//:ryu' $(location :workspace_member_annotation_features_dep_leaf_deps)
         echo ok > $@
     """,
     target_compatible_with = select({

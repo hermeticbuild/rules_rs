@@ -1,0 +1,12 @@
+load("@bar_crates//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+
+rust_library(
+    name = "library_bar",
+    srcs = ["src/lib.rs"],
+    aliases = aliases(),
+    crate_name = "library_bar",
+    edition = "2024",
+    visibility = ["//visibility:public"],
+    deps = all_crate_deps(normal = True),
+)

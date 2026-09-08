@@ -170,7 +170,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    crate_name = {crate_name},
 {indent}    purl = {purl},
 {indent}    version = {version},
-{indent}    aliases = {{
+{crate_identity_attr}{indent}    aliases = {{
 {indent}        {aliases}
 {indent}    }},
 {indent}    deps = [
@@ -243,6 +243,10 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     rustc_env = cargo_manifest_env | getattr(attr, "rustc_env", {})
     rustc_env_attr = "%s    rustc_env = %s,\n" % (indent, repr(rustc_env)) if rustc_env else ""
     skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""
+    crate_identity = getattr(attr, "crate_identity", "")
+    crate_identity_attr = ""
+    if crate_identity:
+        crate_identity_attr = "%s    crate_identity = %r,\n" % (indent, crate_identity)
 
     return _RUST_CRATE_MACRO_CALL.format(
         indent = indent,
@@ -250,6 +254,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         crate_name = values["crate_name"],
         purl = values["purl"],
         version = values["version"],
+        crate_identity_attr = crate_identity_attr,
         aliases = list_indent.join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
         deps = list_indent.join(['"%s"' % d for d in sorted(deps)]),
         extra_deps = extra_deps,
@@ -287,6 +292,16 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         skip_deps_verification_attr = skip_deps_verification_attr,
     )
 
+def render_resolved_platforms(platform_triples, use_legacy_rules_rust_platforms):
+    platforms = sorted(set([
+        _platform(triple, use_legacy_rules_rust_platforms)
+        for triple in platform_triples
+    ]))
+    return """RESOLVED_PLATFORMS = select({
+    %s,
+    "//conditions:default": ["@platforms//:incompatible"],
+})""" % ",\n    ".join(['"%s": []' % platform for platform in platforms])
+
 def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
     additive_build_file_content = ""
     if attr.additive_build_file:
@@ -297,49 +312,68 @@ def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
     return """\
 load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
-load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
+
+{resolved_platforms}
 
 {rust_crate_call}""".format(
-        hub_name = attr.hub_name,
+        resolved_platforms = render_resolved_platforms(attr.platform_triples, attr.use_legacy_rules_rust_platforms),
         rust_crate_call = render_rust_crate_call(attr, values, bazel_metadata = bazel_metadata),
     ) + additive_build_file_content
 
-rust_crate_attrs = {
-    "hub_name": attr.string(),
-    "gen_build_script": attr.string(),
-    "build_script_deps": attr.label_list(),
-    "build_script_deps_select": _label_list_dict(),
+# Repository attrs are declared in their coalescing-policy bucket. Adding an
+# attr therefore requires choosing its compatibility semantics at the same
+# site; the policy map and repository-rule attrs are derived from these maps.
+_EXACT_RUST_CRATE_ATTRS = {
+    "allow_build_script_to_detect_nonhermetic_paths": attr.bool(default = False),
     "build_script_data": attr.label_list(),
     "build_script_data_select": _label_list_dict(),
+    "build_script_deps": attr.label_list(),
     "build_script_env": attr.string_dict(),
     "build_script_env_select": attr.string_dict(),
     "build_script_env_files": attr.label_list(
         allow_files = True,
     ),
-    "allow_build_script_to_detect_nonhermetic_paths": attr.bool(default = False),
+    "build_script_tags": attr.string_list(),
     "build_script_toolchains": attr.label_list(),
     "build_script_tools": attr.label_list(),
     "build_script_tools_select": _label_list_dict(),
-    "build_script_tags": attr.string_list(),
-    "rustc_env": attr.string_dict(),
-    "rustc_flags": attr.string_list(),
-    "rustc_flags_select": attr.string_list_dict(),
     "crate_tags": attr.string_list(),
     "data": attr.label_list(),
     "deps": attr.label_list(),
-    "deps_select": _label_list_dict(),
     "link_deps": attr.string_list(),
-    "aliases": attr.string_dict(),
-    "crate_features": attr.string_list(),
-    "crate_features_select": attr.string_list_dict(),
+    "gen_build_script": attr.string(),
+    "rustc_env": attr.string_dict(),
+    "rustc_flags": attr.string_list(),
+    "rustc_flags_select": attr.string_list_dict(),
     "use_legacy_rules_rust_platforms": attr.bool(),
 }
+_UNION_RUST_CRATE_ATTRS = {
+    "aliases": attr.string_dict(),
+    "build_script_deps_select": _label_list_dict(),
+    "crate_features": attr.string_list(),
+    "crate_features_select": attr.string_list_dict(),
+    "deps_select": _label_list_dict(),
+    "platform_triples": attr.string_list(),
+}
+_HUB_LOCAL_RUST_CRATE_ATTRS = {
+    "hub_name": attr.string(),
+}
 
-common_attrs = rust_crate_attrs | {
+rust_crate_attrs = _EXACT_RUST_CRATE_ATTRS | _UNION_RUST_CRATE_ATTRS | _HUB_LOCAL_RUST_CRATE_ATTRS
+crate_identity_attr = {
+    "crate_identity": attr.string(
+        doc = "Reserved `cargo:` logical library identity emitted on generated library targets.",
+    ),
+}
+RUST_CRATE_ATTR_POLICIES = (
+    {name: "exact" for name in _EXACT_RUST_CRATE_ATTRS} |
+    {name: "union" for name in _UNION_RUST_CRATE_ATTRS} |
+    {name: "hub_local" for name in _HUB_LOCAL_RUST_CRATE_ATTRS}
+)
+
+_EXACT_COMMON_CRATE_ATTRS = {
     "additive_build_file": attr.label(),
     "additive_build_file_content": attr.string(),
-    "gen_binaries": attr.string_list(),
-} | {
     "strip_prefix": attr.string(
         default = "",
         doc = "A directory prefix to strip from the extracted files.",
@@ -384,3 +418,12 @@ common_attrs = rust_crate_attrs | {
               "which requires Bash binary to exist.",
     ),
 }
+_UNION_COMMON_CRATE_ATTRS = {
+    "gen_binaries": attr.string_list(),
+}
+
+COMMON_CRATE_ATTR_POLICIES = (
+    {name: "exact" for name in _EXACT_COMMON_CRATE_ATTRS} |
+    {name: "union" for name in _UNION_COMMON_CRATE_ATTRS}
+)
+common_attrs = rust_crate_attrs | _EXACT_COMMON_CRATE_ATTRS | _UNION_COMMON_CRATE_ATTRS

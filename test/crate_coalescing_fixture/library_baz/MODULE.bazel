@@ -1,0 +1,31 @@
+module(
+    name = "crate_coalescing_baz",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "rules_rs", version = "0.0.0")
+local_path_override(
+    module_name = "rules_rs",
+    path = "../../..",
+)
+
+toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
+toolchains.toolchain(
+    edition = "2024",
+    version = "1.96.1",
+)
+use_repo(toolchains, "default_rust_toolchains")
+
+register_toolchains("@default_rust_toolchains//...")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "zz_baz_crates",
+    cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
+    platform_triples = [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+    ],
+)
+use_repo(crate, "zz_baz_crates")

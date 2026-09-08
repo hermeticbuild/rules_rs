@@ -8,6 +8,8 @@ load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
 load(":cargo_toml_utils_test.bzl", "cargo_toml_utils_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
+load(":crate_coalescing_test.bzl", "crate_coalescing_tests")
+load(":crate_metadata_test.bzl", "crate_metadata_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
 load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
@@ -38,6 +40,10 @@ cargo_toml_utils_tests()
 cargo_workspace_graph_tests()
 
 cfg_parser_tests()
+
+crate_metadata_tests()
+
+crate_coalescing_tests()
 
 lint_flags_tests()
 
@@ -120,9 +126,7 @@ bzl_library(
     name = "git_crate_metadata_repository",
     srcs = ["git_crate_metadata_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
-    deps = [
-        ":repository_utils",
-    ],
+    deps = [":repository_utils"],
 )
 
 bzl_library(
@@ -146,6 +150,7 @@ bzl_library(
     deps = [
         ":annotations",
         ":cargo_credentials",
+        ":crate_metadata",
         ":registry_utils",
         ":toml2json",
         "@bazel_tools//tools/build_defs/repo:git_worker.bzl",
@@ -162,16 +167,6 @@ bzl_library(
         ":select_utils",
         ":semver",
         "@bazel_skylib//lib:paths",
-    ],
-)
-
-bzl_library(
-    name = "registry_config_repository",
-    srcs = ["registry_config_repository.bzl"],
-    visibility = ["//rs:__subpackages__"],
-    deps = [
-        ":cargo_credentials",
-        ":registry_utils",
     ],
 )
 
@@ -404,4 +399,187 @@ bzl_library(
     name = "semver",
     srcs = ["semver.bzl"],
     visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "crate_hub_generation",
+    srcs = ["crate_hub_generation.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":annotations",
+        ":cargo_workspace_graph",
+        ":crate_coalescing",
+        ":crate_compatibility",
+        ":crate_dependency_order",
+        ":crate_hub_resolution",
+        ":crate_identity",
+        ":crate_metadata",
+        ":crate_repository",
+        ":downloader",
+        ":git_crate_metadata_repository",
+        ":lint_flags",
+        ":registry_utils",
+        ":repository_utils",
+        ":toml2json",
+        "@bazel_skylib//lib:paths",
+    ],
+)
+
+bzl_library(
+    name = "crate_metadata",
+    srcs = ["crate_metadata.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "crate_metadata_test",
+    srcs = ["crate_metadata_test.bzl"],
+    deps = [
+        ":crate_metadata",
+        ":crate_test_fixtures",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "crate_identity",
+    srcs = ["crate_identity.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [":downloader"],
+)
+
+bzl_library(
+    name = "crate_coalescer_test",
+    srcs = ["crate_coalescer_test.bzl"],
+    deps = [
+        ":crate_coalescing",
+        ":crate_compatibility",
+        ":crate_identity",
+        ":crate_test_fixtures",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "crate_coalescing",
+    srcs = ["crate_coalescing.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":crate_compatibility",
+        ":crate_identity",
+    ],
+)
+
+bzl_library(
+    name = "crate_coalescing_test",
+    srcs = ["crate_coalescing_test.bzl"],
+    deps = [
+        ":crate_coalescer_test",
+        ":crate_compatibility_test",
+        ":crate_dependency_order_test",
+        ":crate_identity_test",
+        ":crate_metadata_test",
+        ":crate_weak_features_test",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "crate_collection_order",
+    srcs = ["crate_collection_order.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":annotations",
+        ":cargo_workspace_graph",
+        ":crate_dependency_order",
+        ":crate_hub_generation",
+        ":crate_identity",
+    ],
+)
+
+bzl_library(
+    name = "crate_compatibility",
+    srcs = ["crate_compatibility.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":crate_identity",
+        ":crate_metadata",
+        ":downloader",
+        ":repository_utils",
+    ],
+)
+
+bzl_library(
+    name = "crate_compatibility_test",
+    srcs = ["crate_compatibility_test.bzl"],
+    deps = [
+        ":crate_coalescing",
+        ":crate_compatibility",
+        ":crate_identity",
+        ":crate_metadata",
+        ":crate_test_fixtures",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "crate_dependency_order",
+    srcs = ["crate_dependency_order.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "crate_dependency_order_test",
+    srcs = ["crate_dependency_order_test.bzl"],
+    deps = [
+        ":crate_dependency_order",
+        ":crate_test_fixtures",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "crate_hub_resolution",
+    srcs = ["crate_hub_resolution.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":annotations",
+        ":cargo_workspace_graph",
+        ":crate_compatibility",
+        ":crate_dependency_order",
+        ":crate_metadata",
+        ":toml2json",
+        "@bazel_skylib//lib:paths",
+    ],
+)
+
+bzl_library(
+    name = "crate_identity_test",
+    srcs = ["crate_identity_test.bzl"],
+    deps = [
+        ":crate_coalescing",
+        ":crate_identity",
+        ":crate_test_fixtures",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "crate_test_fixtures",
+    srcs = ["crate_test_fixtures.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [
+        ":crate_compatibility",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "crate_weak_features_test",
+    srcs = ["crate_weak_features_test.bzl"],
+    deps = [
+        ":crate_compatibility",
+        ":crate_test_fixtures",
+        "@bazel_skylib//lib:unittest",
+    ],
 )

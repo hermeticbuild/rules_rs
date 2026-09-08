@@ -1,0 +1,10 @@
+[package]
+name = "crate-coalescing-fixture"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+itoa = "=1.0.17"
+log = "=0.4.29"

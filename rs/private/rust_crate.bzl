@@ -47,7 +47,8 @@ def rust_crate(
         use_legacy_rules_rust_platforms,
         extra_compile_data = [],
         rustc_env = {},
-        skip_deps_verification = False):
+        skip_deps_verification = False,
+        crate_identity = ""):
     package_metadata(
         name = name + "_package_metadata",
         purl = purl,
@@ -204,6 +205,9 @@ def rust_crate(
             visibility = ["//visibility:public"],
             skip_per_crate_rustc_flags = True,
         )
+
+        if crate_identity:
+            kwargs["crate_identity"] = crate_identity
 
         if is_proc_macro:
             # rules_rust's rust_proc_macro rule has no link_deps attribute.

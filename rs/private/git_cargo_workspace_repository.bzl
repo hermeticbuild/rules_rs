@@ -6,13 +6,7 @@ load(":toml2json.bzl", "run_toml2json")
 def _render_label_list(labels):
     return ",\n        ".join(['"%s"' % label for label in sorted(labels)])
 
-def _spoke_repo(hub_name, name, version):
-    s = "%s__%s-%s" % (hub_name, name, version)
-    if "+" in s:
-        s = s.replace("+", "-")
-    return s
-
-def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, workspace_cargo_toml):
+def _render_build_file(rctx, dest, crate_bzl, additive_build_file_content, gen_binaries, workspace_cargo_toml):
     package_path = rctx.path(dest).dirname
     cargo_toml_path = package_path.get_child("Cargo.toml")
     cargo_toml = run_toml2json(rctx, cargo_toml_path)
@@ -46,7 +40,7 @@ crate(
     ],
 )
 {additive_build_file_content}{package_metadata_bazel_additive_build_file_content}""".format(
-        crate_bzl = "@%s//:crate.bzl" % _spoke_repo(rctx.attr.hub_name, package["name"], package["version"]),
+        crate_bzl = crate_bzl,
         crate_name = cargo.values["crate_name"],
         crate_root = cargo.values["crate_root"],
         edition = cargo.values["edition"],
@@ -68,7 +62,7 @@ def _git_cargo_workspace_repository_impl(rctx):
 
     workspace_cargo_toml = run_toml2json(rctx, rctx.attr.workspace_cargo_toml)
     for dest, additive_build_file_content in rctx.attr.build_files.items():
-        _render_build_file(rctx, dest, additive_build_file_content, rctx.attr.gen_binaries.get(dest, []), workspace_cargo_toml)
+        _render_build_file(rctx, dest, rctx.attr.crate_bzls[dest], additive_build_file_content, rctx.attr.gen_binaries.get(dest, []), workspace_cargo_toml)
 
     return rctx.repo_metadata(reproducible = True)
 
@@ -77,7 +71,7 @@ git_cargo_workspace_repository = repository_rule(
     attrs = {
         "remote": attr.string(mandatory = True),
         "commit": attr.string(mandatory = True),
-        "hub_name": attr.string(mandatory = True),
+        "crate_bzls": attr.string_dict(mandatory = True),
         "shallow_since": attr.string(),
         "init_submodules": attr.bool(default = True),
         "build_files": attr.string_dict(mandatory = True),

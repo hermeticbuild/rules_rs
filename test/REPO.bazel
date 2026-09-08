@@ -1,3 +1,5 @@
 ignore_directories([
     "bazel-**/*",
+    "crate_coalescing_fixture/library_bar",
+    "crate_coalescing_fixture/library_baz",
 ])

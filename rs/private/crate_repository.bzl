@@ -2,7 +2,7 @@ load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id"
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "get_auth", "patch")
 load(":cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
 load(":registry_utils.bzl", "registry_download_url_from_template")
-load(":repository_utils.bzl", "cargo_build_file_values", "common_attrs", "render_build_file_content")
+load(":repository_utils.bzl", "cargo_build_file_values", "common_attrs", "crate_identity_attr", "render_build_file_content")
 load(":toml2json.bzl", "run_toml2json")
 
 def _cargo_purl(package_name, version, qualifiers = {}):
@@ -27,7 +27,7 @@ def _generate_build_file(rctx, cargo_toml, purl_qualifiers = {}, package_path = 
 
 def _crate_repository_impl(rctx):
     # TODO(zbarsky): Is there a better way than fetching this in every crate repository?
-    if rctx.attr.use_home_cargo_credentials:
+    if rctx.attr.registry_auth_required and rctx.attr.use_home_cargo_credentials:
         headers = registry_auth_headers(
             load_cargo_credentials(rctx, rctx.attr.cargo_config),
             rctx.attr.source,
@@ -39,7 +39,7 @@ def _crate_repository_impl(rctx):
     version = rctx.attr.version
     sha256 = rctx.attr.checksum
 
-    dl = rctx.read(rctx.attr.registry_config)
+    dl = rctx.attr.registry_dl
 
     url = registry_download_url_from_template(dl, crate_name, version, sha256)
 
@@ -65,18 +65,27 @@ def _crate_repository_impl(rctx):
 
     return rctx.repo_metadata(reproducible = True)
 
+# Keep repository-only attrs classified at their declaration site. Compilation
+# attrs live in `common_attrs`, whose policy map is consumed by the coalescer.
+# These fields either define/verify the fetched source or select a hub-local
+# transport for fetching identical verified bytes.
+_SOURCE_IDENTITY_ATTRS = {
+    "checksum": attr.string(),
+    "crate_name": attr.string(mandatory = True),
+    "sbom_extra_qualifiers": attr.string_dict(),
+    "source": attr.string(),
+    "version": attr.string(mandatory = True),
+}
+_HUB_LOCAL_FETCH_ATTRS = {
+    "cargo_config": attr.label(),
+    "registry_auth_required": attr.bool(),
+    "registry_dl": attr.string(mandatory = True),
+    "use_home_cargo_credentials": attr.bool(),
+}
+
 crate_repository = repository_rule(
     implementation = _crate_repository_impl,
-    attrs = {
-        "crate_name": attr.string(mandatory = True),
-        "version": attr.string(mandatory = True),
-        "cargo_config": attr.label(),
-        "source": attr.string(),
-        "use_home_cargo_credentials": attr.bool(),
-        "checksum": attr.string(),
-        "registry_config": attr.label(allow_single_file = True, mandatory = True),
-        "sbom_extra_qualifiers": attr.string_dict(),
-    } | common_attrs,
+    attrs = _SOURCE_IDENTITY_ATTRS | _HUB_LOCAL_FETCH_ATTRS | crate_identity_attr | common_attrs,
 )
 
 def _local_crate_repository_impl(rctx):

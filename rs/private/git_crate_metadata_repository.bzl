@@ -1,9 +1,10 @@
-load(":repository_utils.bzl", "render_rust_crate_call", "rust_crate_attrs")
+load(":repository_utils.bzl", "crate_identity_attr", "render_resolved_platforms", "render_rust_crate_call", "rust_crate_attrs")
 
 def _git_crate_metadata_repository_implementation(rctx):
     rctx.file("crate.bzl", """\
 load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
-load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
+
+{resolved_platforms}
 
 def crate(
         crate_name,
@@ -16,7 +17,7 @@ def crate(
         binaries,
         package_metadata_bazel_deps):
 {rust_crate_call}""".format(
-        hub_name = rctx.attr.hub_name,
+        resolved_platforms = render_resolved_platforms(rctx.attr.platform_triples, rctx.attr.use_legacy_rules_rust_platforms),
         rust_crate_call = render_rust_crate_call(
             rctx.attr,
             # These values are emitted as Starlark source. The bare names refer
@@ -49,5 +50,5 @@ git_crate_metadata_repository = repository_rule(
         "package_name": attr.string(mandatory = True),
         "package_version": attr.string(mandatory = True),
         "purl": attr.string(mandatory = True),
-    } | rust_crate_attrs,
+    } | crate_identity_attr | rust_crate_attrs,
 )

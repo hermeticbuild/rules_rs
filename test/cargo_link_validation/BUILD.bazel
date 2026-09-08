@@ -1,0 +1,425 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_rs//rs:cargo_build_script.bzl", "cargo_build_script")
+load(
+    "@rules_rust//rust:defs.bzl",
+    "rust_binary",
+    "rust_library",
+    "rust_proc_macro",
+    "rust_shared_library",
+    "rust_static_library",
+    "rust_test",
+)
+load(
+    "@rules_rust//rust:rust_link_validation.bzl",
+    "rust_link_checked_cc_binary",
+    "rust_link_checked_cc_shared_library",
+)
+load(":cargo_link_validation_test.bzl", "cargo_link_validation_tests")
+load(":cc_mixed_link_test.bzl", "cc_mixed_link_tests")
+load(":legacy_crate.bzl", "legacy_crate")
+
+exports_files(["verify_command_line_aspect.sh"])
+
+# Two configured instances of one logical Rust library. They share a logical
+# identity but are distinct artifacts (different source sets below), so any
+# link unit that combines them must be rejected.
+_IDENTITY = 'cargo:["registry","sparse+https://index.crates.io/","duplicate","1.0.0"]'
+
+_DIFFERENT_SOURCE_IDENTITY = 'cargo:["registry","sparse+https://example.invalid/index/","duplicate","1.0.0"]'
+
+_DIFFERENT_VERSION_IDENTITY = 'cargo:["registry","sparse+https://index.crates.io/","duplicate","2.0.0"]'
+
+rust_library(
+    name = "class_one",
+    srcs = ["lib_one.rs"],
+    crate_identity = _IDENTITY,
+    crate_name = "duplicate",
+)
+
+rust_library(
+    name = "class_two",
+    srcs = ["lib_two.rs"],
+    crate_identity = _IDENTITY,
+    crate_name = "duplicate",
+)
+
+rust_library(
+    name = "different_version",
+    srcs = ["lib.rs"],
+    crate_identity = _DIFFERENT_VERSION_IDENTITY,
+    crate_name = "duplicate",
+)
+
+rust_library(
+    name = "different_source",
+    srcs = ["lib.rs"],
+    crate_identity = _DIFFERENT_SOURCE_IDENTITY,
+    crate_name = "duplicate",
+)
+
+rust_library(
+    name = "transitive_class_one",
+    srcs = ["lib.rs"],
+    deps = [":class_one"],
+)
+
+rust_library(
+    name = "crate_under_test",
+    srcs = ["lib.rs"],
+    deps = [
+        ":class_one",
+        ":class_two",
+    ],
+)
+
+rust_binary(
+    name = "direct_conflict",
+    srcs = ["main.rs"],
+    aliases = {
+        ":class_one": "class_one",
+        ":class_two": "class_two",
+    },
+    tags = ["manual"],
+    deps = [
+        ":class_one",
+        ":class_two",
+    ],
+)
+
+rust_binary(
+    name = "transitive_conflict",
+    srcs = ["main.rs"],
+    aliases = {
+        ":class_two": "class_two",
+        ":transitive_class_one": "class_one",
+    },
+    tags = ["manual"],
+    deps = [
+        ":class_two",
+        ":transitive_class_one",
+    ],
+)
+
+rust_test(
+    name = "standalone_test_conflict",
+    srcs = ["main.rs"],
+    aliases = {
+        ":class_one": "class_one",
+        ":class_two": "class_two",
+    },
+    tags = ["manual"],
+    deps = [
+        ":class_one",
+        ":class_two",
+    ],
+)
+
+rust_test(
+    name = "crate_test_conflict",
+    crate = ":crate_under_test",
+    tags = ["manual"],
+)
+
+rust_static_library(
+    name = "staticlib_conflict",
+    srcs = ["lib.rs"],
+    aliases = {
+        ":class_one": "class_one",
+        ":class_two": "class_two",
+    },
+    tags = ["manual"],
+    deps = [
+        ":class_one",
+        ":class_two",
+    ],
+)
+
+rust_shared_library(
+    name = "cdylib_conflict",
+    srcs = ["lib.rs"],
+    aliases = {
+        ":class_one": "class_one",
+        ":class_two": "class_two",
+    },
+    tags = ["manual"],
+    deps = [
+        ":class_one",
+        ":class_two",
+    ],
+)
+
+rust_proc_macro(
+    name = "proc_macro_conflict",
+    srcs = ["proc_macro.rs"],
+    aliases = {
+        ":class_one": "class_one",
+        ":class_two": "class_two",
+    },
+    tags = ["manual"],
+    deps = [
+        ":class_one",
+        ":class_two",
+    ],
+)
+
+cargo_build_script(
+    name = "build_script_conflict",
+    srcs = ["build.rs"],
+    aliases = {
+        ":class_one": "class_one",
+        ":class_two": "class_two",
+    },
+    tags = ["manual"],
+    deps = [
+        ":class_one",
+        ":class_two",
+    ],
+)
+
+cargo_build_script(
+    name = "isolated_build_script",
+    srcs = ["build.rs"],
+    deps = [":class_two"],
+)
+
+rust_proc_macro(
+    name = "isolated_proc_macro",
+    srcs = ["proc_macro.rs"],
+    deps = [":class_two"],
+)
+
+rust_binary(
+    name = "proc_macro_isolation",
+    srcs = ["main.rs"],
+    proc_macro_deps = [":isolated_proc_macro"],
+    deps = [":class_one"],
+)
+
+# Build-script implementation dependencies are part of the independently
+# linked host executable, not the consuming target's runtime closure.
+rust_binary(
+    name = "build_script_isolation",
+    srcs = ["main.rs"],
+    deps = [
+        ":class_one",
+        ":isolated_build_script",
+    ],
+)
+
+# Cargo Package IDs include both version and source. These pairs are therefore
+# distinct logical identities even though their Cargo package names match.
+rust_binary(
+    name = "different_version_pass",
+    srcs = ["main.rs"],
+    aliases = {
+        ":class_one": "duplicate_v1",
+        ":different_version": "duplicate_v2",
+    },
+    deps = [
+        ":class_one",
+        ":different_version",
+    ],
+)
+
+# The same cargo name and version from two different registries is a distinct
+# source-qualified logical identity, so it is NOT a link-unit conflict and this
+# passes. This duplication is accepted by design (a private registry may shadow
+# a common crates.io name). Because both crates are direct dependencies here,
+# aliases give them distinct names in this target's Rust extern namespace.
+# Transitive same-name crates are disambiguated by rustc crate metadata.
+rust_binary(
+    name = "different_source_pass",
+    srcs = ["main.rs"],
+    aliases = {
+        ":class_one": "duplicate_crates_io",
+        ":different_source": "duplicate_other_registry",
+    },
+    deps = [
+        ":class_one",
+        ":different_source",
+    ],
+)
+
+# Only one branch of a configured select contributes to a link closure.
+rust_binary(
+    name = "platform_single_active_pass",
+    srcs = ["main.rs"],
+    deps = select({
+        "@platforms//os:linux": [":class_one"],
+        "//conditions:default": [":class_two"],
+    }),
+)
+
+rust_binary(
+    name = "separate_class_one",
+    srcs = ["main.rs"],
+    deps = [":class_one"],
+)
+
+rust_binary(
+    name = "separate_class_two",
+    srcs = ["main.rs"],
+    deps = [":class_two"],
+)
+
+rust_library(
+    name = "legacy_source",
+    srcs = ["lib.rs"],
+)
+
+legacy_crate(
+    name = "legacy_custom_crate",
+    crate = ":legacy_source",
+)
+
+rust_test(
+    name = "legacy_custom_crate_test",
+    crate = ":legacy_custom_crate",
+)
+
+rust_binary(
+    name = "extension_generated_conflict",
+    srcs = ["main.rs"],
+    aliases = {
+        "@crate_coalescing_a//:log-0.4.29": "class_one",
+        "@crate_link_validation_class//:log-0.4.29": "class_two",
+    },
+    tags = ["manual"],
+    deps = [
+        "@crate_coalescing_a//:log-0.4.29",
+        "@crate_link_validation_class//:log-0.4.29",
+    ],
+)
+
+cargo_link_validation_tests()
+
+#
+# Mixed Rust/C++ final links.
+#
+# Each rust_static_library is its own link unit and therefore passes the
+# intrinsic Rust validation on its own (single instance). The conflict only
+# materializes when a native link unit combines two of them. Raw cc_binary
+# rules do not apply the validation aspect, so the checked variants below use
+# the `rust_link_checked_*` wrappers (and the raw negative control exercises
+# the command-line aspect from the shell).
+#
+
+rust_static_library(
+    name = "platform_static_one",
+    srcs = ["lib_static_one.rs"],
+    crate_name = "platform_static_one",
+    deps = [":class_one"],
+)
+
+rust_static_library(
+    name = "platform_static_two",
+    srcs = ["lib_static_two.rs"],
+    crate_name = "platform_static_two",
+    deps = [":class_two"],
+)
+
+rust_link_checked_cc_binary(
+    name = "cc_mixed_conflict",
+    srcs = ["main.cc"],
+    tags = ["manual"],
+    deps = [
+        ":platform_static_one",
+        ":platform_static_two",
+    ],
+)
+
+# Explicit negative control: without the wrapper or the aspect, the same
+# conflicting native link is unchecked and builds successfully.
+cc_binary(
+    name = "cc_mixed_conflict_unchecked",
+    srcs = ["main.cc"],
+    deps = [
+        ":platform_static_one",
+        ":platform_static_two",
+    ],
+)
+
+cc_library(
+    name = "transitive_cc_lib_one",
+    srcs = ["main.cc"],
+    deps = [":platform_static_one"],
+)
+
+cc_library(
+    name = "transitive_cc_lib_two",
+    srcs = ["main.cc"],
+    deps = [":platform_static_two"],
+)
+
+rust_link_checked_cc_binary(
+    name = "cc_transitive_conflict",
+    srcs = ["main.cc"],
+    tags = ["manual"],
+    deps = [
+        ":transitive_cc_lib_one",
+        ":transitive_cc_lib_two",
+    ],
+)
+
+rust_link_checked_cc_binary(
+    name = "cc_separate_one",
+    srcs = ["main.cc"],
+    deps = [":platform_static_one"],
+)
+
+rust_link_checked_cc_binary(
+    name = "cc_separate_two",
+    srcs = ["main.cc"],
+    deps = [":platform_static_two"],
+)
+
+# The same crate instance reaching a native link through two paths is allowed.
+rust_link_checked_cc_binary(
+    name = "cc_same_instance_two_paths",
+    srcs = ["main.cc"],
+    deps = [
+        ":platform_static_one",
+        ":transitive_cc_lib_one",
+    ],
+)
+
+rust_link_checked_cc_shared_library(
+    name = "cc_shared_conflict",
+    tags = ["manual"],
+    deps = [
+        ":platform_static_one",
+        ":platform_static_two",
+    ],
+)
+
+# Dynamically linked Rust shared libraries are independent link boundaries:
+# each is validated internally, and a native consumer does not combine them.
+rust_shared_library(
+    name = "dynamic_lib_one",
+    srcs = ["lib_static_one.rs"],
+    crate_name = "dynamic_lib_one",
+    deps = [":class_one"],
+)
+
+rust_shared_library(
+    name = "dynamic_lib_two",
+    srcs = ["lib_static_two.rs"],
+    crate_name = "dynamic_lib_two",
+    deps = [":class_two"],
+)
+
+rust_link_checked_cc_binary(
+    name = "cc_two_dynamic_boundaries",
+    srcs = ["main.cc"],
+    deps = [
+        ":dynamic_lib_one",
+        ":dynamic_lib_two",
+    ],
+)
+
+cc_mixed_link_tests()
+
+test_suite(
+    name = "cargo_link_compatibility_tests",
+    tests = [":legacy_custom_crate_test"],
+)
