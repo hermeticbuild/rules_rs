@@ -1,0 +1,27 @@
+name: Recover v0.0.110 release
+on:
+  push:
+    branches:
+      - codex/recover-v0.0.110
+permissions:
+  id-token: write
+  attestations: write
+  contents: write
+jobs:
+  release:
+    uses: bazel-contrib/.github/.github/workflows/release_ruleset.yaml@v7.2.2
+    with:
+      release_files: rules_rs-*.tar.gz
+      prerelease: false
+      tag_name: v0.0.110
+      # The tagged .bazelrc requires a BuildBuddy key unavailable to the release job.
+      # release_prep.sh archives the unchanged v0.0.110 tag after the tests.
+      bazel_test_command: >-
+        sed -i '/^common --remote_cache=/d; /^common --experimental_remote_downloader=/d' .bazelrc && bazel test //...
+  publish:
+    needs: release
+    uses: ./.github/workflows/publish.yaml
+    with:
+      tag_name: v0.0.110
+    secrets:
+      publish_token: ${{ secrets.BCR_PUBLISH_TOKEN }}
