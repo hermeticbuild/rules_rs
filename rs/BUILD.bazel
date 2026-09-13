@@ -134,6 +134,16 @@ bzl_library(
 )
 
 bzl_library(
+    name = "rust_test_suite",
+    srcs = ["rust_test_suite.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@bazel_features//:features",
+        "@rules_rust//rust:bzl_lib",
+    ],
+)
+
+bzl_library(
     name = "rust_shared_library",
     srcs = ["rust_shared_library.bzl"],
     visibility = ["//visibility:public"],
