@@ -1,0 +1,15 @@
+[package]
+name = "shared"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+leaf = { path = "../leaf", default-features = false }
+
+[features]
+default = []
+outer = ["inner"]
+inner = ["leaf/enabled"]
+native = []

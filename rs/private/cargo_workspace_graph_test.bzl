@@ -298,6 +298,7 @@ def _resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl(ctx
             "version": "1.0.0",
         })
 
+    resolutions[-1].platforms_enabled.add(triple)
     resolutions[-1].features_enabled[triple].add("forward")
     resolve(None, packages, resolutions_by_crate, {}, False)
 

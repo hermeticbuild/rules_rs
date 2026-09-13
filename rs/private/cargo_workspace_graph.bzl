@@ -66,6 +66,7 @@ def new_feature_resolutions(package_index, possible_deps, possible_features, pla
     return struct(
         features_enabled = {triple: set() for triple in platform_triples},
         build_deps = {triple: set() for triple in platform_triples},
+        platforms_enabled = set(),
         deps = {triple: set() for triple in platform_triples},
         aliases = {},
         package_index = package_index,
@@ -554,6 +555,7 @@ def resolve_cargo_workspace_members(
             ctx.watch(package["manifest_path"])
 
         package_feature_resolutions = feature_resolutions_by_fq_crate[fq_crate(package["name"], package["version"])]
+        package_feature_resolutions.platforms_enabled.update(platform_triples)
         if "default" in package.get("features", {}):
             for triple in platform_triples:
                 package_feature_resolutions.features_enabled[triple].add("default")
