@@ -31,6 +31,7 @@ use_repo(
     toolchains,
     "default_rust_toolchains",
     "rs_rust_host_tools",
+    "rules_rs_default_lint_config",
 )
 
 [
