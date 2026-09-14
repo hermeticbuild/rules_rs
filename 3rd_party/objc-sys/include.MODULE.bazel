@@ -1,0 +1,5 @@
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "objc-sys",
+    patches = ["@rules_rs//:3rd_party/objc-sys/env.patch"],
+)
