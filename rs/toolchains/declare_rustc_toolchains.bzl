@@ -3,7 +3,7 @@
 load("@default_rust_toolchains//rustc:component_labels.bzl", "rust_toolchain_component_label")
 load("@rules_rust//rust:rust_toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
-load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES", "triple_to_rust_constraint_set")
+load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES")
 load("//rs/private:bpf_linker_repository.bzl", "bpf_linker_binary_name", "bpf_linker_repository_name")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
 
@@ -74,28 +74,15 @@ def declare_rustc_toolchains(
     version_key = sanitize_version(version)
     channel = _channel(version)
 
-    source_stdlib_building_select = {}
-    for target_triple in target_triples:
-        if target_triple not in SUPPORTED_TIER_3_TRIPLES:
-            continue
-
-        target_key = sanitize_triple(target_triple)
-        config_setting = name + "_source_stdlib_building_" + target_key
-        native.config_setting(
-            name = config_setting,
-            constraint_values = triple_to_rust_constraint_set(target_triple),
-            flag_values = {
-                "@rules_rs//rs/private:source_stdlib_building": "true",
-            },
-        )
-        source_stdlib_building_select[config_setting] = "@rules_rs//rs/private:empty_stdlib"
-
     rust_std_label = name + "_rust_std"
     rust_std_select = {}
+    source_stdlib_select = {}
     target_triple_select = {}
     for target_triple in target_triples:
         target_key = sanitize_triple(target_triple)
         config_label = "@rules_rs//rs/platforms/config:" + target_triple
+        if target_triple in SUPPORTED_TIER_3_TRIPLES:
+            source_stdlib_select[config_label] = "@rules_rs//rs/private:empty_stdlib"
         stdlib_repo = "rust_stdlib_%s_%s" % (target_key, version_key)
         if target_triple in SUPPORTED_TIER_3_TRIPLES:
             default_rust_std = "@rustc_src_" + version_key + "//src:rust_std"
@@ -108,9 +95,18 @@ def declare_rustc_toolchains(
         name = rust_std_label,
         actual = select(rust_std_select),
     )
-    toolchain_rust_std = select(source_stdlib_building_select | {
-        "//conditions:default": rust_std_label,
-    })
+    toolchain_rust_std = rust_std_label
+    if source_stdlib_select:
+        # An alias defers triple matching until a source stdlib build.
+        source_stdlib_label = name + "_source_stdlib"
+        native.alias(
+            name = source_stdlib_label,
+            actual = select(source_stdlib_select | {"//conditions:default": rust_std_label}),
+        )
+        toolchain_rust_std = select({
+            "@rules_rs//rs/private:source_stdlib_building_enabled": source_stdlib_label,
+            "//conditions:default": rust_std_label,
+        })
 
     for triple in exec_triples:
         exec_triple = _parse_triple(triple)

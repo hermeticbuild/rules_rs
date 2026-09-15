@@ -19,6 +19,12 @@ bool_setting(
     visibility = ["//visibility:public"],
 )
 
+config_setting(
+    name = "source_stdlib_building_enabled",
+    flag_values = {":source_stdlib_building": "true"},
+    visibility = ["//visibility:public"],
+)
+
 rust_stdlib_filegroup(
     name = "empty_stdlib",
     srcs = [],
