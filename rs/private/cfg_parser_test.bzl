@@ -120,8 +120,137 @@ def _cfg_parser_smoke_test_impl(ctx):
 
 cfg_parser_smoke_test = unittest.make(_cfg_parser_smoke_test_impl)
 
+def _assert_attrs(env, triple, expected):
+    """Asserts the named subset of `triple_to_cfg_attrs(triple)`.
+
+    Expected values are `rustc --print cfg --target <triple>` output.
+    """
+    actual = triple_to_cfg_attrs(triple)
+    for key, want in expected.items():
+        asserts.equals(env, want, actual[key], "%s: %s" % (triple, key))
+
+def _triple_normalization_test_impl(ctx):
+    env = unittest.begin(ctx)
+
+    # 32-bit Android: a 3-part triple whose third component is an OS with the
+    # ABI glued onto it. Read positionally it yields target_os "androideabi",
+    # which is neither "android" nor unix, so every cfg(unix) and
+    # cfg(target_os = "android") dependency is dropped.
+    for triple in ["armv7-linux-androideabi", "arm-linux-androideabi"]:
+        _assert_attrs(env, triple, {
+            "target_arch": "arm",
+            "target_os": "android",
+            "target_family": "unix",
+            "target_abi": "eabi",
+            "target_vendor": "unknown",
+            "target_pointer_width": "32",
+            "unix": True,
+        })
+        asserts.true(env, cfg_matches(_cfg("unix"), triple))
+        asserts.true(env, cfg_matches(_cfg('target_os = "android"'), triple))
+        asserts.true(env, cfg_matches(_cfg('target_arch = "arm"'), triple))
+
+    # 64-bit Android is 3-part too, but its third component is a plain OS.
+    _assert_attrs(env, "aarch64-linux-android", {
+        "target_arch": "aarch64",
+        "target_os": "android",
+        "target_family": "unix",
+        "target_vendor": "unknown",
+        "unix": True,
+    })
+
+    # Bare-metal Arm: the third component is an ABI, so the OS sits in the
+    # vendor slot and the triple names no vendor at all.
+    _assert_attrs(env, "thumbv7m-none-eabi", {
+        "target_arch": "arm",
+        "target_os": "none",
+        "target_family": "",
+        "target_abi": "eabi",
+        "target_vendor": "unknown",
+        "target_pointer_width": "32",
+        "unix": False,
+    })
+    _assert_attrs(env, "thumbv7em-none-eabihf", {
+        "target_arch": "arm",
+        "target_os": "none",
+        "target_abi": "eabihf",
+    })
+
+    # Apple spells 64-bit Arm arm64/arm64e; rustc reports aarch64.
+    _assert_attrs(env, "arm64e-apple-ios", {
+        "target_arch": "aarch64",
+        "target_os": "ios",
+        "target_pointer_width": "64",
+    })
+    _assert_attrs(env, "arm64_32-apple-watchos", {
+        "target_arch": "aarch64",
+        "target_pointer_width": "64",
+    })
+
+    # ARM64EC is a distinct Windows architecture, not an Apple spelling of
+    # AArch64.
+    _assert_attrs(env, "arm64ec-pc-windows-msvc", {
+        "target_arch": "arm64ec",
+        "target_os": "windows",
+        "target_pointer_width": "64",
+    })
+
+    # Remaining arch spellings that differ from rustc's target_arch.
+    _assert_attrs(env, "i686-unknown-linux-gnu", {
+        "target_arch": "x86",
+        "target_pointer_width": "32",
+    })
+    _assert_attrs(env, "bpfel-unknown-none", {"target_arch": "bpf"})
+
+    # Endianness is read from the RAW arch, which is where the byte order is
+    # spelled — normalizing first would make these two indistinguishable.
+    _assert_attrs(env, "bpfeb-unknown-none", {
+        "target_arch": "bpf",
+        "target_endian": "big",
+    })
+    _assert_attrs(env, "powerpc64le-unknown-linux-gnu", {
+        "target_arch": "powerpc64",
+        "target_endian": "little",
+    })
+    _assert_attrs(env, "powerpc64-unknown-linux-gnu", {
+        "target_arch": "powerpc64",
+        "target_endian": "big",
+    })
+
+    # "eabi" is a substring of "eabihf"; the longer ABI must win.
+    _assert_attrs(env, "armv7-unknown-linux-gnueabihf", {
+        "target_arch": "arm",
+        "target_abi": "eabihf",
+    })
+
+    # Unchanged: 4-part triples stay positional.
+    _assert_attrs(env, "x86_64-unknown-linux-gnu", {
+        "target_arch": "x86_64",
+        "target_vendor": "unknown",
+        "target_os": "linux",
+        "target_env": "gnu",
+        "target_family": "unix",
+    })
+    _assert_attrs(env, "aarch64-apple-darwin", {
+        "target_arch": "aarch64",
+        "target_vendor": "apple",
+        "target_os": "macos",
+    })
+    _assert_attrs(env, "x86_64-pc-windows-msvc", {
+        "target_arch": "x86_64",
+        "target_vendor": "pc",
+        "target_os": "windows",
+        "target_family": "windows",
+        "windows": True,
+    })
+
+    return unittest.end(env)
+
+triple_normalization_test = unittest.make(_triple_normalization_test_impl)
+
 def cfg_parser_tests():
     return unittest.suite(
         "cfg_parser_tests",
         cfg_parser_smoke_test,
+        triple_normalization_test,
     )
