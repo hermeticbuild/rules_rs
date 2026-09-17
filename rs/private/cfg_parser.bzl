@@ -1,7 +1,6 @@
-def _get(xs, index, default):
-    if index < len(xs):
-        return xs[index]
-    return default
+"""Parses and evaluates Cargo cfg predicates for Rust target triples."""
+
+load(":cfg_target_data.bzl", "CFG_ATOMS", "CFG_ATOM_IDS_BY_TRIPLE")
 
 def _emit_pending(frames, pending_ident, pending_eq_key):
     # Moves any pending identifier into a predicate node in the current frame.
@@ -67,6 +66,15 @@ def _cfg_tokenize(expr):
 ############################################
 
 def cfg_parse(expr):
+    """Parses a cfg predicate into its evaluator representation.
+
+    Args:
+      expr: The cfg predicate body to parse.
+
+    Returns:
+      A tuple containing the parsed syntax tree and whether it uses package
+      feature cfgs.
+    """
     tokens = _cfg_tokenize(expr)
     frames = [{"fn": "__ROOT__", "args": []}]
     pending_ident = None
@@ -141,114 +149,36 @@ def cfg_parse(expr):
 
     return root_args[0], uses_feature_cfg
 
-############################################
-# Triple → cfg attribute derivation
-############################################
-
-def _normalize_os(os_raw):
-    if os_raw == "darwin":
-        return "macos"
-    return os_raw
-
-def _normalize_arch(arch_raw):
-    # RISC-V target triples encode the enabled ISA extensions in their first
-    # component, while Rust's cfg(target_arch) exposes only the register width.
-    if arch_raw.startswith("riscv32"):
-        return "riscv32"
-    if arch_raw.startswith("riscv64"):
-        return "riscv64"
-    return arch_raw
-
-def _family_for_os(os_name):
-    if os_name == "windows":
-        return "windows"
-    if os_name in [
-        "linux", "macos", "ios", "freebsd", "netbsd", "openbsd", "dragonfly",
-        "android", "solaris", "illumos", "aix", "haiku", "hurd",
-    ]:
-        return "unix"
-    return ""
-
-def _family_for_arch_and_os(arch, os_name):
-    if arch.startswith("wasm"):
-        return "wasm"
-    return _family_for_os(os_name)
-
-def _pointer_width_for_arch(arch):
-    # Common targets
-    arch64 = ["s390x","bpfel","bpfeb"]
-    if "64" in arch or arch in arch64:
-        return "64"
-
-    arch32 = [
-        "i686","i586","i386","x86","arm","armv7","thumbv7","thumbv6","mips","mipsel",
-        "powerpc","ppc","sparc","riscv32","wasm32","m68k","loongarch32",
-    ]
-    if "32" in arch or arch in arch32:
-        return "32"
-
-    return "64"
-
-def _endian_for_arch(arch):
-    big_set = ["m68k","s390x","sparc","sparc64","powerpc","powerpc64"]
-    if arch.endswith("be") or arch.endswith("eb") or arch in big_set:
-        return "big"
-    if arch.startswith("mips") and (not arch.endswith("el")):
-        return "big"
-
-    # Most contemporary targets are little-endian:
-    return "little"
-
-def _abi_from_env(env):
-    # Very rough: surface a few commonly referenced ABIs
-    abi_pieces = ["eabi", "eabihf", "elf", "gnuabi64"]
-    for abi_piece in abi_pieces:
-        if abi_piece in env:
-            return abi_piece
-    return ""
-
-def _target_has_feature(ctx, feature):
-    # x86_64 baseline implies SSE2.
-    if feature == "sse2":
-        return ctx["target_arch"] == "x86_64"
-
-    # AArch64 baseline implies NEON.
-    if feature == "neon":
-        return ctx["target_arch"] == "aarch64"
-
-    return False
-
-def triple_to_cfg_attrs(triple):
-    parts = triple.split("-")
-    arch_part = _normalize_arch(_get(parts, 0, ""))
-    vendor_part = _get(parts, 1, "unknown")
-    os_raw_part = _get(parts, 2, "none")
-    env_part = "-".join(parts[3:])
-    os_norm = _normalize_os(os_raw_part)
-    fam = _family_for_arch_and_os(arch_part, os_norm)
-    width = _pointer_width_for_arch(arch_part)
-    endian = _endian_for_arch(arch_part)
-    abi_guess = _abi_from_env(env_part)
-
-    return {
+def _cfg_context(triple, atoms):
+    ctx = {
         "_triple": triple,
-
-        "target_arch": arch_part,
-        "target_vendor": vendor_part,
-        "target_os": os_norm,
-        "target_env": env_part,
-        "target_family": fam,
-        "target_endian": endian,
-        "target_pointer_width": width,
-        "target_abi": abi_guess,
-
-        # convenience booleans for bare predicates
         "true": True,
         "false": False,
-        "unix": fam == "unix",
-        "windows": fam == "windows",
-        "wasm": fam == "wasm",
     }
+    for atom in atoms:
+        pieces = atom.split("=", 1)
+        if len(pieces) == 1:
+            ctx[atom] = True
+            continue
+
+        key = pieces[0]
+        encoded_value = pieces[1]
+        value = encoded_value[1:-1]
+        key_values = ctx.get(key)
+        if key_values == None:
+            key_values = set()
+            ctx[key] = key_values
+        key_values.add(value)
+    return ctx
+
+def cfg_atoms_for_triple(triple):
+    atom_ids = CFG_ATOM_IDS_BY_TRIPLE.get(triple)
+    if atom_ids == None:
+        fail("Unsupported target triple '{}'; expected one of ALL_TARGET_TRIPLES".format(triple))
+    return [CFG_ATOMS[atom_id] for atom_id in atom_ids]
+
+def triple_to_cfg_attrs(triple):
+    return _cfg_context(triple, cfg_atoms_for_triple(triple))
 
 ############################################
 # Evaluator (non-recursive; explicit stack)
@@ -257,17 +187,7 @@ def triple_to_cfg_attrs(triple):
 def _eval_eq(ctx, key, value, features):
     if key == "feature":
         return value in features
-    if key == "target_feature":
-        return _target_has_feature(ctx, value)
-    known = [
-        "target_os","target_family","target_arch","target_env",
-        "target_vendor","target_endian","target_pointer_width","target_abi",
-    ]
-    if key in known:
-        return ctx.get(key, "") == value
-    # Unknown keys evaluate to False
-    # fail("Unknown key %s" % key)
-    return False
+    return value in ctx.get(key, ())
 
 def _eval_pred(ctx, name):
     return ctx.get(name, False)
