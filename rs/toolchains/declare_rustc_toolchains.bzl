@@ -20,6 +20,44 @@ def _rustc_flags_to_select(rustc_flags_by_triple):
         {"//conditions:default": []},
     )
 
+def _stdlib_linkflags_for_target_triple(target_triple):
+    target = _parse_triple(target_triple)
+
+    if target.system == "android":
+        return ["-ldl", "-llog"]
+
+    if target.system == "freebsd":
+        return ["-lexecinfo", "-lpthread"]
+
+    if target.system == "ios":
+        return ["-lSystem", "-lobjc", "-Wl,-framework,Security", "-Wl,-framework,Foundation", "-lresolv"]
+
+    if target.system == "macos":
+        return ["-lSystem", "-lresolv"]
+
+    if target.system == "netbsd":
+        return ["-lpthread", "-lrt"]
+
+    if target.system == "nixos":
+        return ["-ldl", "-lpthread"]
+
+    if target.system == "openbsd":
+        return ["-lpthread"]
+
+    if target.system == "windows" and target.abi in ("gnu", "gnullvm"):
+        return ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"]
+
+    if target.system == "windows" and target.abi == "msvc":
+        return ["advapi32.lib", "ws2_32.lib", "userenv.lib", "Bcrypt.lib"]
+
+    return []
+
+def _stdlib_linkflags_to_select(targets):
+    return select(
+        {"@rules_rs//rs/platforms/config:" + target: _stdlib_linkflags_for_target_triple(target) for target in targets} |
+        {"//conditions:default": []},
+    )
+
 def _component(component, triple, default):
     component = component.get(triple) if type(component) == "dict" else component
     return component or rust_toolchain_component_label(default)
@@ -170,24 +208,7 @@ def declare_rustc_toolchains(
                 "@platforms//os:windows": ".dll",
                 "//conditions:default": ".so",
             }),
-            stdlib_linkflags = select({
-                "@platforms//os:android": ["-ldl", "-llog"],
-                "@platforms//os:freebsd": ["-lexecinfo", "-lpthread"],
-                "@platforms//os:macos": ["-lSystem", "-lresolv"],
-                "@platforms//os:netbsd": ["-lpthread", "-lrt"],
-                "@platforms//os:nixos": ["-ldl", "-lpthread"],
-                "@platforms//os:openbsd": ["-lpthread"],
-                "@platforms//os:ios": ["-lSystem", "-lobjc", "-Wl,-framework,Security", "-Wl,-framework,Foundation", "-lresolv"],
-                "@llvm//constraints/windows/abi:gnu": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
-                "@llvm//constraints/windows/abi:gnullvm": ["-lws2_32", "-luserenv", "-lbcrypt", "-lntdll", "-lsynchronization"],
-                "@llvm//constraints/windows/abi:msvc": [
-                    "advapi32.lib",
-                    "ws2_32.lib",
-                    "userenv.lib",
-                    "Bcrypt.lib",
-                ],
-                "//conditions:default": [],
-            }),
+            stdlib_linkflags = _stdlib_linkflags_to_select(target_triples),
             default_edition = edition,
             extra_exec_rustc_flags = _rustc_flags_to_select(extra_exec_rustc_flags),
             extra_rustc_flags = _rustc_flags_to_select(extra_rustc_flags),
