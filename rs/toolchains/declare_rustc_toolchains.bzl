@@ -271,7 +271,7 @@ def declare_rustc_toolchains(
                     "@platforms//cpu:" + exec_triple.arch,
                 ],
                 target_settings = [
-                    ":" + target_triples_label,
+                    target_triples_label,
                     "@rules_rs//rs/toolchains:bpf_targets" if is_bpf else "@rules_rs//rs/toolchains:non_bpf_targets",
                     bootstrap_setting,
                     "@rules_rust//rust/toolchain/channel:" + channel,
