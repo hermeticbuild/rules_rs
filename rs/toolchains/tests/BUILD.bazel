@@ -1,0 +1,13 @@
+load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load(":declare_rustc_toolchains_test.bzl", "declare_rustc_toolchains_test_suite")
+
+declare_rustc_toolchains_test_suite(name = "declare_rustc_toolchains_tests")
+
+bzl_library(
+    name = "declare_rustc_toolchains_test",
+    srcs = ["declare_rustc_toolchains_test.bzl"],
+    deps = [
+        "//rs/toolchains:declare_rustc_toolchains",
+        "@bazel_skylib//lib:unittest",
+    ],
+)

@@ -45,6 +45,9 @@ def declare_rustc_toolchains(
         rust_std = None):
     """Declares generated or custom Rust compiler toolchains.
 
+    Register the generated toolchain targets before default toolchains when
+    these toolchains should take precedence for their supported target triples.
+
     Args:
       name: Target-name prefix for separately declared toolchains.
       version: Rust compiler version.
@@ -52,7 +55,8 @@ def declare_rustc_toolchains(
       rustc: Optional compiler label or labels keyed by execution triple.
       exec_triples: Supported execution triples; defaults to compiler dictionary
         keys or all supported execution triples.
-      target_triples: Supported target triples; defaults to all supported triples.
+      target_triples: Nonempty list of supported target triples; defaults to all
+        supported triples. Generated toolchains only match these target triples.
       extra_rustc_flags: Additional compiler flags keyed by target triple.
       extra_exec_rustc_flags: Additional compiler flags keyed by execution triple.
       rust_doc: Optional rustdoc label or labels keyed by execution triple.
@@ -65,6 +69,9 @@ def declare_rustc_toolchains(
       bpf_linker: Optional bpf-linker label or labels keyed by execution triple.
       rust_std: Optional standard-library label or labels keyed by target triple.
     """
+    if not target_triples:
+        fail("target_triples must not be empty")
+
     if type(rustc) == "dict":
         for exec_triple in rustc:
             if exec_triple not in SUPPORTED_EXEC_TRIPLES:
@@ -90,6 +97,20 @@ def declare_rustc_toolchains(
             default_rust_std = "@%s//:rust_std-%s" % (stdlib_repo, target_triple)
         rust_std_select[config_label] = _component(rust_std, target_triple, default_rust_std)
         target_triple_select[config_label] = target_triple
+
+    target_triples_label = name + "_target_triples"
+    native.alias(
+        name = target_triples_label,
+        actual = select({config: config for config in target_triple_select} | {
+            # When no declared triple matches, this config_setting is false.
+            "//conditions:default": "@rules_rs//rs/platforms/config:" + target_triples[0],
+        }),
+    )
+
+    # Allow wildcard analysis outside target_triples. The target_settings on
+    # each toolchain prevent these defaults from being used for compilation.
+    rust_std_select["//conditions:default"] = "@rules_rs//rs/private:empty_stdlib"
+    target_triple_select["//conditions:default"] = target_triples[0]
 
     native.alias(
         name = rust_std_label,
@@ -250,6 +271,7 @@ def declare_rustc_toolchains(
                     "@platforms//cpu:" + exec_triple.arch,
                 ],
                 target_settings = [
+                    ":" + target_triples_label,
                     "@rules_rs//rs/toolchains:bpf_targets" if is_bpf else "@rules_rs//rs/toolchains:non_bpf_targets",
                     bootstrap_setting,
                     "@rules_rust//rust/toolchain/channel:" + channel,
