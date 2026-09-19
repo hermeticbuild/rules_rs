@@ -64,6 +64,22 @@ use_repo(crate, "crates")
 
 `platform_triples` should include every exec and target triple that can participate in the build. For the common case, include the host triples you use locally and in CI plus the target triples you build for.
 
+### Toolchain declarations in dependencies
+
+When multiple modules declare `toolchains.toolchain` with the same `name`
+(defaulting to `default_rust_toolchains`), a declaration in the root module
+controls the complete configuration. Otherwise, `rules_rs` independently selects
+the highest Rust version, edition, rustfmt version, and rust-analyzer version.
+Omitted rustfmt and rust-analyzer versions use each declaration's Rust version
+before comparison. Stable versions are compared numerically; dated beta or
+nightly versions are compared by date within the same channel.
+
+Dependencies that mix stable, beta, or nightly versions, or specify different
+`extra_rustc_flags` or `extra_exec_rustc_flags`, must use different toolchain repo
+names or be overridden by a root-module declaration. Conflicting declarations
+within the root module are errors. Without a root override, any declaration with
+`use_rust_redist = False` disables redistribution for the selected versions.
+
 ### Rust toolchain archives
 
 Stable Rust toolchains use Zstandard-compressed archives from

@@ -23,6 +23,7 @@ load("//rs/private:rustc_src_repository.bzl", "rustc_src_repository")
 load("//rs/private:rustfmt_repository.bzl", "rustfmt_repository")
 load("//rs/private:stdlib_repository.bzl", "stdlib_repository")
 load("//rs/private:toolchains_repository.bzl", "toolchains_repository")
+load("//rs/toolchains:toolchain_config.bzl", "resolve_toolchain_configs")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
 
 _DEFAULT_RUSTC_VERSION = "1.92.0"
@@ -159,15 +160,10 @@ def _toolchains_impl(mctx):
             root_module_name = mod.name
             break
 
-    version_tags = []
-    had_tags = True
-    for mod in mctx.modules:
-        for tag in mod.tags.toolchain:
-            version_tags.append(tag)
-
-    if not version_tags:
-        had_tags = False
-        version_tags.append(struct(
+    repo_configs = resolve_toolchain_configs(mctx.modules)
+    had_tags = bool(repo_configs)
+    if not had_tags:
+        repo_configs[_DEFAULT_TOOLCHAIN_REPO_NAME] = struct(
             name = _DEFAULT_TOOLCHAIN_REPO_NAME,
             version = _DEFAULT_RUSTC_VERSION,
             use_rust_redist = True,
@@ -176,7 +172,8 @@ def _toolchains_impl(mctx):
             edition = _DEFAULT_EDITION,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
-        ))
+        )
+    version_tags = repo_configs.values()
 
     versions = set([])
     rustfmt_versions = set([])
@@ -523,40 +520,34 @@ def _toolchains_impl(mctx):
     # user modules are not asked to import it.
     direct_deps = ["rs_rust_host_tools"] if root_module_name == "rules_rs" else []
     direct_dev_deps = []
-    repo_configs = {}
     for tag in version_tags:
-        repo_name = tag.name
-        rustfmt_version = tag.rustfmt_version or tag.version
-        rust_analyzer_version = tag.rust_analyzer_version or tag.version
-        existing = repo_configs.get(repo_name)
-        if existing and (
-            existing.version != tag.version or
-            (existing.rustfmt_version or existing.version) != rustfmt_version or
-            (existing.rust_analyzer_version or existing.version) != rust_analyzer_version or
-            existing.edition != tag.edition or
-            existing.extra_rustc_flags != tag.extra_rustc_flags or
-            existing.extra_exec_rustc_flags != tag.extra_exec_rustc_flags
-        ):
-            fail("Toolchain repo {} has conflicting tag configurations".format(repo_name))
+        toolchains_repository(
+            name = tag.name,
+            version = tag.version,
+            rustfmt_version = tag.rustfmt_version or tag.version,
+            rust_analyzer_version = tag.rust_analyzer_version or tag.version,
+            edition = tag.edition,
+            extra_rustc_flags = tag.extra_rustc_flags,
+            extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
+            target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES,
+        )
 
-        if not existing:
-            repo_configs[repo_name] = tag
-            toolchains_repository(
-                name = repo_name,
-                version = tag.version,
-                rustfmt_version = rustfmt_version,
-                rust_analyzer_version = rust_analyzer_version,
-                edition = tag.edition,
-                extra_rustc_flags = tag.extra_rustc_flags,
-                extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
-                target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES,
-            )
-        is_dev_dependency = had_tags and mctx.is_dev_dependency(tag)
-        if is_dev_dependency:
-            if repo_name not in direct_dev_deps:
-                direct_dev_deps.append(repo_name)
-        elif repo_name not in direct_deps:
-            direct_deps.append(repo_name)
+    # Dependency tags do not describe the root module's direct dependencies.
+    # is_dev_dependency requires the original tag, not a resolved configuration.
+    for mod in mctx.modules:
+        if not mod.is_root:
+            continue
+        for tag in mod.tags.toolchain:
+            deps = direct_dev_deps if mctx.is_dev_dependency(tag) else direct_deps
+            if tag.name not in deps:
+                deps.append(tag.name)
+    if (_DEFAULT_TOOLCHAIN_REPO_NAME in repo_configs and
+        _DEFAULT_TOOLCHAIN_REPO_NAME not in direct_deps and
+        _DEFAULT_TOOLCHAIN_REPO_NAME not in direct_dev_deps):
+        # The default repo can be imported without a toolchain tag.
+        deps = direct_deps if mctx.root_module_has_non_dev_dependency else direct_dev_deps
+        deps.append(_DEFAULT_TOOLCHAIN_REPO_NAME)
+    direct_dev_deps = [name for name in direct_dev_deps if name not in direct_deps]
 
     for tag in miri_repo_tags:
         if tag.name in repo_configs:

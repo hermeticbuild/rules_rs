@@ -1,4 +1,5 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load(":toolchain_config_test.bzl", "toolchain_config_tests")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -77,6 +78,7 @@ bzl_library(
     name = "module_extension",
     srcs = ["module_extension.bzl"],
     deps = [
+        ":toolchain_config",
         ":toolchain_utils",
         "//rs/experimental/miri/private:miri_repository",
         "//rs/platforms:triples",
@@ -101,3 +103,20 @@ bzl_library(
     name = "toolchain_utils",
     srcs = ["toolchain_utils.bzl"],
 )
+
+bzl_library(
+    name = "toolchain_config",
+    srcs = ["toolchain_config.bzl"],
+)
+
+bzl_library(
+    name = "toolchain_config_test",
+    testonly = True,
+    srcs = ["toolchain_config_test.bzl"],
+    deps = [
+        ":toolchain_config",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+toolchain_config_tests(name = "toolchain_config_tests")
