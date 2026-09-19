@@ -1,0 +1,14 @@
+[package]
+name = "rust-crate-example"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+normal-dependency = { path = "../normal-dependency" }
+
+[dev-dependencies]
+dev-dependency = { path = "../dev-dependency" }
+normal-dependency = { path = "../normal-dependency" }
+
+[build-dependencies]
+build-dependency = { path = "../build-dependency" }
