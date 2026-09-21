@@ -14,11 +14,12 @@ def crate_aliases(dep_data, normal = False, normal_dev = False, build = False, t
         if "build_script_profiles" in dep_data:
             profiles = dep_data["build_script_profiles"]
             profiles = profiles.values() if target_triple == None else [profiles[target_triple]]
-            build_aliases = [profile["aliases"] for profile in profiles]
-            if build_aliases:
-                if any([value != build_aliases[0] for value in build_aliases[1:]]):
-                    fail("Build-script aliases differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl, or pass target_triple explicitly.")
-                aliases.update(build_aliases[0])
+            if profiles:
+                build_aliases = profiles[0]["aliases"]
+                for profile in profiles:
+                    if profile["aliases"] != build_aliases:
+                        fail("Build-script aliases differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl, or pass target_triple explicitly.")
+                aliases.update(build_aliases)
         else:
             aliases.update(dep_data.get("build_aliases", {}))
     return aliases
@@ -33,9 +34,9 @@ def merge_structured_dep_specs(specs, platforms, filter_prefix):
                 merged_deps.add(dep)
 
         for platform, deps in per_platform_items.items():
-            filtered = [dep for dep in deps if not filter_prefix or dep.startswith(filter_prefix)]
-            if filtered:
-                merged_by_platform.setdefault(platform, set()).update(filtered)
+            if filter_prefix:
+                deps = [dep for dep in deps if dep.startswith(filter_prefix)]
+            merged_by_platform[platform].update(deps)
 
     deps, per_platform = compute_select(merged_deps, merged_by_platform)
     return sorted(deps), per_platform
@@ -58,10 +59,10 @@ def all_crate_deps(
             execution_platforms = dep_data["build_script_platforms"]
             profiles = dep_data["build_script_profiles"]
             profiles = profiles.values() if target_triple == None else [profiles[target_triple]]
-            build_deps = [profile["deps"] for profile in profiles]
-            execution_deps = build_deps[0] if build_deps else {}
-            if any([deps != execution_deps for deps in build_deps[1:]]):
-                fail("Build-script dependencies differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl, or pass target_triple explicitly.")
+            execution_deps = profiles[0]["deps"] if profiles else {}
+            for profile in profiles:
+                if profile["deps"] != execution_deps:
+                    fail("Build-script dependencies differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl, or pass target_triple explicitly.")
             by_platform = {}
             for triple, deps in execution_deps.items():
                 by_platform.setdefault(execution_platforms[triple], []).extend(deps)

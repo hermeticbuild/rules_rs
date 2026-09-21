@@ -185,7 +185,8 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    conditional_crate_features = {conditional_crate_features},
 {indent}    crate_root = {crate_root},
 {indent}    edition = {edition},
-{rustc_env_attr}{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
+{indent}    rustc_env = {rustc_env},
+{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
 {indent}    tags = {tags},
 {indent}    target_compatible_with = {target_compatible_with},
 {indent}    links = {links},
@@ -255,7 +256,6 @@ def _render_rust_crate_call(
         )
     cargo_manifest_env = {"CARGO_MANIFEST_PATH": "$(execpath :Cargo.toml)"}
     rustc_env = cargo_manifest_env | getattr(attr, "rustc_env", {})
-    rustc_env_attr = "%s    rustc_env = %s,\n" % (indent, repr(rustc_env))
     skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""
     build_deps_by_target_attr = ""
     if any([any(deps.values()) for deps in build_deps_by_target.values()]):
@@ -284,7 +284,7 @@ def _render_rust_crate_call(
         conditional_crate_features = repr(conditional_crate_features),
         crate_root = values["crate_root"],
         edition = values["edition"],
-        rustc_env_attr = rustc_env_attr,
+        rustc_env = repr(rustc_env),
         rustc_flags = repr(rustc_flags),
         conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),

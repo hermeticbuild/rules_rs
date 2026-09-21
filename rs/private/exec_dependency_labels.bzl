@@ -17,7 +17,7 @@ def _aliases_for_deps(aliases, deps):
     return {dep: alias for dep, alias in aliases.items() if dep in labels}
 
 def _dependency_map(deps, triples):
-    return {triple: sorted(deps.get(triple, [])) for triple in triples}
+    return {triple: deps.get(triple, []) for triple in triples}
 
 def _resolution_node(fq, origin, resolution, target_build_deps, target_build_aliases, exec_triples):
     features = {

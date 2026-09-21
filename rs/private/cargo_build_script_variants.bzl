@@ -3,7 +3,7 @@
 # buildifier: disable=bzl-visibility
 load("@rules_rust//cargo/private:cargo_build_script.bzl", "name_to_crate_name", "name_to_pkg_name")
 load("//rs:cargo_build_script.bzl", "cargo_build_script")
-load(":select_utils.bzl", "compute_select", "platform_label")
+load(":select_utils.bzl", "platform_label", "shared_and_per_platform")
 
 def build_script_variants(
         triples,
@@ -36,16 +36,6 @@ def build_script_variants(
             variants[key] = dict(recipe, triples = [])
         variants[key]["triples"].append(triple)
     return variants.values()
-
-def _execution_deps(deps, use_legacy_rules_rust_platforms):
-    by_platform = {}
-    for triple, labels in deps.items():
-        platform = platform_label(triple, use_legacy_rules_rust_platforms)
-        by_platform.setdefault(platform, []).extend(labels)
-    common, branches = compute_select([], by_platform)
-    if branches:
-        return sorted(common) + select(branches | {"//conditions:default": []})
-    return sorted(common)
 
 def cargo_build_script_for_targets(
         name,
@@ -108,10 +98,13 @@ def cargo_build_script_for_targets(
             script_kwargs["rustc_flags"] = kwargs.get("rustc_flags", []) + [
                 "--codegen=metadata=-" + representative.replace("-", "_"),
             ]
+        script_deps, conditional_deps = shared_and_per_platform(variant["deps"], use_legacy_rules_rust_platforms)
+        if conditional_deps:
+            script_deps += select(conditional_deps | {"//conditions:default": []})
         cargo_build_script(
             name = script_name,
             crate_features = crate_features + variant["crate_features"],
-            deps = deps + _execution_deps(variant["deps"], use_legacy_rules_rust_platforms),
+            deps = deps + script_deps,
             aliases = variant["aliases"] | aliases,
             **script_kwargs
         )

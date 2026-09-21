@@ -1,7 +1,7 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:resolver.bzl", "collect_exec_build_dependencies", "resolve")
-load("//rs/private:select_utils.bzl", "compute_select", "platform_label")
+load("//rs/private:select_utils.bzl", "platform_label", "shared_and_per_platform")
 load("//rs/private:semver.bzl", "select_matching_version")
 
 def fq_crate(name, version):
@@ -25,18 +25,6 @@ def add_to_dict(d, k, v):
 
 def exclude_deps_from_features(features):
     return [f for f in features if not f.startswith("dep:")]
-
-def shared_and_per_platform(platform_items, use_legacy_rules_rust_platforms):
-    if not platform_items:
-        return [], {}
-
-    by_platform = {}
-    for triple, items in platform_items.items():
-        platform = platform_label(triple, use_legacy_rules_rust_platforms)
-        by_platform.setdefault(platform, set()).update(items)
-
-    items, per_platform = compute_select([], by_platform)
-    return sorted(items), per_platform
 
 def render_string_list(items):
     return ",\n            ".join(['"%s"' % item for item in sorted(items)])

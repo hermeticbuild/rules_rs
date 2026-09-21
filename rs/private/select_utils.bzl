@@ -25,3 +25,12 @@ def compute_select(non_platform_items, platform_items):
             branches[platform] = sorted(items)
 
     return common_items, branches
+
+def shared_and_per_platform(platform_items, use_legacy_rules_rust_platforms):
+    by_platform = {}
+    for triple, items in platform_items.items():
+        platform = platform_label(triple, use_legacy_rules_rust_platforms)
+        by_platform.setdefault(platform, set()).update(items)
+
+    items, per_platform = compute_select([], by_platform)
+    return sorted(items), per_platform

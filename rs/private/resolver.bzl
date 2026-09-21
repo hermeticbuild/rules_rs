@@ -48,7 +48,6 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
         package_changed = _propagate_feature_enablement(
             new_dirty_package_indices,
             package,
-            feature_resolutions,
             cfg_attrs_by_triple,
             debug,
             include_build_dependencies,
@@ -112,11 +111,11 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
 def _propagate_feature_enablement(
         dirty_package_indices,
         package,
-        feature_resolutions,
         cfg_attrs_by_triple,
         debug,
         include_build_dependencies):
     package_changed = False
+    feature_resolutions = package["feature_resolutions"]
     possible_features = feature_resolutions.possible_features
 
     for triple, feature_set in feature_resolutions.features_enabled.items():
