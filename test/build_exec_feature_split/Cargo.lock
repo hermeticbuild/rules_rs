@@ -17,10 +17,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "feature-split-build-macro"
+version = "0.1.0"
+dependencies = [
+ "feature-split-shared",
+]
+
+[[package]]
 name = "feature-split-consumer"
 version = "0.1.0"
 dependencies = [
  "build-only-helper",
+ "feature-split-build-macro",
  "feature-split-macro",
  "feature-split-shared",
 ]
