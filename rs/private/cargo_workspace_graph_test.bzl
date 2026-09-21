@@ -273,7 +273,6 @@ def _resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl(ctx
     triples = [triple]
     packages = []
     resolutions = []
-    resolutions_by_crate = {}
     for index in range(60):
         name = "chain-%s" % index
         possible_deps = []
@@ -291,7 +290,6 @@ def _resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl(ctx
 
         resolution = new_feature_resolutions(index, possible_deps, possible_features, triples)
         resolutions.append(resolution)
-        resolutions_by_crate["%s-1.0.0" % name] = resolution
         packages.append({
             "feature_resolutions": resolution,
             "name": name,
@@ -300,7 +298,7 @@ def _resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl(ctx
 
     resolutions[-1].active.add(triple)
     resolutions[-1].features_enabled[triple].add("forward")
-    resolve(None, packages, resolutions_by_crate, {}, False)
+    resolve(None, packages, {}, False)
 
     asserts.true(env, "forward" in resolutions[0].features_enabled[triple])
     asserts.equals(env, ["//:chain-0"], sorted(resolutions[1].deps[triple]))

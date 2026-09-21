@@ -103,8 +103,20 @@ def _split_dependency_labels_test_impl(ctx):
     asserts.equals(env, _build_scripts(target_call), _build_scripts(exec_call))
     asserts.true(env, 'binaries = {"example-cli": "src/main.rs"}' in target_call)
     asserts.true(env, "binaries = {}" in exec_call)
-    asserts.true(env, "target_compatible_with = None" in target_call)
-    asserts.true(env, "target_compatible_with = None" in exec_call)
+    for call in [target_call, exec_call]:
+        asserts.true(env, "target_compatible_with = select({" in call)
+        asserts.true(env, '"@rules_rs//rs/platforms/config:%s": []' % _LINUX in call)
+        asserts.true(env, '"//conditions:default": ["@platforms//:incompatible"]' in call)
+
+    rendered = render_rust_crate_call(
+        _attrs(variants = [_variant(), _variant(name_suffix = "_exec", crate_features_select = {_MACOS: []})]),
+        _values(),
+    )
+    target_call, exec_call = rendered.split("rust_crate(")[1:]
+    for call, triple, other in [(target_call, _LINUX, _MACOS), (exec_call, _MACOS, _LINUX)]:
+        compatibility = call.split("target_compatible_with = ")[1].split("    links =")[0]
+        asserts.true(env, triple in compatibility)
+        asserts.false(env, other in compatibility)
     return unittest.end(env)
 
 def _separate_build_aliases_test_impl(ctx):
@@ -137,7 +149,7 @@ def _separate_build_aliases_test_impl(ctx):
         asserts.equals(env, build_aliases[triple], build_scripts[triple]["aliases"])
         asserts.equals(env, build_deps[triple][_MACOS], build_scripts[triple]["deps"])
         asserts.equals(env, {}, build_scripts[triple]["deps_by_platform"])
-    asserts.false(env, "select(" in rendered)
+    asserts.equals(env, 1, rendered.count("select("))
     return unittest.end(env)
 
 def _merged_resolutions_test_impl(ctx):
@@ -164,13 +176,16 @@ def _merged_resolutions_test_impl(ctx):
         _values(),
     )
     asserts.equals(env, 1, len(rendered.split("rust_crate(")[1:]))
-    asserts.true(env, "triples = " + repr(sorted([_LINUX, _MACOS])) in rendered)
+    asserts.false(env, "    triples =" in rendered)
+    for triple in [_LINUX, _MACOS]:
+        asserts.true(env, '"@rules_rs//rs/platforms/config:%s": []' % triple in rendered)
     asserts.true(env, 'name = "example",' in rendered)
     asserts.false(env, 'name_suffix = "_exec"' in rendered)
     asserts.false(env, "dep:" in rendered)
-    asserts.true(env, 'crate_features = ["shared"]' in rendered)
-    asserts.true(env, 'conditional_crate_features = {"%s": ["macos"]}' % _MACOS in rendered)
-    asserts.true(env, "target_compatible_with = None" in rendered)
+    asserts.true(env, 'crate_features = ["shared"] + select({' in rendered)
+    asserts.true(env, '"@rules_rs//rs/platforms/config:%s": ["macos"]' % _MACOS in rendered)
+    asserts.false(env, "conditional_crate_features =" in rendered)
+    asserts.true(env, "target_compatible_with = select({" in rendered)
     for alias in ["normal_alias", "macos_alias", "build_alias", "macos_build_alias"]:
         asserts.true(env, alias in rendered)
     return unittest.end(env)
@@ -197,6 +212,18 @@ def _legacy_attributes_test_impl(ctx):
     asserts.true(env, "target_compatible_with = RESOLVED_PLATFORMS" in rendered)
     asserts.false(env, "build_deps_by_target" in rendered)
     asserts.false(env, "build_aliases_by_target" in rendered)
+
+    rendered = render_rust_crate_call(
+        _attrs(
+            crate_features = ["shared"],
+            crate_features_select = {_LINUX: ["gnu"], "x86_64-unknown-linux-musl": ["musl"], _MACOS: []},
+            use_legacy_rules_rust_platforms = True,
+        ),
+        _values(),
+    )
+    asserts.true(env, 'crate_features = ["shared"] + select({' in rendered)
+    asserts.true(env, '"@rules_rust//rust/platform:%s": ["musl"]' % _LINUX in rendered)
+    asserts.false(env, '"@rules_rust//rust/platform:%s": ["gnu"]' % _LINUX in rendered)
     return unittest.end(env)
 
 def _empty_build_matrices_test_impl(ctx):

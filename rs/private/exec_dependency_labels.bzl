@@ -72,7 +72,7 @@ def _remap_definition(node, exec_labels):
     build_deps = {}
     build_aliases = {}
     for triple, deps in node.build_deps_by_target.items():
-        build_labels = exec_labels.get(triple if node.origin == None else node.origin, {})
+        build_labels = exec_labels.get(triple, {}) if node.origin == None else labels
         build_deps[triple] = _remap_deps(deps, build_labels)
         build_aliases[triple] = _remap_aliases(node.build_aliases_by_target[triple], build_labels)
     return {
@@ -121,9 +121,6 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
     for resolutions in exec_resolutions_by_target.values():
         for resolution in resolutions.values():
             exec_triples.update(resolution.features_enabled)
-    for owners in target_build_deps.values():
-        for deps in owners.values():
-            exec_triples.update(deps)
     exec_triples = sorted(exec_triples)
 
     groups_by_crate = {}

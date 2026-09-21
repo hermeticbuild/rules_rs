@@ -181,9 +181,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    data = [
 {indent}        {data}
 {indent}    ],
-{extra_compile_data_attr}{indent}    crate_features = {crate_features},
-{indent}    triples = {triples},
-{indent}    conditional_crate_features = {conditional_crate_features},
+{extra_compile_data_attr}{indent}    crate_features = {crate_features}{conditional_crate_features},
 {indent}    crate_root = {crate_root},
 {indent}    edition = {edition},
 {indent}    rustc_env = {rustc_env},
@@ -213,14 +211,13 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     use_legacy_rules_rust_platforms = attr.use_legacy_rules_rust_platforms
-    resolved_crates = getattr(attr, "resolved_crates", "")
-    if resolved_crates:
-        variants = json.decode(resolved_crates)
+    if hasattr(attr, "resolved_crates"):
+        variants = json.decode(attr.resolved_crates)
         build_aliases = {}
         build_deps = []
         conditional_build_deps = ""
         common_crate_features = []
-        target_compatible_with = "None"
+        target_compatible_with = ""
     else:
         # rustc_src_repository supplies one resolution without repository attributes.
         variants = [{
@@ -267,7 +264,15 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     for variant in variants:
         name_suffix = variant["name_suffix"]
         crate_features_select = variant["crate_features_select"]
-        crate_features, conditional_crate_features = compute_select(common_crate_features, crate_features_select)
+        crate_features, feature_branches = compute_select(common_crate_features, crate_features_select)
+        feature_branches = {
+            platform_label(triple, use_legacy_rules_rust_platforms): repr(features)
+            for triple, features in feature_branches.items()
+        }
+        conditional_crate_features = ""
+        if feature_branches:
+            feature_branches["//conditions:default"] = "[]"
+            conditional_crate_features = " + " + _format_branches(feature_branches.items())
         deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), variant["deps_select"], use_legacy_rules_rust_platforms)
         build_scripts = []
         if values["build_script"] != "None":
@@ -294,15 +299,17 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
             data = list_indent.join(['"%s"' % str(d) for d in attr.data]),
             extra_compile_data_attr = extra_compile_data_attr,
             crate_features = repr(sorted(crate_features)),
-            triples = repr(crate_features_select.keys()),
-            conditional_crate_features = repr(conditional_crate_features),
+            conditional_crate_features = conditional_crate_features,
             crate_root = values["crate_root"],
             edition = values["edition"],
             rustc_env = repr(rustc_env),
             rustc_flags = repr(rustc_flags),
             conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
             tags = repr(attr.crate_tags),
-            target_compatible_with = target_compatible_with,
+            target_compatible_with = target_compatible_with or _format_branches(({
+                platform_label(triple, use_legacy_rules_rust_platforms): "[]"
+                for triple in crate_features_select
+            } | {"//conditions:default": '["@platforms//:incompatible"]'}).items()),
             links = values["links"],
             build_script = values["build_script"],
             build_scripts = repr(build_scripts),

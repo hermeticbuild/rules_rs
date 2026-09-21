@@ -1,7 +1,7 @@
 """Tests for selecting build-script requirements before the exec transition."""
 
-load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cargo_build_script_variants.bzl", "build_script_variants")
+load("@bazel_skylib//lib:unittest.bzl", "asserts", "loadingtest", "unittest")
+load(":cargo_build_script_variants.bzl", "build_script_variants", "cargo_build_script_for_targets")
 
 _LINUX = "x86_64-unknown-linux-gnu"
 _MACOS = "aarch64-apple-darwin"
@@ -167,6 +167,33 @@ common_features_preserve_target_domain_test = unittest.make(_common_features_pre
 legacy_platform_dependencies_share_script_test = unittest.make(_legacy_platform_dependencies_share_script_impl)
 
 def cargo_build_script_variants_tests():
+    name = "legacy_platform_build_script"
+    cargo_build_script_for_targets(
+        name = name,
+        build_scripts = build_script_variants(
+            {_MACOS: ["vendored"], _LINUX: [], "x86_64-unknown-linux-musl": ["vendored"]},
+            {},
+            {},
+            True,
+        ),
+        use_legacy_rules_rust_platforms = True,
+        tags = ["manual"],
+    )
+    native.alias(
+        name = name + "_expected",
+        actual = select({
+            "@rules_rust//rust/platform:" + _MACOS: ":" + name + "_" + _MACOS,
+            "@rules_rust//rust/platform:" + _LINUX: ":" + name + "_" + _MACOS,
+        }),
+        tags = ["manual"],
+    )
+    loadingtest.equals(
+        loadingtest.make(name),
+        "selection",
+        str(native.existing_rule(name + "_expected")["actual"]),
+        str(native.existing_rule(name)["actual"]),
+    )
+
     return unittest.suite(
         "cargo_build_script_variants_tests",
         identical_recipes_share_script_test,

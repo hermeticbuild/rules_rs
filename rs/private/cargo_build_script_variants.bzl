@@ -65,27 +65,28 @@ def cargo_build_script_for_targets(
     """
 
     split = len(build_scripts) > 1
+    script_kwargs = dict(kwargs) if split else kwargs
     if split:
         branches = {}
 
         # Preserve the environment derived by rules_rust from the original name.
         if kwargs.get("pkg_name") == None:
-            kwargs["pkg_name"] = name_to_pkg_name(name)
+            script_kwargs["pkg_name"] = name_to_pkg_name(name)
         rustc_env = dict(kwargs.get("rustc_env", {}))
         rustc_env.setdefault("CARGO_CRATE_NAME", name_to_crate_name(name_to_pkg_name(name)))
-        kwargs["rustc_env"] = rustc_env
+        script_kwargs["rustc_env"] = rustc_env
+
+        # Wildcard builds must select the target platform through the alias.
+        if "manual" not in kwargs.get("tags", []):
+            script_kwargs["tags"] = kwargs.get("tags", []) + ["manual"]
 
     for variant in build_scripts:
         script_name = name
-        script_kwargs = dict(kwargs) if split else kwargs
         if split:
-            # Wildcard builds must select the target platform through the alias.
-            if "manual" not in kwargs.get("tags", []):
-                script_kwargs["tags"] = kwargs.get("tags", []) + ["manual"]
             representative = variant["target_triples"][0]
             script_name = "%s_%s" % (name, representative)
             for triple in variant["target_triples"]:
-                branches[platform_label(triple, use_legacy_rules_rust_platforms)] = ":%s" % script_name
+                branches[triple] = ":" + script_name
 
             # Distinct build.rs definitions need distinct metadata when their
             # binaries share an exec configuration.
@@ -107,6 +108,10 @@ def cargo_build_script_for_targets(
         # This alias selects before cargo_build_script.script applies cfg=exec.
         native.alias(
             name = name,
-            actual = select(branches),
+            # Legacy platform labels can coincide; preserve triple ordering.
+            actual = select({
+                platform_label(triple, use_legacy_rules_rust_platforms): branches[triple]
+                for triple in sorted(branches)
+            }),
             **{key: kwargs[key] for key in ["tags", "testonly", "visibility", "target_compatible_with"] if key in kwargs}
         )

@@ -300,11 +300,14 @@ def _generate_hub_and_spokes(
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
     exec_resolutions_by_target = workspace_resolution.exec_resolutions_by_target
 
-    package_keys = [_fq_crate(package["name"], package["version"]) for package in packages]
+    package_by_fq = {
+        _fq_crate(package["name"], package["version"]): package
+        for package in packages
+    }
     dependency_variants = prepare_dependency_variants(
-        {fq: feature_resolutions_by_fq_crate[fq] for fq in package_keys},
+        {fq: feature_resolutions_by_fq_crate[fq] for fq in package_by_fq},
         {
-            triple: {fq: resolutions[fq] for fq in package_keys}
+            triple: {fq: resolutions[fq] for fq in package_by_fq}
             for triple, resolutions in exec_resolutions_by_target.items()
         },
         workspace_resolution.target_build_deps,
@@ -448,10 +451,6 @@ crate.annotation(
 
     mctx.report_progress("Initializing hub")
 
-    package_by_fq = {
-        _fq_crate(package["name"], package["version"]): package
-        for package in packages
-    }
     repo_root = _normalize_path(cargo_metadata["workspace_root"])
     workspace_package = _label_directory(cargo_lock_path)
 
@@ -617,11 +616,9 @@ filegroup(
     for target_name, lint_flags in package_lint_targets:
         hub_contents.append(_render_cargo_lints_target(target_name, lint_flags))
 
-    resolved_platforms = []
+    resolved_platforms = set()
     for triple in platform_triples:
-        platform = platform_label(triple, use_legacy_rules_rust_platforms)
-        if platform not in resolved_platforms:
-            resolved_platforms.append(platform)
+        resolved_platforms.add(platform_label(triple, use_legacy_rules_rust_platforms))
 
     build_triples = set()
     for owners in workspace_resolution.target_build_deps.values():

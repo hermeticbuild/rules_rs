@@ -8,7 +8,6 @@ load("//rs:rust_binary.bzl", "rust_binary")
 load("//rs:rust_library.bzl", "rust_library")
 load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
 load(":cargo_build_script_variants.bzl", "cargo_build_script_for_targets")
-load(":select_utils.bzl", "platform_label")
 
 def rust_crate(
         name,
@@ -21,8 +20,6 @@ def rust_crate(
         link_deps,
         data,
         crate_features,
-        triples,
-        conditional_crate_features,
         crate_root,
         edition,
         rustc_flags,
@@ -48,12 +45,6 @@ def rust_crate(
         skip_deps_verification = False,
         name_suffix = ""):
     build_script_name = "_bs" + name_suffix
-    if target_compatible_with == None:
-        target_compatible_with = select({
-            platform_label(triple, use_legacy_rules_rust_platforms): []
-            for triple in triples
-        } | {"//conditions:default": ["@platforms//:incompatible"]})
-
     package_metadata_name = name + "_package_metadata"
     if not name_suffix:
         package_metadata(
@@ -146,12 +137,7 @@ def rust_crate(
             visibility = ["//visibility:public"],
         )
 
-    selected_crate_features = crate_features + select(
-        {platform_label(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
-        {"//conditions:default": []},
-    )
-
-    if has_lib:
+    else:
         kwargs = dict(
             name = name,
             crate_name = crate_name,
@@ -161,7 +147,7 @@ def rust_crate(
             aliases = aliases,
             deps = deps,
             data = data,
-            crate_features = selected_crate_features,
+            crate_features = crate_features,
             crate_root = crate_root,
             edition = edition,
             rustc_env = rustc_env,
@@ -192,7 +178,7 @@ def rust_crate(
             deps = binary_lib_dep + deps,
             link_deps = link_deps,
             data = data,
-            crate_features = selected_crate_features,
+            crate_features = crate_features,
             crate_root = crate_root,
             edition = edition,
             rustc_env = rustc_env,

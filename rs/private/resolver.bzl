@@ -1,8 +1,9 @@
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs")
 
-def _count(feature_resolutions_by_fq_crate):
+def _count(packages):
     n = 0
-    for feature_resolutions in feature_resolutions_by_fq_crate.values():
+    for package in packages:
+        feature_resolutions = package["feature_resolutions"]
         for features in feature_resolutions.features_enabled.values():
             n += len(features)
 
@@ -19,7 +20,7 @@ def _dep_target_matches_triple(dep, triple, package_feature_set, cfg_attrs_by_tr
     if triple not in dep["target"]:
         return False
 
-    if not dep.get("feature_sensitive", False):
+    if "target_expr" not in dep:
         return True
 
     cfg_attr = cfg_attrs_by_triple[triple]
@@ -45,8 +46,6 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
         if not restrict_to_active_platforms:
             feature_resolutions.active.update(features_enabled)
 
-        deps = feature_resolutions.deps
-
         _propagate_feature_enablement(
             new_dirty_package_indices,
             package,
@@ -64,15 +63,17 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
             kind = dep.get("kind", "normal")
             if kind == "build" and not include_build_dependencies:
                 continue
+            deps = feature_resolutions.deps if kind == "normal" else feature_resolutions.build_deps
 
             dep_feature_resolutions = dep["feature_resolutions"]
+            dep_features = dep.get("features")
 
             has_alias = "package" in dep
             dep_name = dep["name"]
             prefixed_dep_alias = "dep:" + dep_name
             optional = dep.get("optional", False)
 
-            feature_sensitive = dep.get("feature_sensitive")
+            feature_sensitive = "target_expr" in dep
             for triple in dep["target"]:
                 if triple not in feature_resolutions.active:
                     continue
@@ -84,20 +85,17 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
                     if dep_name not in features_for_triple and prefixed_dep_alias not in features_for_triple:
                         continue
 
-                triple_deps = deps[triple] if kind == "normal" else feature_resolutions.build_deps[triple]
-                triple_deps.add(bazel_target)
+                deps[triple].add(bazel_target)
 
                 if has_alias:
                     feature_resolutions.aliases[bazel_target] = dep_name.replace("-", "_")
-
-                triple_features = dep_feature_resolutions.features_enabled[triple]
 
                 if triple not in dep_feature_resolutions.active:
                     dep_feature_resolutions.active.add(triple)
                     new_dirty_package_indices.add(dep_feature_resolutions.package_index)
 
-                dep_features = dep.get("features")
                 if dep_features:
+                    triple_features = dep_feature_resolutions.features_enabled[triple]
                     prev_length = len(triple_features)
                     triple_features.update(dep_features)
                     if prev_length != len(triple_features):
@@ -114,8 +112,9 @@ def _propagate_feature_enablement(
     feature_resolutions = package["feature_resolutions"]
     possible_features = feature_resolutions.possible_features
 
-    for triple, feature_set in feature_resolutions.features_enabled.items():
-        if triple not in feature_resolutions.active or not feature_set:
+    for triple in feature_resolutions.active:
+        feature_set = feature_resolutions.features_enabled[triple]
+        if not feature_set:
             continue
 
         # Enable any features that are implied by previously-enabled features.
@@ -177,7 +176,7 @@ def _propagate_feature_enablement(
 
 _MAX_ROUNDS = 200
 
-def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple, debug, include_build_dependencies = True, restrict_to_active_platforms = False):
+def resolve(mctx, packages, cfg_attrs_by_triple, debug, include_build_dependencies = True, restrict_to_active_platforms = False):
     # Do some rounds of mutual resolution; bail when no more changes
     dirty_package_indices = range(len(packages))
 
@@ -188,7 +187,7 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple
         dirty_package_indices = _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, debug, include_build_dependencies, restrict_to_active_platforms)
         if not dirty_package_indices:
             if debug:
-                count = _count(feature_resolutions_by_fq_crate)
+                count = _count(packages)
                 print("Got count", count, "in", i + 1, "rounds")
             return
         dirty_package_indices = sorted(dirty_package_indices)
@@ -220,8 +219,9 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
                 continue
 
             dep_resolution = dep["feature_resolutions"]
+            feature_sensitive = "target_expr" in dep
             for exec_triple in dep["target"]:
-                if not _dep_target_matches_triple(dep, exec_triple, target_features, exec_cfg_attrs_by_triple):
+                if feature_sensitive and not _dep_target_matches_triple(dep, exec_triple, target_features, exec_cfg_attrs_by_triple):
                     continue
 
                 if owner not in build_deps:
