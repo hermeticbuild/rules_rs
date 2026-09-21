@@ -45,7 +45,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
 
         deps = feature_resolutions.deps
 
-        package_changed = _propagate_feature_enablement(
+        _propagate_feature_enablement(
             new_dirty_package_indices,
             package,
             cfg_attrs_by_triple,
@@ -83,9 +83,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
                         continue
 
                 triple_deps = deps[triple] if kind == "normal" else feature_resolutions.build_deps[triple]
-                if bazel_target not in triple_deps:
-                    package_changed = True
-                    triple_deps.add(bazel_target)
+                triple_deps.add(bazel_target)
 
                 if has_alias:
                     feature_resolutions.aliases[bazel_target] = dep_name.replace("-", "_")
@@ -103,9 +101,6 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
                     if prev_length != len(triple_features):
                         new_dirty_package_indices.add(dep_feature_resolutions.package_index)
 
-        if package_changed:
-            new_dirty_package_indices.add(index)
-
     return new_dirty_package_indices
 
 def _propagate_feature_enablement(
@@ -114,7 +109,6 @@ def _propagate_feature_enablement(
         cfg_attrs_by_triple,
         debug,
         include_build_dependencies):
-    package_changed = False
     feature_resolutions = package["feature_resolutions"]
     possible_features = feature_resolutions.possible_features
 
@@ -132,8 +126,8 @@ def _propagate_feature_enablement(
                 idx = feature.find("/")
                 if idx == -1:
                     if feature not in feature_set:
-                        package_changed = True
                         feature_set.add(feature)
+                        dirty_package_indices.add(feature_resolutions.package_index)
                     continue
 
                 dep_name = feature[:idx]
@@ -173,13 +167,11 @@ def _propagate_feature_enablement(
 
                 # Only optional deps need to be explicitly enabled when a subfeature is toggled.
                 if has_optional_dependency and (not optional_marker) and dep_name not in feature_set:
-                    package_changed = True
                     feature_set.add(dep_name)
+                    dirty_package_indices.add(feature_resolutions.package_index)
 
                 if not found and debug:
                     print("Skipping enabling subfeature", feature, "for", package["name"], "@", package["version"], "it's not a dep...")
-
-    return package_changed
 
 _MAX_ROUNDS = 200
 

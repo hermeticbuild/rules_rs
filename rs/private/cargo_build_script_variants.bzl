@@ -57,6 +57,8 @@ def cargo_build_script_for_targets(
     variants = build_script_variants(profiles)
     split = len(variants) > 1
     if split:
+        branches = {}
+
         # Preserve the environment derived by rules_rust from the original name.
         if kwargs.get("pkg_name") == None:
             kwargs["pkg_name"] = name_to_pkg_name(name)
@@ -64,10 +66,9 @@ def cargo_build_script_for_targets(
         rustc_env.setdefault("CARGO_CRATE_NAME", name_to_crate_name(name_to_pkg_name(name)))
         kwargs["rustc_env"] = rustc_env
 
-    branches = {}
     for variant in variants:
         script_name = name
-        script_kwargs = dict(kwargs)
+        script_kwargs = dict(kwargs) if split else kwargs
         if split:
             # Wildcard builds must select the target platform through the alias.
             if "manual" not in kwargs.get("tags", []):

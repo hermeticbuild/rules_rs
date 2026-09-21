@@ -111,7 +111,7 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
 
     Args:
         target_resolutions: Ordinary feature resolutions keyed by crate name/version.
-        exec_resolutions_by_target: Execution resolutions keyed by original target triple.
+        exec_resolutions_by_target: Execution resolutions for the same crates, keyed by original target triple.
         target_build_deps: Build dependency matrices keyed by target triple, owner, and execution triple.
         target_build_aliases: Build dependency aliases keyed by target triple and owner.
         dep_label_prefix: Ordinary Cargo dependency label prefix, such as "@crates//:".
@@ -121,10 +121,8 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
         exec_labels_by_target dictionaries.
     """
     target_triples = sorted(exec_resolutions_by_target)
-    crate_names = set(target_resolutions)
     exec_triples = set()
     for resolutions in exec_resolutions_by_target.values():
-        crate_names.update(resolutions)
         for resolution in resolutions.values():
             exec_triples.update(resolution.features_enabled)
     for owners in target_build_deps.values():
@@ -134,20 +132,19 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
 
     groups_by_crate = {}
     node_count = 0
-    for fq in sorted(crate_names):
+    for fq in sorted(target_resolutions):
         nodes = []
-        target = target_resolutions.get(fq)
-        if target and target.active:
+        target = target_resolutions[fq]
+        if target.active:
             nodes.append(_resolution_node(fq, None, target, target_build_deps, target_build_aliases, exec_triples))
         for triple in target_triples:
-            execution = exec_resolutions_by_target[triple].get(fq)
-            if execution and execution.active:
+            execution = exec_resolutions_by_target[triple][fq]
+            if execution.active:
                 nodes.append(_resolution_node(fq, triple, execution, target_build_deps, target_build_aliases, exec_triples))
-        if not nodes and target:
+        if not nodes:
             nodes.append(_resolution_node(fq, None, target, target_build_deps, target_build_aliases, exec_triples))
-        if nodes:
-            groups_by_crate[fq] = [nodes]
-            node_count += len(nodes)
+        groups_by_crate[fq] = [nodes]
+        node_count += len(nodes)
 
     for _ in range(node_count + 1):
         exec_labels = _execution_labels(groups_by_crate, target_triples, dep_label_prefix)

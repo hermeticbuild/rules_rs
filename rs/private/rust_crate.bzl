@@ -102,7 +102,7 @@ def rust_crate(
                     "deps": build_deps_by_target.get(triple, {}),
                     "aliases": build_aliases_by_target.get(triple, {}),
                 }
-                for triple in triples or [""]
+                for triple in triples
             },
             crate_features = crate_features,
             deps = build_deps,

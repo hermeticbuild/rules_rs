@@ -64,9 +64,8 @@ def all_crate_deps(
             for triple, deps in execution_deps.items():
                 by_platform.setdefault(execution_platforms[triple], []).extend(deps)
             specs.append(([], by_platform))
-            selected_platforms = set(platforms if normal or normal_dev else [])
-            selected_platforms.update(execution_platforms.values())
-            platforms = sorted(selected_platforms)
+            platforms = set(platforms if normal or normal_dev else [])
+            platforms.update(execution_platforms.values())
         else:
             specs.append((dep_data.get("build_deps", []), dep_data.get("build_deps_by_platform", {})))
 

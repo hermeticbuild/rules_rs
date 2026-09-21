@@ -19,7 +19,6 @@ def compute_select(non_platform_items, platform_items):
     branches = {}
     for platform, items in platform_items.items():
         items = set(items)
-        items.difference_update(non_platform_items)
         items.difference_update(common_items)
         if items:
             branches[platform] = sorted(items)

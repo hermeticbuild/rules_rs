@@ -742,11 +742,12 @@ def _resolve_cargo_workspace_members_isolates_weak_build_features_impl(ctx):
                     "optional": True,
                 }],
                 "features": {
-                    "enable": ["dep:helper"],
+                    "enable": ["forward"],
+                    "forward": ["helper/base"],
                     "weak": ["helper?/extra"],
                 },
             },
-            "helper": {"features": {"extra": []}},
+            "helper": {"features": {"base": [], "extra": []}},
         },
         [{"name": "builder"}],
         [linux, macos, windows],
@@ -764,8 +765,8 @@ def _resolve_cargo_workspace_members_isolates_weak_build_features_impl(ctx):
     linux_helper = got.exec_resolutions_by_target[linux]["helper-1.0.0"]
     macos_helper = got.exec_resolutions_by_target[macos]["helper-1.0.0"]
     windows_helper = got.exec_resolutions_by_target[windows]["helper-1.0.0"]
-    asserts.equals(env, ["extra"], sorted(linux_helper.features_enabled[macos]))
-    asserts.equals(env, [], sorted(macos_helper.features_enabled[macos]))
+    asserts.equals(env, ["base", "extra"], sorted(linux_helper.features_enabled[macos]))
+    asserts.equals(env, ["base"], sorted(macos_helper.features_enabled[macos]))
     asserts.equals(env, [macos], sorted(macos_helper.active))
     asserts.equals(env, [], sorted(windows_helper.active))
     asserts.equals(env, {}, got.target_build_deps[windows])
