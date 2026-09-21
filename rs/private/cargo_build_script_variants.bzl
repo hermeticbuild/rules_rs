@@ -24,8 +24,8 @@ def build_script_variants(profiles):
         aliases = profile["aliases"]
         recipe = {
             "crate_features": sorted(set(profile["features"])),
-            "deps": {host: sorted(set(deps[host])) for host in sorted(deps)} if any(deps.values()) else {},
-            "aliases": {label: aliases[label] for label in sorted(aliases)},
+            "deps": {host: sorted(set(labels)) for host, labels in deps.items()} if any(deps.values()) else {},
+            "aliases": aliases,
         }
         key = json.encode(recipe)
         if key not in variants:

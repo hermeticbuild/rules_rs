@@ -21,7 +21,8 @@ def _prepare(target, execution, build_deps = {}, build_aliases = {}):
     return prepare_dependency_variants(target, execution, build_deps, build_aliases, _PREFIX)
 
 def _variant(result, fq, origin = None):
-    suffix = result.exec_aliases_by_crate[fq].get(_label(result, fq, origin), "") if origin else ""
+    label = _label(result, fq, origin) if origin else _PREFIX + fq
+    suffix = label.removeprefix(_PREFIX + "__exec/" + fq) if label != _PREFIX + fq else ""
     return [variant for variant in result.variants_by_crate[fq] if variant["name_suffix"] == suffix][0]
 
 def _label(result, fq, origin):
@@ -49,8 +50,6 @@ def _matching_and_inactive_resolutions_impl(ctx):
         asserts.equals(env, 1, len(variants))
         asserts.equals(env, "", variants[0]["name_suffix"])
     asserts.equals(env, {_LINUX: ["std"]}, _variant(result, "shared-1.0.0")["crate_features_select"])
-    asserts.equals(env, {}, result.exec_aliases_by_crate["inactive-1.0.0"])
-    asserts.equals(env, {}, result.exec_aliases_by_crate["target-only-1.0.0"])
     asserts.equals(env, set(["std", "dep:optional"]), target["shared-1.0.0"].features_enabled[_LINUX])
     asserts.equals(env, result.variants_by_crate, json.decode(json.encode(result.variants_by_crate)))
     return unittest.end(env)

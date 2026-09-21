@@ -523,8 +523,7 @@ def resolve_cargo_workspace_members(
         debug = False,
         dep_label_prefix = "//:",
         skip_internal_rustc_placeholder_crates = True,
-        watch_manifests = False,
-        use_legacy_rules_rust_platforms = False):
+        watch_manifests = False):
     platform_cfg_attrs = [triple_to_cfg_attrs(triple) for triple in platform_triples]
     platform_cfg_attrs_by_triple = {cfg_attr["_triple"]: cfg_attr for cfg_attr in platform_cfg_attrs}
 
@@ -740,12 +739,8 @@ def resolve_cargo_workspace_members(
         target_build_aliases = exec_targets.target_build_aliases,
         feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,
         platform_cfg_attrs = platform_cfg_attrs,
-        platform_cfg_attrs_by_triple = platform_cfg_attrs_by_triple,
-        resolver_versions_by_name = resolver_versions_by_name,
         workspace_dep_labels_by_triple = workspace_dep_labels_by_triple,
         workspace_dep_versions_by_name = workspace_dep_versions_by_name,
-        workspace_fq_deps = workspace_fq_deps,
-        workspace_member_keys = workspace_member_keys,
     )
 
 def workspace_dep_data(

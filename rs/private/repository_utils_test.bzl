@@ -31,6 +31,8 @@ def _attrs(variants = None, **kwargs):
         use_legacy_rules_rust_platforms = False,
     )
     if variants != None:
+        for key in ["aliases", "build_script_deps", "build_script_deps_select", "crate_features", "crate_features_select", "deps_select"]:
+            fields.pop(key)
         fields["resolved_crates"] = json.encode(variants)
     fields.update(kwargs)
     return struct(**fields)
@@ -83,8 +85,8 @@ def _split_dependency_labels_test_impl(ctx):
     asserts.equals(env, 2, len(calls))
     target_call, exec_call = calls
     asserts.true(env, 'name = "example",' in target_call)
-    asserts.true(env, 'name = "example" + "_exec",' in exec_call)
-    asserts.false(env, 'name = "example" + "_target"' in rendered)
+    asserts.true(env, 'name = "example",' in exec_call)
+    asserts.true(env, 'name_suffix = "_exec",' in exec_call)
     asserts.true(env, '"@dependency//:dependency"' in target_call)
     asserts.false(env, '"@dependency//:dependency_exec"' in target_call)
     asserts.true(env, '"@dependency//:dependency_exec"' in exec_call)
@@ -135,7 +137,7 @@ def _merged_resolutions_test_impl(ctx):
         _attrs(variants = [
             _variant(
                 crate_features_select = {
-                    _LINUX: ["shared", "dep:optional"],
+                    _LINUX: ["shared"],
                     _MACOS: ["shared", "macos"],
                 },
                 deps_select = {_LINUX: ["@normal//:normal"], _MACOS: ["@macos//:macos"]},
@@ -153,6 +155,7 @@ def _merged_resolutions_test_impl(ctx):
         _values(),
     )
     asserts.equals(env, 1, len(rendered.split("rust_crate(")[1:]))
+    asserts.true(env, "triples = " + repr(sorted([_LINUX, _MACOS])) in rendered)
     asserts.true(env, 'name = "example",' in rendered)
     asserts.false(env, 'name_suffix = "_exec"' in rendered)
     asserts.false(env, "dep:" in rendered)
@@ -163,37 +166,13 @@ def _merged_resolutions_test_impl(ctx):
         asserts.true(env, alias in rendered)
     return unittest.end(env)
 
-def _exec_only_resolution_test_impl(ctx):
-    env = unittest.begin(ctx)
-    rendered = render_rust_crate_call(
-        _attrs(
-            crate_features_select = {},
-            variants = [
-                _variant(
-                    crate_features_select = {_MACOS: ["exec_feature"]},
-                    deps_select = {_MACOS: ["@normal//:normal_exec"]},
-                    aliases = {"@normal//:normal_exec": "normal_alias"},
-                    build_deps_by_target = {_MACOS: {_MACOS: ["@build//:build_exec"]}},
-                    build_aliases_by_target = {_MACOS: {"@build//:build_exec": "build_alias"}},
-                ),
-            ],
-        ),
-        _values(),
-    )
-    asserts.equals(env, 1, len(rendered.split("rust_crate(")[1:]))
-    asserts.true(env, 'name = "example",' in rendered)
-    asserts.true(env, 'crate_features = ["exec_feature"]' in rendered)
-    asserts.true(env, 'triples = ["%s"]' % _MACOS in rendered)
-    asserts.true(env, '"@normal//:normal_exec": "normal_alias"' in rendered)
-    asserts.true(env, '"@build//:build_exec": "build_alias"' in rendered)
-    asserts.true(env, "target_compatible_with = None" in rendered)
-    return unittest.end(env)
-
 def _legacy_attributes_test_impl(ctx):
     env = unittest.begin(ctx)
     rendered = render_rust_crate_call(
         _attrs(
             aliases = {"@dependency//:dependency": "renamed"},
+            crate_features = ["shared", "dep:optional"],
+            crate_features_select = {_LINUX: ["specific", "dep:another"]},
             build_script_deps_select = {_LINUX: ["@dependency//:dependency"]},
         ),
         _values(),
@@ -202,6 +181,8 @@ def _legacy_attributes_test_impl(ctx):
     )
     asserts.equals(env, 2, len(rendered.split('"@dependency//:dependency": "renamed"')) - 1)
     asserts.true(env, " + package_metadata_bazel_deps" in rendered)
+    asserts.true(env, 'crate_features = ["shared", "specific"]' in rendered)
+    asserts.false(env, "dep:" in rendered)
     asserts.true(env, "skip_deps_verification = True" in rendered)
     asserts.true(env, "target_compatible_with = RESOLVED_PLATFORMS" in rendered)
     asserts.false(env, "build_deps_by_target" in rendered)
@@ -226,7 +207,6 @@ def _empty_build_matrices_test_impl(ctx):
 _split_dependency_labels_test = unittest.make(_split_dependency_labels_test_impl)
 _separate_build_aliases_test = unittest.make(_separate_build_aliases_test_impl)
 _merged_resolutions_test = unittest.make(_merged_resolutions_test_impl)
-_exec_only_resolution_test = unittest.make(_exec_only_resolution_test_impl)
 _legacy_attributes_test = unittest.make(_legacy_attributes_test_impl)
 _empty_build_matrices_test = unittest.make(_empty_build_matrices_test_impl)
 
@@ -236,7 +216,6 @@ def repository_utils_tests():
         _split_dependency_labels_test,
         _separate_build_aliases_test,
         _merged_resolutions_test,
-        _exec_only_resolution_test,
         _legacy_attributes_test,
         _empty_build_matrices_test,
     )

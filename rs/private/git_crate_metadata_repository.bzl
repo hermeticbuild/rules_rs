@@ -3,7 +3,6 @@ load(":repository_utils.bzl", "render_rust_crate_call", "rust_crate_attrs")
 def _git_crate_metadata_repository_implementation(rctx):
     rctx.file("crate.bzl", """\
 load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
-load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
 def crate(
         crate_name,
@@ -16,7 +15,6 @@ def crate(
         binaries,
         package_metadata_bazel_deps):
 {rust_crate_call}""".format(
-        hub_name = rctx.attr.hub_name,
         rust_crate_call = render_rust_crate_call(
             rctx.attr,
             # These values are emitted as Starlark source. The bare names refer

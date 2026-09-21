@@ -59,8 +59,8 @@ def _workspace_build_profiles_preserve_target_requirements_impl(ctx):
     linux = "x86_64-unknown-linux-gnu"
     macos = "aarch64-apple-darwin"
     dep = "@crates//:helper-1.0.0"
-    linux_dep = "@crates//:__exec/linux/helper-1.0.0"
-    macos_dep = "@crates//:__exec/macos/helper-1.0.0"
+    linux_dep = "@crates//:__exec/helper-1.0.0_exec_linux"
+    macos_dep = "@crates//:__exec/helper-1.0.0_exec_macos"
     data = workspace_dep_data(
         cargo_metadata = {
             "packages": [{

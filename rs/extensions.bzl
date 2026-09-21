@@ -293,7 +293,6 @@ def _generate_hub_and_spokes(
         debug = debug,
         dep_label_prefix = "@%s//:" % hub_name,
         watch_manifests = watch_manifests,
-        use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
     )
     cfg_match_cache = workspace_resolution.cfg_match_cache
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
@@ -355,7 +354,6 @@ crate.annotation(
         kwargs = dict(
             hub_name = hub_name,
             gen_build_script = annotation.gen_build_script,
-            build_script_deps = [],
             resolved_crates = json.encode(dependency_variants.variants_by_crate[_fq_crate(crate_name, version)]),
             build_script_data = annotation.build_script_data,
             build_script_data_select = annotation.build_script_data_select,
@@ -374,7 +372,6 @@ crate.annotation(
             deps = annotation.deps,
             crate_tags = annotation.tags,
             link_deps = annotation.link_deps,
-            crate_features = annotation.crate_features,
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
 
@@ -502,12 +499,15 @@ alias(
 )""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
 
             fq = _fq_crate(name, version)
-            for label, suffix in dependency_variants.exec_aliases_by_crate[fq].items():
+            for variant in dependency_variants.variants_by_crate[fq]:
+                suffix = variant["name_suffix"]
+                if not suffix:
+                    continue
                 hub_contents.append("""
 alias(
     name = "%s",
     actual = "%s",
-)""" % (label.split("//:")[1], _target_label(target_repo_name, target_package_path, name + suffix)))
+)""" % ("__exec/" + fq + suffix, _target_label(target_repo_name, target_package_path, name + suffix)))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""

@@ -161,7 +161,7 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
     )
 
 _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
-{indent}    name = {name}{name_suffix},
+{indent}    name = {name},
 {indent}    crate_name = {crate_name} or {name}.replace("-", "_"),
 {indent}    purl = {purl},
 {indent}    version = {version},
@@ -210,28 +210,33 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 """
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
+    use_legacy_rules_rust_platforms = attr.use_legacy_rules_rust_platforms
     resolved_crates = getattr(attr, "resolved_crates", "")
     if resolved_crates:
         variants = json.decode(resolved_crates)
         build_aliases = {}
-        build_deps_select = {}
+        build_deps = []
+        conditional_build_deps = ""
+        common_crate_features = []
         target_compatible_with = "None"
     else:
         # rustc_src_repository supplies one resolution without repository attributes.
         variants = [{
             "name_suffix": "",
             "aliases": attr.aliases,
-            "crate_features_select": attr.crate_features_select,
+            "crate_features_select": {
+                platform: _exclude_deps_from_features(features)
+                for platform, features in attr.crate_features_select.items()
+            },
             "deps_select": attr.deps_select,
             "build_deps_by_target": {},
             "build_aliases_by_target": {},
         }]
         build_aliases = attr.aliases
-        build_deps_select = attr.build_script_deps_select
+        build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select, use_legacy_rules_rust_platforms)
+        common_crate_features = _exclude_deps_from_features(attr.crate_features)
         target_compatible_with = "RESOLVED_PLATFORMS"
 
-    use_legacy_rules_rust_platforms = attr.use_legacy_rules_rust_platforms
-    build_deps, conditional_build_deps = render_select(attr.build_script_deps, build_deps_select, use_legacy_rules_rust_platforms)
     build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select, use_legacy_rules_rust_platforms)
     build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_legacy_rules_rust_platforms)
     rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_legacy_rules_rust_platforms)
@@ -264,10 +269,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         build_aliases_by_target = variant["build_aliases_by_target"]
 
         # cargo_build_script_for_targets selects these features before cfg = "exec".
-        crate_features, conditional_crate_features = compute_select(
-            _exclude_deps_from_features(attr.crate_features),
-            {platform: _exclude_deps_from_features(features) for platform, features in crate_features_select.items()},
-        )
+        crate_features, conditional_crate_features = compute_select(common_crate_features, crate_features_select)
         deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), variant["deps_select"], use_legacy_rules_rust_platforms)
         build_deps_by_target_attr = ""
         for deps_by_exec in build_deps_by_target.values():
@@ -286,7 +288,6 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         calls.append(_RUST_CRATE_MACRO_CALL.format(
             indent = indent,
             name = values["name"],
-            name_suffix = " + " + repr(name_suffix) if name_suffix else "",
             crate_name = values["crate_name"],
             purl = values["purl"],
             version = values["version"],
@@ -353,8 +354,6 @@ load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 rust_crate_attrs = {
     "hub_name": attr.string(),
     "gen_build_script": attr.string(),
-    "build_script_deps": attr.label_list(),
-    "build_script_deps_select": _label_list_dict(),
     "build_script_data": attr.label_list(),
     "build_script_data_select": _label_list_dict(),
     "build_script_env": attr.string_dict(),
@@ -373,12 +372,8 @@ rust_crate_attrs = {
     "crate_tags": attr.string_list(),
     "data": attr.label_list(),
     "deps": attr.label_list(),
-    "deps_select": _label_list_dict(),
     "link_deps": attr.string_list(),
-    "aliases": attr.string_dict(),
-    "crate_features": attr.string_list(),
-    "crate_features_select": attr.string_list_dict(),
-    "resolved_crates": attr.string(),
+    "resolved_crates": attr.string(mandatory = True),
     "use_legacy_rules_rust_platforms": attr.bool(),
 }
 

@@ -16,6 +16,7 @@ def rust_crate(
         purl,
         version,
         aliases,
+        build_aliases,
         deps,
         link_deps,
         data,
@@ -44,7 +45,6 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False,
-        build_aliases = None,
         name_suffix = "",
         build_deps_by_target = {},
         build_aliases_by_target = {}):
@@ -55,7 +55,7 @@ def rust_crate(
             for triple in triples
         } | {"//conditions:default": ["@platforms//:incompatible"]})
 
-    package_metadata_name = name.removesuffix(name_suffix) + "_package_metadata"
+    package_metadata_name = name + "_package_metadata"
     if not name_suffix:
         package_metadata(
             name = package_metadata_name,
@@ -85,12 +85,13 @@ def rust_crate(
     )
 
     default_tags = [
-        "crate-name=" + (crate_name or name),
+        "crate-name=" + name,
         "manual",
         "noclippy",
         "norustfmt",
     ]
     crate_tags = default_tags + tags
+    name += name_suffix
 
     if build_script:
         cargo_build_script_for_targets(
@@ -105,7 +106,7 @@ def rust_crate(
             },
             crate_features = crate_features,
             deps = build_deps,
-            aliases = aliases if build_aliases == None else build_aliases,
+            aliases = build_aliases,
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
             compile_data = compile_data,
             crate_name = "build_script_build",

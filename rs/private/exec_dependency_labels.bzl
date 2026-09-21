@@ -37,9 +37,8 @@ def _resolution_node(fq, origin, resolution, target_build_deps, target_build_ali
     for triple in features:
         if origin == None:
             triple_deps = target_build_deps.get(triple, {}).get(fq, {})
-            triple_aliases = target_build_aliases.get(triple, {}).get(fq, {})
             build_deps[triple] = _dependency_map(triple_deps, exec_triples)
-            build_aliases[triple] = _aliases_for_deps(triple_aliases, triple_deps)
+            build_aliases[triple] = target_build_aliases.get(triple, {}).get(fq, {})
         else:
             build_deps[triple] = exec_build_deps
             build_aliases[triple] = exec_build_aliases
@@ -56,7 +55,8 @@ def _execution_labels(groups_by_crate, target_triples, dep_label_prefix):
     labels = {triple: {} for triple in target_triples}
     for fq, groups in groups_by_crate.items():
         for group in groups[1:]:
-            label = dep_label_prefix + "__exec/" + group[0].origin + "/" + fq
+            suffix = "_exec" if len(groups) == 2 else "_exec_" + group[0].origin
+            label = dep_label_prefix + "__exec/" + fq + suffix
             for node in group:
                 labels[node.origin][dep_label_prefix + fq] = label
     return labels
@@ -117,8 +117,8 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
         dep_label_prefix: Ordinary Cargo dependency label prefix, such as "@crates//:".
 
     Returns:
-        A struct containing JSON-compatible variants_by_crate,
-        exec_labels_by_target, and exec_aliases_by_crate dictionaries.
+        A struct containing JSON-compatible variants_by_crate and
+        exec_labels_by_target dictionaries.
     """
     target_triples = sorted(exec_resolutions_by_target)
     crate_names = set(target_resolutions)
@@ -176,20 +176,16 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
                 variants[fq].extend(definitions)
                 changed = changed or len(new_groups) > 1
         if not changed:
-            exec_aliases = {}
             for fq, definitions in variants.items():
-                exec_aliases[fq] = {}
                 for index, definition in enumerate(definitions):
                     definition["name_suffix"] = ""
                     if index:
                         origin = groups_by_crate[fq][index][0].origin
-                        definition["name_suffix"] = "_exec" if len(definitions) == 2 else "_exec_" + origin
                         label = exec_labels[origin][dep_label_prefix + fq]
-                        exec_aliases[fq][label] = definition["name_suffix"]
+                        definition["name_suffix"] = label.removeprefix(dep_label_prefix + "__exec/" + fq)
             return struct(
                 variants_by_crate = variants,
                 exec_labels_by_target = exec_labels,
-                exec_aliases_by_crate = exec_aliases,
             )
         groups_by_crate = refined
 
