@@ -548,6 +548,95 @@ def _resolve_cargo_workspace_members_forwards_features_to_exec_only_build_deps_i
 
 resolve_cargo_workspace_members_forwards_features_to_exec_only_build_deps_test = unittest.make(_resolve_cargo_workspace_members_forwards_features_to_exec_only_build_deps_impl)
 
+def _resolve_cargo_workspace_members_adds_requested_binary_target_roots_impl(ctx):
+    env = unittest.begin(ctx)
+    windows = "x86_64-pc-windows-gnullvm"
+    linux = "x86_64-unknown-linux-gnu"
+
+    got = _resolve_test_workspace(
+        {
+            "bin-helper": {
+                "dependencies": [
+                    {"default_features": False, "name": "default-dep", "optional": True},
+                    {"default_features": False, "features": ["exec-dep"], "kind": "build", "name": "build-support"},
+                ],
+                "features": {
+                    "annotated": [],
+                    "build-mode": [],
+                    "default": ["dep:default-dep"],
+                },
+            },
+            "default-dep": {},
+            "build-support": {"features": {"exec-dep": []}},
+        },
+        [{"features": ["build-mode"], "kind": "build", "name": "bin-helper"}],
+        [windows],
+        [linux],
+        annotations = {"bin-helper": {"*": struct(
+            crate_features = ["annotated"],
+            crate_features_select = {},
+            gen_binaries = ["bin-helper"],
+        )}},
+    )
+
+    target = got.feature_resolutions_by_fq_crate["bin-helper-1.0.0"]
+    execution = got.exec_feature_resolutions_by_fq_crate["bin-helper-1.0.0"]
+    asserts.equals(env, [windows], sorted(target.active))
+    asserts.equals(env, ["annotated", "default", "dep:default-dep"], sorted(target.features_enabled[windows]))
+    asserts.equals(env, ["//:default-dep-1.0.0"], sorted(target.deps[windows]))
+    asserts.equals(env, ["//:build-support-1.0.0"], sorted(target.build_deps[linux]))
+    asserts.equals(env, ["annotated", "build-mode"], sorted(execution.features_enabled[linux]))
+    asserts.equals(env, [], sorted(execution.deps[linux]))
+    asserts.equals(env, [], sorted(got.feature_resolutions_by_fq_crate["build-support-1.0.0"].active))
+    asserts.equals(env, [], sorted(got.exec_feature_resolutions_by_fq_crate["default-dep-1.0.0"].active))
+    asserts.equals(env, ["exec-dep"], sorted(got.exec_feature_resolutions_by_fq_crate["build-support-1.0.0"].features_enabled[linux]))
+    return unittest.end(env)
+
+resolve_cargo_workspace_members_adds_requested_binary_target_roots_test = unittest.make(_resolve_cargo_workspace_members_adds_requested_binary_target_roots_impl)
+
+def _resolve_cargo_workspace_members_preserves_requested_binary_target_features_impl(ctx):
+    env = unittest.begin(ctx)
+    windows = "x86_64-pc-windows-gnullvm"
+    linux = "x86_64-unknown-linux-gnu"
+
+    got = _resolve_test_workspace(
+        {
+            "middle": {
+                "dependencies": [{"default_features": False, "features": ["requested"], "name": "bin-helper"}],
+            },
+            "bin-helper": {
+                "dependencies": [{"default_features": False, "name": "default-dep", "optional": True}],
+                "features": {
+                    "build-mode": [],
+                    "default": ["dep:default-dep"],
+                    "requested": [],
+                },
+            },
+            "default-dep": {},
+        },
+        [
+            {"name": "middle"},
+            {"features": ["build-mode"], "kind": "build", "name": "bin-helper"},
+        ],
+        [windows],
+        [linux],
+        annotations = {"bin-helper": {"*": struct(
+            crate_features = [],
+            crate_features_select = {},
+            gen_binaries = ["bin-helper"],
+        )}},
+    )
+
+    target = got.feature_resolutions_by_fq_crate["bin-helper-1.0.0"]
+    execution = got.exec_feature_resolutions_by_fq_crate["bin-helper-1.0.0"]
+    asserts.equals(env, ["requested"], sorted(target.features_enabled[windows]))
+    asserts.equals(env, [], sorted(target.deps[windows]))
+    asserts.equals(env, ["build-mode"], sorted(execution.features_enabled[linux]))
+    asserts.equals(env, [], sorted(got.feature_resolutions_by_fq_crate["default-dep-1.0.0"].active))
+    return unittest.end(env)
+
+resolve_cargo_workspace_members_preserves_requested_binary_target_features_test = unittest.make(_resolve_cargo_workspace_members_preserves_requested_binary_target_features_impl)
+
 def _resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_impl(ctx):
     env = unittest.begin(ctx)
     linux = "x86_64-unknown-linux-gnu"
@@ -591,10 +680,12 @@ def cargo_workspace_graph_tests():
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
         resolve_handles_dependency_chains_deeper_than_previous_round_limit_test,
+        resolve_cargo_workspace_members_adds_requested_binary_target_roots_test,
         resolve_cargo_workspace_members_forwards_features_to_exec_only_build_deps_test,
         resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_test,
         resolve_cargo_workspace_members_keeps_target_optional_build_deps_on_exec_platform_test,
         resolve_cargo_workspace_members_preserves_proc_macro_host_dependencies_test,
+        resolve_cargo_workspace_members_preserves_requested_binary_target_features_test,
         resolve_cargo_workspace_members_separates_target_and_exec_features_test,
         resolve_package_facts_attaches_feature_resolutions_test,
         select_package_fq_dep_uses_package_name_test,

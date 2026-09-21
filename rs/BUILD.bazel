@@ -71,6 +71,7 @@ bzl_library(
         "//rs/private:cargo_workspace_graph",
         "//rs/private:crate_repository",
         "//rs/private:downloader",
+        "//rs/private:exec_dependency_labels",
         "//rs/private:git_cargo_workspace_repository",
         "//rs/private:git_crate_metadata_repository",
         "//rs/private:lint_flags",

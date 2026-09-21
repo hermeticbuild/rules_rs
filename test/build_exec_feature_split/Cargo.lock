@@ -7,6 +7,7 @@ name = "build-exec-feature-split"
 version = "0.1.0"
 dependencies = [
  "feature-split-consumer",
+ "feature-split-shared",
 ]
 
 [[package]]
@@ -31,11 +32,8 @@ dependencies = [
  "feature-split-build-macro",
  "feature-split-macro",
  "feature-split-shared",
+ "feature-split-wrapper",
 ]
-
-[[package]]
-name = "feature-split-shared"
-version = "0.1.0"
 
 [[package]]
 name = "feature-split-macro"
@@ -47,3 +45,14 @@ dependencies = [
 [[package]]
 name = "feature-split-macro-helper"
 version = "0.1.0"
+
+[[package]]
+name = "feature-split-shared"
+version = "0.1.0"
+
+[[package]]
+name = "feature-split-wrapper"
+version = "0.1.0"
+dependencies = [
+ "feature-split-shared",
+]

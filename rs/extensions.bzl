@@ -21,6 +21,7 @@ load(
 )
 load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
+load("//rs/private:exec_dependency_labels.bzl", "prepare_exec_dependency_labels")
 load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_repository")
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
@@ -34,6 +35,22 @@ def _spoke_repo(hub_name, name, version):
     if "+" in s:
         s = s.replace("+", "-")
     return s
+
+def _exec_deps_select(deps, exec_labels):
+    return {
+        triple: sorted([exec_labels.get(dep, dep) for dep in labels])
+        for triple, labels in deps.items()
+    }
+
+def _resolved_aliases(aliases, deps, exec_labels = {}):
+    dep_labels = set()
+    for labels in deps.values():
+        dep_labels.update(labels)
+    return {
+        exec_labels.get(label, label): alias
+        for label, alias in aliases.items()
+        if label in dep_labels
+    }
 
 def _git_repo_remote_name(remote):
     scheme_separator = remote.find("://")
@@ -301,6 +318,14 @@ def _generate_hub_and_spokes(
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
     exec_feature_resolutions_by_fq_crate = workspace_resolution.exec_feature_resolutions_by_fq_crate
 
+    package_keys = [_fq_crate(package["name"], package["version"]) for package in packages]
+    exec_dependency_labels = prepare_exec_dependency_labels(
+        {fq: feature_resolutions_by_fq_crate[fq] for fq in package_keys},
+        {fq: exec_feature_resolutions_by_fq_crate[fq] for fq in package_keys},
+        dep_label_prefix = "@%s//:" % hub_name,
+    )
+    exec_labels = exec_dependency_labels.exec_labels
+
     _date(mctx, "set up initial deps!")
 
     mctx.report_progress("Initializing spokes")
@@ -346,8 +371,10 @@ crate.annotation(
             hub_name = hub_name,
             gen_build_script = annotation.gen_build_script,
             build_script_deps = [],
-            build_script_deps_select = _select(feature_resolutions.build_deps),
-            exec_build_script_deps_select = _select(exec_feature_resolutions.build_deps),
+            build_script_deps_select = _exec_deps_select(feature_resolutions.build_deps, exec_labels),
+            exec_build_script_deps_select = _exec_deps_select(exec_feature_resolutions.build_deps, exec_labels),
+            build_script_aliases = _resolved_aliases(feature_resolutions.aliases, feature_resolutions.build_deps, exec_labels),
+            exec_build_script_aliases = _resolved_aliases(exec_feature_resolutions.aliases, exec_feature_resolutions.build_deps, exec_labels),
             build_script_data = annotation.build_script_data,
             build_script_data_select = annotation.build_script_data_select,
             build_script_env = annotation.build_script_env,
@@ -366,14 +393,15 @@ crate.annotation(
             crate_tags = annotation.tags,
             deps_select = _select(feature_resolutions.deps),
             link_deps = annotation.link_deps,
-            exec_deps_select = _select(exec_feature_resolutions.deps),
-            aliases = feature_resolutions.aliases,
-            exec_aliases = exec_feature_resolutions.aliases,
+            exec_deps_select = _exec_deps_select(exec_feature_resolutions.deps, exec_labels),
+            aliases = _resolved_aliases(feature_resolutions.aliases, feature_resolutions.deps),
+            exec_aliases = _resolved_aliases(exec_feature_resolutions.aliases, exec_feature_resolutions.deps, exec_labels),
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
             exec_crate_features_select = _select(exec_feature_resolutions.features_enabled),
             target_active = bool(feature_resolutions.active),
             exec_active = bool(exec_feature_resolutions.active),
+            split_exec = _fq_crate(crate_name, version) in exec_dependency_labels.split_crates,
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
 
@@ -500,6 +528,13 @@ alias(
     actual = "{actual}",
 )""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
 
+            if _fq_crate(name, version) in exec_dependency_labels.split_crates:
+                hub_contents.append("""
+alias(
+    name = "__exec/{name}-{version}",
+    actual = "{actual}",
+)""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name + "_exec")))
+
             for binary in annotation.gen_binaries:
                 hub_contents.append("""
 alias(
@@ -529,6 +564,19 @@ alias(
     name = "{name}",
     actual = ":{fq}",
 )""".format(name = name, fq = fq))
+
+            exec_versions = sorted([
+                version
+                for version in workspace_versions
+                if exec_feature_resolutions_by_fq_crate[version].active
+            ])
+            if exec_versions:
+                exec_fq = exec_versions[-1]
+                hub_contents.append("""
+alias(
+    name = "__exec/%s",
+    actual = "%s",
+)""" % (name, ":__exec/" + exec_fq if exec_fq in exec_dependency_labels.split_crates else ":" + exec_fq))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""
@@ -616,18 +664,18 @@ filegroup(
 
     defs_bzl_contents = \
         """load(":data.bzl", "DEP_DATA")
-load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
+load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps", _crate_aliases = "crate_aliases")
 
 _PLATFORMS = [
     {platforms}
 ]
 
-def aliases(package_name = None):
+def aliases(package_name = None, normal = False, normal_dev = False, build = False):
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return {{}}
 
-    return dep_data["aliases"]
+    return _crate_aliases(dep_data, normal = normal, normal_dev = normal_dev, build = build)
 
 def crate_name(package_name = None):
     dep_data = DEP_DATA.get(package_name or native.package_name())
@@ -692,6 +740,7 @@ RESOLVED_PLATFORMS = select({{
         workspace_package = workspace_package,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         lint_configs = lint_configs,
+        exec_labels = exec_labels,
     ))
 
     if dry_run:
@@ -1082,7 +1131,7 @@ _annotation = tag_class(
         #     doc = "If true, generates `rust_binary` targets for all of the crates bins",
         # ),
         "gen_binaries": attr.string_list(
-            doc = "As a list, the subset of the crate's bins that should get `rust_binary` targets produced.",
+            doc = "The subset of the crate's bins that should get `rust_binary` targets produced. Otherwise build-only packages are resolved for target platforms with default and annotated features; packages already used as target dependencies retain their resolved features.",
         ),
         "gen_build_script": attr.string(
             doc = "An authoritative flag to determine whether or not to produce `cargo_build_script` targets for the current crate. Supported values are 'on', 'off', and 'auto'.",

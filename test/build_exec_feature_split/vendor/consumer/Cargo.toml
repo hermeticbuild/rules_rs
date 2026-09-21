@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+feature-split-wrapper = { path = "../wrapper" }
 # The target crate must not receive exec_feature from build-dependencies.
 feature-split-shared = { path = "../shared", features = ["target_feature"] }
 
 [build-dependencies]
+feature-split-wrapper = { path = "../wrapper" }
 build-only-helper = { path = "../build-only-helper" }
 feature-split-build-macro = { path = "../build-macro" }
 # The build script must not receive target_feature from dependencies.

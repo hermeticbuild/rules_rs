@@ -1,5 +1,19 @@
 load(":select_utils.bzl", "compute_select")
 
+def crate_aliases(dep_data, normal = False, normal_dev = False, build = False):
+    """Returns aliases for selected dependency kinds, or all kinds by default."""
+    if not normal and not normal_dev and not build:
+        return dep_data["aliases"]
+
+    aliases = {}
+    if normal:
+        aliases.update(dep_data.get("normal_aliases", {}))
+    if normal_dev:
+        aliases.update(dep_data.get("dev_aliases", {}))
+    if build:
+        aliases.update(dep_data.get("build_aliases", {}))
+    return aliases
+
 def _filter_by_prefix(deps, prefix):
     return [dep for dep in deps if dep.startswith(prefix)]
 

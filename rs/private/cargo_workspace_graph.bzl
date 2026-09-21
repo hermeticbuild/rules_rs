@@ -652,6 +652,7 @@ def resolve_cargo_workspace_members(
                 feature_resolutions.active.add(triple)
                 feature_resolutions.features_enabled[triple].update(features)
 
+    binary_feature_resolutions = {}
     for crate, annotation_versions in annotations.items():
         for version_key, annotation in annotation_versions.items():
             target_versions = resolver_versions_by_name.get(crate, [])
@@ -659,16 +660,35 @@ def resolve_cargo_workspace_members(
                 if version_key not in target_versions:
                     continue
                 target_versions = [version_key]
-            if not annotation.crate_features and not annotation.crate_features_select:
+            gen_binaries = getattr(annotation, "gen_binaries", [])
+            if not annotation.crate_features and not annotation.crate_features_select and not gen_binaries:
                 continue
             for version in target_versions:
                 fq = fq_crate(crate, version)
                 _apply_annotation_features(feature_resolutions_by_fq_crate[fq], annotation)
+                if gen_binaries:
+                    binary_feature_resolutions[fq] = feature_resolutions_by_fq_crate[fq]
 
                 if exec_platform_triples:
                     _apply_annotation_features(exec_feature_resolutions_by_fq_crate[fq], annotation)
 
     resolve(ctx, resolver_packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug, include_build_dependencies = not exec_platform_triples)
+
+    # Requested binaries are target roots even when their packages otherwise
+    # occur only as build dependencies. Preserve features of packages already
+    # reached through normal dependencies, including default-features = false.
+    added_binary_roots = False
+    for feature_resolutions in binary_feature_resolutions.values():
+        if feature_resolutions.active:
+            continue
+        feature_resolutions.active.update(platform_triples)
+        if "default" in feature_resolutions.possible_features:
+            for features in feature_resolutions.features_enabled.values():
+                features.add("default")
+        added_binary_roots = True
+
+    if added_binary_roots:
+        resolve(ctx, resolver_packages, feature_resolutions_by_fq_crate, platform_cfg_attrs_by_triple, debug, include_build_dependencies = not exec_platform_triples)
 
     if exec_platform_triples:
         seed_exec_build_dependencies(resolver_packages, exec_resolver_packages, exec_platform_cfg_attrs_by_triple)
@@ -711,10 +731,14 @@ def workspace_dep_data(
         repo_root,
         workspace_package,
         use_legacy_rules_rust_platforms,
-        lint_configs = {}):
+        lint_configs = {},
+        exec_labels = {}):
     dep_data = {}
     for package in cargo_metadata["packages"]:
         aliases = {}
+        normal_aliases = {}
+        dev_aliases = {}
+        build_aliases = {}
         crate_features = {triple: set() for triple in platform_triples}
         deps = {triple: set() for triple in platform_triples}
         build_deps = {triple: set() for triple in platform_triples}
@@ -753,23 +777,31 @@ def workspace_dep_data(
 
             is_self_dep = dep_path and normalize_path(dep_path) == package_manifest_dir
 
+            kind = dep["kind"]
+            if kind == "dev":
+                target_deps = dev_deps
+                target_aliases = dev_aliases
+            elif kind == "build":
+                bazel_target = exec_labels.get(bazel_target, bazel_target)
+                target_deps = build_deps
+                target_aliases = build_aliases
+            else:
+                target_deps = deps
+                target_aliases = normal_aliases
+
             if not is_self_dep:
                 if dep.get("rename"):
-                    aliases[bazel_target] = dep["rename"].replace("-", "_")
+                    alias = dep["rename"].replace("-", "_")
+                    aliases[bazel_target] = alias
+                    target_aliases[bazel_target] = alias
                 elif dep_path:
-                    aliases[bazel_target] = dep["name"].replace("-", "_")
+                    alias = dep["name"].replace("-", "_")
+                    aliases[bazel_target] = alias
+                    target_aliases[bazel_target] = alias
 
             target = dep.get("target")
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
             match = match_info.matches
-
-            kind = dep["kind"]
-            if kind == "dev":
-                target_deps = dev_deps
-            elif kind == "build":
-                target_deps = build_deps
-            else:
-                target_deps = deps
 
             for triple in match:
                 if dep.get("optional") and feature_resolutions:
@@ -796,6 +828,9 @@ def workspace_dep_data(
 
         package_dep_data = {
             "aliases": aliases,
+            "normal_aliases": normal_aliases,
+            "dev_aliases": dev_aliases,
+            "build_aliases": build_aliases,
             "binaries": binaries,
             "build_deps": build_deps,
             "build_deps_by_platform": build_deps_by_platform,

@@ -5,3 +5,6 @@ edition = "2024"
 
 [build-dependencies]
 feature-split-shared = { path = "../shared", features = ["exec_feature"] }
+
+[features]
+binary_linux = []

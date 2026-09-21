@@ -1,0 +1,7 @@
+[package]
+name = "feature-split-wrapper"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+selected-shared = { package = "feature-split-shared", path = "../shared" }

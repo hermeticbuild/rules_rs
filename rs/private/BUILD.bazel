@@ -8,10 +8,13 @@ load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
 load(":cargo_toml_utils_test.bzl", "cargo_toml_utils_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
+load(":exec_dependency_labels_test.bzl", "exec_dependency_labels_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
+load(":repository_utils_test.bzl", "repository_utils_tests")
 load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
 load(":semver_test.bzl", "semver_select_tests")
+load(":workspace_dep_data_test.bzl", "workspace_dep_data_tests")
 
 bool_setting(
     name = "source_stdlib_building",
@@ -45,13 +48,19 @@ cargo_workspace_graph_tests()
 
 cfg_parser_tests()
 
+exec_dependency_labels_tests()
+
 lint_flags_tests()
 
 registry_utils_tests()
 
+repository_utils_tests()
+
 rust_repository_utils_tests()
 
 semver_select_tests()
+
+workspace_dep_data_tests()
 
 # package_metadata.bzl does not provide a bzl_library for Stardoc.
 filegroup(
@@ -172,6 +181,21 @@ bzl_library(
 )
 
 bzl_library(
+    name = "exec_dependency_labels",
+    srcs = ["exec_dependency_labels.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "exec_dependency_labels_test",
+    srcs = ["exec_dependency_labels_test.bzl"],
+    deps = [
+        ":exec_dependency_labels",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
     name = "registry_config_repository",
     srcs = ["registry_config_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
@@ -204,6 +228,25 @@ bzl_library(
         ":cargo_toml_utils",
         ":select_utils",
         ":semver",
+    ],
+)
+
+bzl_library(
+    name = "repository_utils_test",
+    srcs = ["repository_utils_test.bzl"],
+    deps = [
+        ":repository_utils",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "workspace_dep_data_test",
+    srcs = ["workspace_dep_data_test.bzl"],
+    deps = [
+        ":all_crate_deps",
+        ":cargo_workspace_graph",
+        "@bazel_skylib//lib:unittest",
     ],
 )
 

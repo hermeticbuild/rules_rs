@@ -173,6 +173,9 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    aliases = {{
 {indent}        {aliases}
 {indent}    }},
+{indent}    build_aliases = {{
+{indent}        {build_aliases}
+{indent}    }},
 {indent}    deps = [
 {indent}        {deps}
 {indent}    ]{extra_deps}{conditional_deps},
@@ -214,6 +217,7 @@ def _render_rust_crate_call(
         attr,
         values,
         aliases,
+        build_aliases,
         crate_features_select,
         deps_select,
         build_deps_select,
@@ -269,6 +273,7 @@ def _render_rust_crate_call(
         purl = values["purl"],
         version = values["version"],
         aliases = list_indent.join(['"%s": "%s"' % kv for kv in aliases.items()]),
+        build_aliases = list_indent.join(['"%s": "%s"' % kv for kv in build_aliases.items()]),
         deps = list_indent.join(['"%s"' % d for d in sorted(deps)]),
         extra_deps = extra_deps,
         conditional_deps = " + " + conditional_deps if conditional_deps else "",
@@ -307,15 +312,10 @@ def _render_rust_crate_call(
         skip_deps_verification_attr = skip_deps_verification_attr,
     )
 
-def _merge_target_and_exec(target_values, exec_values):
-    for key, exec_value in exec_values.items():
-        if key in target_values and target_values[key] != exec_value:
-            return None
-    return target_values | exec_values
-
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     exec_active = getattr(attr, "exec_active", False)
     aliases = attr.aliases
+    build_aliases = getattr(attr, "build_script_aliases", aliases)
     crate_features_select = attr.crate_features_select
     deps_select = attr.deps_select
     build_deps_select = attr.build_script_deps_select
@@ -323,23 +323,21 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
 
     if not getattr(attr, "target_active", True) and exec_active:
         aliases = attr.exec_aliases
+        build_aliases = attr.exec_build_script_aliases
         crate_features_select = attr.exec_crate_features_select
         deps_select = attr.exec_deps_select
         build_deps_select = attr.exec_build_script_deps_select
     elif exec_active:
-        merged_crate_features_select = _merge_target_and_exec(crate_features_select, attr.exec_crate_features_select)
-        merged_deps_select = _merge_target_and_exec(deps_select, attr.exec_deps_select)
-        merged_build_deps_select = _merge_target_and_exec(build_deps_select, attr.exec_build_script_deps_select)
-        merged_aliases = _merge_target_and_exec(aliases, attr.exec_aliases)
-        if None in [merged_crate_features_select, merged_deps_select, merged_build_deps_select, merged_aliases]:
+        if attr.split_exec:
             target_call = _render_rust_crate_call(
                 attr = attr,
                 values = values,
                 aliases = aliases,
+                build_aliases = build_aliases,
                 crate_features_select = crate_features_select,
                 deps_select = deps_select,
                 build_deps_select = build_deps_select,
-                name_suffix = "_target",
+                name_suffix = "",
                 binaries = binaries,
                 bazel_metadata = bazel_metadata,
                 extra_deps = extra_deps,
@@ -350,6 +348,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
                 attr = attr,
                 values = values,
                 aliases = attr.exec_aliases,
+                build_aliases = attr.exec_build_script_aliases,
                 crate_features_select = attr.exec_crate_features_select,
                 deps_select = attr.exec_deps_select,
                 build_deps_select = attr.exec_build_script_deps_select,
@@ -362,15 +361,17 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
             )
             return target_call + "\n" + exec_call
 
-        aliases = merged_aliases
-        crate_features_select = merged_crate_features_select
-        deps_select = merged_deps_select
-        build_deps_select = merged_build_deps_select
+        aliases = aliases | attr.exec_aliases
+        build_aliases = build_aliases | attr.exec_build_script_aliases
+        crate_features_select = crate_features_select | attr.exec_crate_features_select
+        deps_select = deps_select | attr.exec_deps_select
+        build_deps_select = build_deps_select | attr.exec_build_script_deps_select
 
     return _render_rust_crate_call(
         attr = attr,
         values = values,
         aliases = aliases,
+        build_aliases = build_aliases,
         crate_features_select = crate_features_select,
         deps_select = deps_select,
         build_deps_select = build_deps_select,
@@ -428,11 +429,14 @@ rust_crate_attrs = {
     "exec_deps_select": _label_list_dict(),
     "aliases": attr.string_dict(),
     "exec_aliases": attr.string_dict(),
+    "build_script_aliases": attr.string_dict(),
+    "exec_build_script_aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
     "exec_crate_features_select": attr.string_list_dict(),
     "target_active": attr.bool(),
     "exec_active": attr.bool(),
+    "split_exec": attr.bool(),
     "use_legacy_rules_rust_platforms": attr.bool(),
 }
 

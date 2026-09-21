@@ -48,6 +48,7 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False,
+        build_aliases = None,
         name_suffix = ""):
     build_script_name = "_bs" + name_suffix
     if target_compatible_with == None:
@@ -61,20 +62,6 @@ def rust_crate(
         purl = purl,
         visibility = ["//visibility:public"],
     )
-
-    if name_suffix == "_exec":
-        if not hasattr(config.exec(), "and_then"):
-            fail("Separate target and build-dependency features require config.exec().and_then; use Bazel 8.8.x or Bazel 9.2.0 and later")
-        target_exec_alias_name = name.removesuffix(name_suffix)
-        native.alias(
-            name = target_exec_alias_name,
-            actual = select({
-                "@rules_rust//cargo/settings:use_exec_features_enabled": name,
-                "//conditions:default": target_exec_alias_name + "_target",
-            }),
-            tags = ["crate-name=" + (crate_name or target_exec_alias_name)] + tags,
-            visibility = ["//visibility:public"],
-        )
 
     compile_data = native.glob(
         include = ["**"],
@@ -109,7 +96,7 @@ def rust_crate(
     if build_script:
         build_script_kwargs = dict(
             deps = build_deps,
-            aliases = aliases,
+            aliases = aliases if build_aliases == None else build_aliases,
             compile_data = compile_data,
             crate_name = "build_script_build",
             crate_root = build_script,
@@ -200,6 +187,11 @@ def rust_crate(
             visibility = ["//visibility:public"],
         )
 
+    selected_crate_features = crate_features + select(
+        {_platform(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
+        {"//conditions:default": []},
+    )
+
     if has_lib:
         kwargs = dict(
             name = name,
@@ -210,10 +202,7 @@ def rust_crate(
             aliases = aliases,
             deps = deps,
             data = data,
-            crate_features = crate_features + select(
-                {_platform(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
-                {"//conditions:default": []},
-            ),
+            crate_features = selected_crate_features,
             crate_root = crate_root,
             edition = edition,
             rustc_env = rustc_env,
@@ -244,7 +233,7 @@ def rust_crate(
             deps = binary_lib_dep + deps,
             link_deps = link_deps,
             data = data,
-            crate_features = crate_features,
+            crate_features = selected_crate_features,
             crate_root = crate_root,
             edition = edition,
             rustc_env = rustc_env,

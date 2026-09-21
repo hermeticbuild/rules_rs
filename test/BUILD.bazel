@@ -1,7 +1,9 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
+load("@build_exec_feature_split//:defs.bzl", split_aliases = "aliases", split_deps = "all_crate_deps")
 load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
 load("@root_package//:defs.bzl", root_package_lint_config = "lint_config")
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_rs//rs:cargo_build_script.bzl", "cargo_build_script")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 load("@rules_rs//rs:rust_test.bzl", "rust_test")
@@ -20,6 +22,36 @@ load("//:verify_aliases.bzl", "verify_alias", "verify_alias_absent", "verify_cra
 load("//:workspace_lints_test.bzl", "inherited_workspace_lints_test", "opted_out_workspace_lints_test", "package_lints_test")
 
 target_triple_constraints_test()
+
+cargo_build_script(
+    name = "build_exec_feature_split_build_script",
+    srcs = ["build_exec_feature_split/build.rs"],
+    aliases = split_aliases(
+        package_name = "build_exec_feature_split",
+        build = True,
+    ),
+    crate_root = "build_exec_feature_split/build.rs",
+    edition = "2024",
+    deps = split_deps(
+        package_name = "build_exec_feature_split",
+        build = True,
+    ),
+)
+
+rust_library(
+    name = "build_exec_feature_split_first_party",
+    srcs = ["build_exec_feature_split/src/lib.rs"],
+    aliases = split_aliases(
+        package_name = "build_exec_feature_split",
+        normal = True,
+    ),
+    crate_root = "build_exec_feature_split/src/lib.rs",
+    edition = "2024",
+    deps = split_deps(
+        package_name = "build_exec_feature_split",
+        normal = True,
+    ) + [":build_exec_feature_split_build_script"],
+)
 
 optional_target_build_dep_linux_test(
     name = "optional_target_build_dep_linux_test",
@@ -397,6 +429,7 @@ filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         ":aws_lc_openssl",
+        ":build_exec_feature_split_first_party",
         ":optional_target_build_dep_linux",
         ":rust_binary",
         ":verify_self_dev_dependency_feature_present",
