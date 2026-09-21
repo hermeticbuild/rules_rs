@@ -492,7 +492,7 @@ def _resolve_exec_targets(ctx, target_packages, template_packages, platform_trip
             for (index, triple), features in sorted(seeds.features.items())
         ])
         if seed_key not in resolved_seeds:
-            exec_packages, exec_resolutions = _copy_exec_resolutions(template_packages, exec_cfg_attrs_by_triple.keys())
+            exec_packages, exec_resolutions = _copy_exec_resolutions(template_packages, exec_cfg_attrs_by_triple)
             for (index, triple), features in seeds.features.items():
                 resolution = exec_packages[index]["feature_resolutions"]
                 resolution.active.add(triple)

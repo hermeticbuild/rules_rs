@@ -126,8 +126,6 @@ def _workspace_build_profiles_preserve_target_requirements_impl(ctx):
     asserts.equals(env, [dep], all_crate_deps(data, [], normal = True))
     asserts.equals(env, ["@crates//:dev-1.0.0"], all_crate_deps(data, [], normal_dev = True))
     asserts.equals(env, {"@crates//:dev-1.0.0": "dev_dep"}, crate_aliases(data, normal_dev = True))
-    asserts.equals(env, ["//local-helper", linux_dep], all_crate_deps(data, [], build = True, target_triple = linux))
-    asserts.equals(env, {linux_dep: "build_helper", "//local-helper": "local_helper"}, crate_aliases(data, build = True, target_triple = linux))
     asserts.equals(env, {dep: "normal_helper"}, crate_aliases(data, normal = True))
     asserts.equals(env, {
         dep: "normal_helper",

@@ -129,14 +129,6 @@ def _all_crate_deps_invariant_profiles_ignore_own_features_impl(ctx):
     asserts.equals(env, {"@crates//:linux_helper": "helper"}, crate_aliases(data, build = True))
     return unittest.end(env)
 
-def _all_crate_deps_explicit_target_preserves_profile_impl(ctx):
-    env = unittest.begin(ctx)
-    data = _build_profiles_data(vary_by_target = True)
-    asserts.equals(env, ["@crates//:linux_helper"], all_crate_deps(data, [], build = True, target_triple = "linux_target"))
-    asserts.equals(env, ["@crates//:macos_helper"], all_crate_deps(data, [], build = True, target_triple = "macos_target"))
-    asserts.equals(env, {"@crates//:macos_helper": "helper"}, crate_aliases(data, build = True, target_triple = "macos_target"))
-    return unittest.end(env)
-
 def _all_crate_deps_selects_execution_platform_impl(ctx):
     env = unittest.begin(ctx)
     data = _build_profiles_data()
@@ -163,7 +155,7 @@ _ambiguous_build_profile = rule(
 
 def _ambiguous_build_profile_test_impl(ctx):
     env = analysistest.begin(ctx)
-    asserts.expect_failure(env, "Use cargo_build_script from the generated Cargo repository's defs.bzl, or pass target_triple explicitly.")
+    asserts.expect_failure(env, "Use cargo_build_script from the generated Cargo repository's defs.bzl.")
     return analysistest.end(env)
 
 ambiguous_build_profile_test = analysistest.make(_ambiguous_build_profile_test_impl, expect_failure = True)
@@ -173,7 +165,6 @@ merge_structured_dep_specs_applies_filter_prefix_test = unittest.make(_merge_str
 all_crate_deps_defaults_to_normal_test = unittest.make(_all_crate_deps_defaults_to_normal_impl)
 all_crate_deps_dedupes_across_selected_kinds_test = unittest.make(_all_crate_deps_dedupes_across_selected_kinds_impl)
 all_crate_deps_invariant_profiles_ignore_own_features_test = unittest.make(_all_crate_deps_invariant_profiles_ignore_own_features_impl)
-all_crate_deps_explicit_target_preserves_profile_test = unittest.make(_all_crate_deps_explicit_target_preserves_profile_impl)
 all_crate_deps_selects_execution_platform_test = unittest.make(_all_crate_deps_selects_execution_platform_impl)
 
 def all_crate_deps_tests():
@@ -190,7 +181,6 @@ def all_crate_deps_tests():
         all_crate_deps_defaults_to_normal_test,
         all_crate_deps_dedupes_across_selected_kinds_test,
         all_crate_deps_invariant_profiles_ignore_own_features_test,
-        all_crate_deps_explicit_target_preserves_profile_test,
         all_crate_deps_selects_execution_platform_test,
         partial.make(ambiguous_build_profile_test, target_under_test = ":ambiguous_build_profile_deps"),
         partial.make(ambiguous_build_profile_test, target_under_test = ":ambiguous_build_profile_aliases"),

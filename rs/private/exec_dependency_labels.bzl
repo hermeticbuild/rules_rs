@@ -13,8 +13,13 @@ def _nested_maps_conflict(left, right):
     return False
 
 def _aliases_for_deps(aliases, deps):
-    labels = set([dep for values in deps.values() for dep in values])
-    return {dep: alias for dep, alias in aliases.items() if dep in labels}
+    result = {}
+    for dep in aliases:
+        for triple in deps:
+            if dep in deps[triple]:
+                result[dep] = aliases[dep]
+                break
+    return result
 
 def _dependency_map(deps, triples):
     return {triple: deps.get(triple, []) for triple in triples}
@@ -46,13 +51,6 @@ def _resolution_node(fq, origin, resolution, target_build_deps, target_build_ali
         build_deps_by_target = build_deps,
         build_aliases_by_target = build_aliases,
     )
-
-def _variant_suffix(groups, index):
-    if index == 0:
-        return ""
-    if len(groups) == 2:
-        return "_exec"
-    return "_exec_" + groups[index][0].origin
 
 def _execution_labels(groups_by_crate, target_triples, dep_label_prefix):
     labels = {triple: {} for triple in target_triples}
@@ -182,9 +180,10 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
             for fq, definitions in variants.items():
                 exec_aliases[fq] = {}
                 for index, definition in enumerate(definitions):
-                    definition["name_suffix"] = _variant_suffix(groups_by_crate[fq], index)
+                    definition["name_suffix"] = ""
                     if index:
                         origin = groups_by_crate[fq][index][0].origin
+                        definition["name_suffix"] = "_exec" if len(definitions) == 2 else "_exec_" + origin
                         label = exec_labels[origin][dep_label_prefix + fq]
                         exec_aliases[fq][label] = definition["name_suffix"]
             return struct(

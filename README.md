@@ -509,8 +509,7 @@ cargo_build_script(
 Use `all_crate_deps(normal = True)` and `aliases(normal = True)` for libraries.
 `all_crate_deps(build = True)` and `aliases(build = True)` remain available when
 the requested dependencies or aliases are identical across target platforms.
-Otherwise, use the generated `cargo_build_script`, or pass `target_triple`
-explicitly when declaring a build script for one target platform.
+Otherwise, use the generated `cargo_build_script`.
 Annotation-added dependencies retain the labels supplied by the user.
 
 Proc macros reached through normal dependencies use the existing conservative

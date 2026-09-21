@@ -95,13 +95,17 @@ def rust_crate(
     if build_script:
         cargo_build_script_for_targets(
             name = build_script_name,
-            triples = triples,
+            profiles = {
+                triple: {
+                    "features": conditional_crate_features.get(triple, []),
+                    "deps": build_deps_by_target.get(triple, {}),
+                    "aliases": build_aliases_by_target.get(triple, {}),
+                }
+                for triple in triples or [""]
+            },
             crate_features = crate_features,
-            conditional_crate_features = conditional_crate_features,
             deps = build_deps,
             aliases = aliases if build_aliases == None else build_aliases,
-            deps_by_target = build_deps_by_target,
-            aliases_by_target = build_aliases_by_target,
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
             compile_data = compile_data,
             crate_name = "build_script_build",

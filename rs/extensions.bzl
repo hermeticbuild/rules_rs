@@ -632,12 +632,12 @@ _PLATFORMS = [
     {platforms}
 ]
 
-def aliases(package_name = None, normal = False, normal_dev = False, build = False, target_triple = None):
+def aliases(package_name = None, normal = False, normal_dev = False, build = False):
     dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
     if not dep_data:
         return {{}}
 
-    return _crate_aliases(dep_data, normal = normal, normal_dev = normal_dev, build = build, target_triple = target_triple)
+    return _crate_aliases(dep_data, normal = normal, normal_dev = normal_dev, build = build)
 
 def crate_name(package_name = None):
     dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
@@ -665,8 +665,7 @@ def all_crate_deps(
         normal_dev = False,
         build = False,
         package_name = None,
-        cargo_only = False,
-        target_triple = None):
+        cargo_only = False):
 
     dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
     if not dep_data:
@@ -679,7 +678,6 @@ def all_crate_deps(
         normal_dev = normal_dev,
         build = build,
         filter_prefix = {this_repo} if cargo_only else None,
-        target_triple = target_triple,
     )
 
 def cargo_build_script(name, package_name = None, **kwargs):
@@ -687,14 +685,10 @@ def cargo_build_script(name, package_name = None, **kwargs):
     dep_data = DEP_DATA.get(package_name)
     if dep_data == None:
         fail("No Cargo package found for %r" % package_name)
-    profiles = dep_data["build_script_profiles"]
     kwargs.setdefault("edition", dep_data["edition"])
     _cargo_build_script_for_targets(
         name = name,
-        triples = profiles.keys(),
-        conditional_crate_features = {{triple: profile["features"] for triple, profile in profiles.items()}},
-        deps_by_target = {{triple: profile["deps"] for triple, profile in profiles.items()}},
-        aliases_by_target = {{triple: profile["aliases"] for triple, profile in profiles.items()}},
+        profiles = dep_data["build_script_profiles"],
         use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
         **kwargs
     )

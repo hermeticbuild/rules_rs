@@ -41,7 +41,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
         # platform. Preserve its dependencies on every configured platform;
         # proc-macro metadata is only available after fetching its archive.
         if feature_resolutions.active and not restrict_to_active_platforms:
-            feature_resolutions.active.update(features_enabled.keys())
+            feature_resolutions.active.update(features_enabled)
 
         deps = feature_resolutions.deps
 

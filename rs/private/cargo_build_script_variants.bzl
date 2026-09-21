@@ -5,29 +5,25 @@ load("@rules_rust//cargo/private:cargo_build_script.bzl", "name_to_crate_name", 
 load("//rs:cargo_build_script.bzl", "cargo_build_script")
 load(":select_utils.bzl", "platform_label", "shared_and_per_platform")
 
-def build_script_variants(
-        triples,
-        conditional_crate_features = {},
-        deps_by_target = {},
-        aliases_by_target = {}):
+def build_script_variants(profiles):
     """Group target triples with equal build-script features, deps, and aliases.
 
     Args:
-        triples: Original target triples.
-        conditional_crate_features: Additional build-script features by target triple.
-        deps_by_target: Dependency labels by target triple, then execution triple.
-        aliases_by_target: Dependency aliases by target triple.
+        profiles: Features, execution-platform dependencies, and aliases by target triple.
 
     Returns:
         Dictionaries containing triples, crate_features, deps, and aliases. The
         deps dictionary remains indexed by execution triple.
     """
+    if not profiles:
+        profiles = {"": {"features": [], "deps": {}, "aliases": {}}}
     variants = {}
-    for triple in sorted(triples or [""]):
-        deps = deps_by_target.get(triple, {})
-        aliases = aliases_by_target.get(triple, {})
+    for triple in sorted(profiles):
+        profile = profiles[triple]
+        deps = profile["deps"]
+        aliases = profile["aliases"]
         recipe = {
-            "crate_features": sorted(set(conditional_crate_features.get(triple, []))),
+            "crate_features": sorted(set(profile["features"])),
             "deps": {host: sorted(set(deps[host])) for host in sorted(deps)} if any(deps.values()) else {},
             "aliases": {label: aliases[label] for label in sorted(aliases)},
         }
@@ -39,37 +35,26 @@ def build_script_variants(
 
 def cargo_build_script_for_targets(
         name,
-        triples,
+        profiles,
         crate_features = [],
-        conditional_crate_features = {},
         deps = [],
         aliases = {},
-        deps_by_target = {},
-        aliases_by_target = {},
         use_legacy_rules_rust_platforms = False,
         **kwargs):
     """Declare build scripts selected in the original target configuration.
 
     Args:
         name: Build-script target name.
-        triples: Original target triples.
+        profiles: Features, execution-platform dependencies, and aliases by target triple.
         crate_features: Features shared by every target triple.
-        conditional_crate_features: Additional features by target triple.
         deps: Additional dependencies shared by every target triple.
         aliases: Additional dependency aliases shared by every target triple.
-        deps_by_target: Dependency labels by target triple, then execution triple.
-        aliases_by_target: Dependency aliases by target triple.
         use_legacy_rules_rust_platforms: Whether to use rules_rust platform labels.
         **kwargs: Remaining cargo_build_script arguments.
     """
 
     # Shared crate_features, deps, and aliases do not affect grouping.
-    variants = build_script_variants(
-        triples,
-        conditional_crate_features,
-        deps_by_target,
-        aliases_by_target,
-    )
+    variants = build_script_variants(profiles)
     split = len(variants) > 1
     if split:
         # Preserve the environment derived by rules_rust from the original name.

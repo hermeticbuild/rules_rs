@@ -1,6 +1,6 @@
 load(":select_utils.bzl", "compute_select")
 
-def crate_aliases(dep_data, normal = False, normal_dev = False, build = False, target_triple = None):
+def crate_aliases(dep_data, normal = False, normal_dev = False, build = False):
     """Returns aliases for selected dependency kinds, or all kinds by default."""
     if not normal and not normal_dev and not build:
         return dep_data["aliases"]
@@ -12,13 +12,12 @@ def crate_aliases(dep_data, normal = False, normal_dev = False, build = False, t
         aliases.update(dep_data.get("dev_aliases", {}))
     if build:
         if "build_script_profiles" in dep_data:
-            profiles = dep_data["build_script_profiles"]
-            profiles = profiles.values() if target_triple == None else [profiles[target_triple]]
+            profiles = dep_data["build_script_profiles"].values()
             if profiles:
                 build_aliases = profiles[0]["aliases"]
                 for profile in profiles:
                     if profile["aliases"] != build_aliases:
-                        fail("Build-script aliases differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl, or pass target_triple explicitly.")
+                        fail("Build-script aliases differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl.")
                 aliases.update(build_aliases)
         else:
             aliases.update(dep_data.get("build_aliases", {}))
@@ -47,8 +46,7 @@ def all_crate_deps(
         normal = False,
         normal_dev = False,
         build = False,
-        filter_prefix = None,
-        target_triple = None):
+        filter_prefix = None):
     specs = []
 
     if normal_dev:
@@ -57,12 +55,11 @@ def all_crate_deps(
     if build:
         if "build_script_profiles" in dep_data:
             execution_platforms = dep_data["build_script_platforms"]
-            profiles = dep_data["build_script_profiles"]
-            profiles = profiles.values() if target_triple == None else [profiles[target_triple]]
+            profiles = dep_data["build_script_profiles"].values()
             execution_deps = profiles[0]["deps"] if profiles else {}
             for profile in profiles:
                 if profile["deps"] != execution_deps:
-                    fail("Build-script dependencies differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl, or pass target_triple explicitly.")
+                    fail("Build-script dependencies differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl.")
             by_platform = {}
             for triple, deps in execution_deps.items():
                 by_platform.setdefault(execution_platforms[triple], []).extend(deps)
