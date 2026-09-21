@@ -21,8 +21,6 @@ def _build_script_actions_impl(target, ctx):
         if action.mnemonic != "Rustc":
             continue
         arguments = action.argv
-        if 'feature="vendored"' not in arguments:
-            continue
         if not any([arg.endswith("/build.rs") and "libdbus-sys" in arg for arg in arguments]):
             continue
         arguments_by_output[action.outputs.to_list()[0].path] = arguments
@@ -38,14 +36,18 @@ def _optional_target_build_dep_test_impl(ctx):
     env = analysistest.begin(ctx)
     target = analysistest.target_under_test(env)
     actions = target[_BuildScriptActionsInfo].arguments_by_output
-    asserts.true(env, bool(actions), "Expected a vendored libdbus-sys build-script compiler action")
+    if ctx.attr.vendored:
+        actions = {output: arguments for output, arguments in actions.items() if 'feature="vendored"' in arguments}
+    asserts.true(env, bool(actions), "Expected a libdbus-sys build-script compiler action")
 
     for output, arguments in actions.items():
-        asserts.true(env, 'feature="cc"' in arguments, "Missing cc feature in " + output)
-        asserts.true(
+        asserts.equals(env, ctx.attr.vendored, 'feature="vendored"' in arguments, "Unexpected vendored feature in " + output)
+        asserts.equals(env, ctx.attr.vendored, 'feature="cc"' in arguments, "Unexpected cc feature in " + output)
+        asserts.equals(
             env,
+            ctx.attr.vendored,
             any([arg.startswith("--extern=cc=") for arg in arguments]),
-            "The Linux vendored build script must receive cc on %s: %s" % (ctx.attr.exec_triple, output),
+            "Only the vendored build script should receive cc on %s: %s" % (ctx.attr.exec_triple, output),
         )
         asserts.true(
             env,
@@ -55,14 +57,21 @@ def _optional_target_build_dep_test_impl(ctx):
 
     return analysistest.end(env)
 
-def _make_optional_target_build_dep_test(exec_platform, exec_triple):
+def _make_optional_target_build_dep_test(
+        exec_platform,
+        exec_triple,
+        target_platform = Label("//:x86_64-unknown-linux-gnu"),
+        vendored = True):
     return analysistest.make(
         _optional_target_build_dep_test_impl,
-        attrs = {"exec_triple": attr.string(default = exec_triple)},
+        attrs = {
+            "exec_triple": attr.string(default = exec_triple),
+            "vendored": attr.bool(default = vendored),
+        },
         config_settings = {
             "//command_line_option:extra_execution_platforms": str(exec_platform),
             "//command_line_option:host_platform": str(exec_platform),
-            "//command_line_option:platforms": str(Label("//:x86_64-unknown-linux-gnu")),
+            "//command_line_option:platforms": str(target_platform),
         },
         extra_target_under_test_aspects = [_build_script_actions],
     )
@@ -75,4 +84,11 @@ optional_target_build_dep_macos_test = _make_optional_target_build_dep_test(
 optional_target_build_dep_linux_test = _make_optional_target_build_dep_test(
     Label("//:x86_64-unknown-linux-gnu"),
     "x86_64-unknown-linux-gnu",
+)
+
+optional_target_build_dep_macos_target_test = _make_optional_target_build_dep_test(
+    Label("@rules_rs//rs/platforms:aarch64-apple-darwin"),
+    "aarch64-apple-darwin",
+    target_platform = Label("@rules_rs//rs/platforms:aarch64-apple-darwin"),
+    vendored = False,
 )

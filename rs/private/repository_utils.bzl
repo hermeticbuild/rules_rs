@@ -199,7 +199,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    build_deps = [
 {indent}        {build_deps}
 {indent}    ]{conditional_build_deps},
-{indent}    build_script_env = {build_script_env}{conditional_build_script_env},
+{build_deps_by_target_attr}{build_aliases_by_target_attr}{indent}    build_script_env = {build_script_env}{conditional_build_script_env},
 {indent}    build_script_env_files = {build_script_env_files},
 {indent}    allow_build_script_to_detect_nonhermetic_paths = {allow_build_script_to_detect_nonhermetic_paths},
 {indent}    build_script_toolchains = {build_script_toolchains},
@@ -226,13 +226,11 @@ def _render_rust_crate_call(
         bazel_metadata,
         extra_deps,
         indent,
-        skip_deps_verification):
-    target_compatible_with = "RESOLVED_PLATFORMS"
-    if name_suffix == "_exec" or not getattr(attr, "target_active", True) or crate_features_select.keys() != attr.crate_features_select.keys():
-        target_compatible_with = "None"
-
-    # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
-    # See `rs/private/rust_crate.bzl` for details.
+        skip_deps_verification,
+        target_compatible_with = "RESOLVED_PLATFORMS",
+        build_deps_by_target = {},
+        build_aliases_by_target = {}):
+    # cargo_build_script_for_targets selects these features before cfg = "exec".
     crate_features, conditional_crate_features = compute_select(
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in crate_features_select.items()},
@@ -264,6 +262,12 @@ def _render_rust_crate_call(
     rustc_env = cargo_manifest_env | getattr(attr, "rustc_env", {})
     rustc_env_attr = "%s    rustc_env = %s,\n" % (indent, repr(rustc_env)) if rustc_env else ""
     skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""
+    build_deps_by_target_attr = ""
+    if any([any(deps.values()) for deps in build_deps_by_target.values()]):
+        build_deps_by_target_attr = "%s    build_deps_by_target = %s,\n" % (indent, repr(build_deps_by_target))
+    build_aliases_by_target_attr = ""
+    if any(build_aliases_by_target.values()):
+        build_aliases_by_target_attr = "%s    build_aliases_by_target = %s,\n" % (indent, repr(build_aliases_by_target))
 
     return _RUST_CRATE_MACRO_CALL.format(
         indent = indent,
@@ -296,6 +300,8 @@ def _render_rust_crate_call(
         conditional_build_script_data = " + " + conditional_build_script_data if conditional_build_script_data else "",
         build_deps = list_indent.join(['"%s"' % d for d in sorted(build_deps)]),
         conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
+        build_deps_by_target_attr = build_deps_by_target_attr,
+        build_aliases_by_target_attr = build_aliases_by_target_attr,
         build_script_env = repr(cargo_manifest_env | attr.build_script_env),
         conditional_build_script_env = " | " + conditional_build_script_env if conditional_build_script_env else "",
         build_script_env_files = repr([str(f) for f in build_script_env_files]),
@@ -313,74 +319,37 @@ def _render_rust_crate_call(
     )
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
-    exec_active = getattr(attr, "exec_active", False)
-    aliases = attr.aliases
-    build_aliases = getattr(attr, "build_script_aliases", aliases)
-    crate_features_select = attr.crate_features_select
-    deps_select = attr.deps_select
-    build_deps_select = attr.build_script_deps_select
-    binaries = values["binaries"]
-
-    if not getattr(attr, "target_active", True) and exec_active:
-        aliases = attr.exec_aliases
-        build_aliases = attr.exec_build_script_aliases
-        crate_features_select = attr.exec_crate_features_select
-        deps_select = attr.exec_deps_select
-        build_deps_select = attr.exec_build_script_deps_select
-    elif exec_active:
-        if attr.split_exec:
-            target_call = _render_rust_crate_call(
-                attr = attr,
-                values = values,
-                aliases = aliases,
-                build_aliases = build_aliases,
-                crate_features_select = crate_features_select,
-                deps_select = deps_select,
-                build_deps_select = build_deps_select,
-                name_suffix = "",
-                binaries = binaries,
-                bazel_metadata = bazel_metadata,
-                extra_deps = extra_deps,
-                indent = indent,
-                skip_deps_verification = skip_deps_verification,
-            )
-            exec_call = _render_rust_crate_call(
-                attr = attr,
-                values = values,
-                aliases = attr.exec_aliases,
-                build_aliases = attr.exec_build_script_aliases,
-                crate_features_select = attr.exec_crate_features_select,
-                deps_select = attr.exec_deps_select,
-                build_deps_select = attr.exec_build_script_deps_select,
-                name_suffix = "_exec",
-                binaries = "{}",
-                bazel_metadata = bazel_metadata,
-                extra_deps = extra_deps,
-                indent = indent,
-                skip_deps_verification = skip_deps_verification,
-            )
-            return target_call + "\n" + exec_call
-
-        aliases = aliases | attr.exec_aliases
-        build_aliases = build_aliases | attr.exec_build_script_aliases
-        crate_features_select = crate_features_select | attr.exec_crate_features_select
-        deps_select = deps_select | attr.exec_deps_select
-        build_deps_select = build_deps_select | attr.exec_build_script_deps_select
-
-    return _render_rust_crate_call(
+    common = dict(
         attr = attr,
         values = values,
-        aliases = aliases,
-        build_aliases = build_aliases,
-        crate_features_select = crate_features_select,
-        deps_select = deps_select,
-        build_deps_select = build_deps_select,
-        name_suffix = "",
-        binaries = binaries,
         bazel_metadata = bazel_metadata,
         extra_deps = extra_deps,
         indent = indent,
         skip_deps_verification = skip_deps_verification,
+    )
+    resolved_crates = getattr(attr, "resolved_crates", "")
+    if resolved_crates:
+        return "\n".join([
+            _render_rust_crate_call(
+                build_aliases = {},
+                build_deps_select = {},
+                binaries = values["binaries"] if not variant["name_suffix"] else "{}",
+                target_compatible_with = "None",
+                **(common | variant)
+            )
+            for variant in json.decode(resolved_crates)
+        ])
+
+    # rustc_src_repository supplies one resolution without repository attributes.
+    return _render_rust_crate_call(
+        aliases = attr.aliases,
+        build_aliases = attr.aliases,
+        crate_features_select = attr.crate_features_select,
+        deps_select = attr.deps_select,
+        build_deps_select = attr.build_script_deps_select,
+        name_suffix = "",
+        binaries = values["binaries"],
+        **common
     )
 
 def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
@@ -405,7 +374,6 @@ rust_crate_attrs = {
     "gen_build_script": attr.string(),
     "build_script_deps": attr.label_list(),
     "build_script_deps_select": _label_list_dict(),
-    "exec_build_script_deps_select": _label_list_dict(),
     "build_script_data": attr.label_list(),
     "build_script_data_select": _label_list_dict(),
     "build_script_env": attr.string_dict(),
@@ -426,17 +394,10 @@ rust_crate_attrs = {
     "deps": attr.label_list(),
     "deps_select": _label_list_dict(),
     "link_deps": attr.string_list(),
-    "exec_deps_select": _label_list_dict(),
     "aliases": attr.string_dict(),
-    "exec_aliases": attr.string_dict(),
-    "build_script_aliases": attr.string_dict(),
-    "exec_build_script_aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),
-    "exec_crate_features_select": attr.string_list_dict(),
-    "target_active": attr.bool(),
-    "exec_active": attr.bool(),
-    "split_exec": attr.bool(),
+    "resolved_crates": attr.string(),
     "use_legacy_rules_rust_platforms": attr.bool(),
 }
 

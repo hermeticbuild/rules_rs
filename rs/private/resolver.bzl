@@ -175,7 +175,7 @@ def _propagate_feature_enablement(
                         continue
 
                     if defer_build_dependency:
-                        dep.setdefault("deferred_features", set()).add(dep_feature)
+                        dep.setdefault("deferred_features", {}).setdefault(triple, set()).add(dep_feature)
                     else:
                         dep_feature_resolutions = dep["feature_resolutions"]
                         triple_features = dep_feature_resolutions.features_enabled[triple]
@@ -213,18 +213,20 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple
 
     fail("Resolution did not converge after %s rounds! This is likely a bug in rules_rs, please report it to github.com/hermeticbuild/rules_rs" % _MAX_ROUNDS)
 
-def seed_exec_build_dependencies(packages, exec_packages, exec_cfg_attrs_by_triple):
-    """Seeds exec resolution from build dependencies of target-active packages."""
-    for package, exec_package in zip(packages, exec_packages):
+def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_attrs_by_triple, target_triple):
+    """Collect execution seeds and owner dependencies for one target triple."""
+    features = {}
+    build_deps = {}
+    aliases = {}
+    for package, exec_package in zip(packages, exec_template_packages):
         target_resolution = package["feature_resolutions"]
         exec_resolution = exec_package["feature_resolutions"]
 
-        if not target_resolution.active:
+        if target_triple not in target_resolution.active:
             continue
 
-        target_features = set()
-        for triple in target_resolution.active:
-            target_features.update(target_resolution.features_enabled[triple])
+        target_features = target_resolution.features_enabled[target_triple]
+        owner = package["name"] + "-" + package["version"]
 
         for target_dep, dep in zip(target_resolution.possible_deps, exec_resolution.possible_deps):
             bazel_target = dep.get("bazel_target")
@@ -240,10 +242,15 @@ def seed_exec_build_dependencies(packages, exec_packages, exec_cfg_attrs_by_trip
                 if not _dep_target_matches_triple(dep, exec_triple, target_features, exec_cfg_attrs_by_triple):
                     continue
 
-                target_resolution.build_deps[exec_triple].add(bazel_target)
+                if owner not in build_deps:
+                    build_deps[owner] = {triple: set() for triple in exec_cfg_attrs_by_triple}
+                build_deps[owner][exec_triple].add(bazel_target)
                 if "package" in dep:
-                    target_resolution.aliases[bazel_target] = dep_name.replace("-", "_")
+                    aliases.setdefault(owner, {})[bazel_target] = dep_name.replace("-", "_")
 
-                dep_resolution.active.add(exec_triple)
-                dep_resolution.features_enabled[exec_triple].update(dep.get("features", []))
-                dep_resolution.features_enabled[exec_triple].update(target_dep.get("deferred_features", []))
+                requested_features = features.setdefault((dep_resolution.package_index, exec_triple), set())
+                requested_features.update(dep_resolution.features_enabled[exec_triple])
+                requested_features.update(dep.get("features", []))
+                requested_features.update(target_dep.get("deferred_features", {}).get(target_triple, []))
+
+    return struct(features = features, build_deps = build_deps, aliases = aliases)

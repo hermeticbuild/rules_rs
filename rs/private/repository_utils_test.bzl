@@ -6,11 +6,10 @@ load(":repository_utils.bzl", "render_rust_crate_call")
 _LINUX = "x86_64-unknown-linux-gnu"
 _MACOS = "aarch64-apple-darwin"
 
-def _attrs(legacy = False, **kwargs):
+def _attrs(variants = None, **kwargs):
     fields = dict(
         aliases = {},
         allow_build_script_to_detect_nonhermetic_paths = False,
-        build_script_aliases = {},
         build_script_data = [],
         build_script_data_select = {},
         build_script_deps = [],
@@ -27,24 +26,24 @@ def _attrs(legacy = False, **kwargs):
         data = [],
         deps = [],
         deps_select = {_LINUX: []},
-        exec_active = False,
-        exec_aliases = {},
-        exec_build_script_aliases = {},
-        exec_build_script_deps_select = {_LINUX: []},
-        exec_crate_features_select = {_LINUX: []},
-        exec_deps_select = {_LINUX: []},
         rustc_flags = [],
         rustc_flags_select = {},
-        split_exec = False,
-        target_active = True,
         use_legacy_rules_rust_platforms = False,
     )
+    if variants != None:
+        fields["resolved_crates"] = json.encode(variants)
     fields.update(kwargs)
-    if legacy:
-        for key in fields.keys():
-            if key.startswith("exec_") or key in ["build_script_aliases", "split_exec", "target_active"]:
-                fields.pop(key)
     return struct(**fields)
+
+def _variant(**kwargs):
+    return dict(
+        name_suffix = "",
+        crate_features_select = {_LINUX: []},
+        deps_select = {_LINUX: []},
+        aliases = {},
+        build_deps_by_target = {},
+        build_aliases_by_target = {},
+    ) | kwargs
 
 def _values(binaries = {}):
     return {
@@ -63,17 +62,21 @@ def _values(binaries = {}):
 
 def _split_dependency_labels_test_impl(ctx):
     env = unittest.begin(ctx)
+    build_deps = {_LINUX: {_MACOS: ["@helper//:helper_exec"]}}
     rendered = render_rust_crate_call(
-        _attrs(
-            exec_active = True,
-            split_exec = True,
-            crate_features_select = {_LINUX: ["shared_feature"]},
-            exec_crate_features_select = {_LINUX: ["shared_feature"]},
-            deps_select = {_LINUX: ["@dependency//:dependency"]},
-            exec_deps_select = {_LINUX: ["@dependency//:dependency_exec"]},
-            build_script_deps_select = {_LINUX: ["@helper//:helper_exec"]},
-            exec_build_script_deps_select = {_LINUX: ["@helper//:helper_exec"]},
-        ),
+        _attrs(variants = [
+            _variant(
+                crate_features_select = {_LINUX: ["shared_feature"]},
+                deps_select = {_LINUX: ["@dependency//:dependency"]},
+                build_deps_by_target = build_deps,
+            ),
+            _variant(
+                name_suffix = "_exec",
+                crate_features_select = {_LINUX: ["shared_feature"]},
+                deps_select = {_LINUX: ["@dependency//:dependency_exec"]},
+                build_deps_by_target = build_deps,
+            ),
+        ]),
         _values(binaries = {"example-cli": "src/main.rs"}),
     )
     calls = rendered.split("rust_crate(")[1:]
@@ -81,62 +84,72 @@ def _split_dependency_labels_test_impl(ctx):
     target_call, exec_call = calls
     asserts.true(env, 'name = "example",' in target_call)
     asserts.true(env, 'name = "example" + "_exec",' in exec_call)
-    asserts.false(env, "_target" in rendered)
+    asserts.false(env, 'name = "example" + "_target"' in rendered)
     asserts.true(env, '"@dependency//:dependency"' in target_call)
     asserts.false(env, '"@dependency//:dependency_exec"' in target_call)
     asserts.true(env, '"@dependency//:dependency_exec"' in exec_call)
-    asserts.true(env, '"@helper//:helper_exec"' in target_call)
-    asserts.true(env, '"@helper//:helper_exec"' in exec_call)
+    asserts.true(env, "build_deps_by_target = %s," % repr(build_deps) in target_call)
+    asserts.true(env, "build_deps_by_target = %s," % repr(build_deps) in exec_call)
     asserts.true(env, 'binaries = {"example-cli": "src/main.rs"}' in target_call)
     asserts.true(env, "binaries = {}" in exec_call)
-    asserts.true(env, "target_compatible_with = RESOLVED_PLATFORMS" in target_call)
+    asserts.true(env, "target_compatible_with = None" in target_call)
     asserts.true(env, "target_compatible_with = None" in exec_call)
     return unittest.end(env)
 
 def _separate_build_aliases_test_impl(ctx):
     env = unittest.begin(ctx)
+    build_deps = {
+        _LINUX: {_MACOS: ["@build//:linux_exec"]},
+        _MACOS: {_MACOS: ["@build//:macos_exec"]},
+    }
+    build_aliases = {
+        _LINUX: {"@build//:linux_exec": "renamed_build"},
+        _MACOS: {"@build//:macos_exec": "renamed_build"},
+    }
     rendered = render_rust_crate_call(
-        _attrs(
-            exec_active = True,
-            split_exec = True,
-            aliases = {"@normal//:normal": "renamed"},
-            build_script_aliases = {"@build//:build_exec": "renamed_build"},
-            exec_aliases = {"@normal//:normal_exec": "renamed"},
-            exec_build_script_aliases = {"@build//:build_exec": "renamed_build"},
-            deps_select = {_LINUX: ["@normal//:normal"]},
-            exec_deps_select = {_LINUX: ["@normal//:normal_exec"]},
-            build_script_deps_select = {_LINUX: ["@build//:build_exec"]},
-            exec_build_script_deps_select = {_LINUX: ["@build//:build_exec"]},
-        ),
+        _attrs(variants = [
+            _variant(
+                crate_features_select = {_LINUX: [], _MACOS: []},
+                aliases = {"@normal//:normal": "renamed"},
+                deps_select = {_LINUX: ["@normal//:normal"], _MACOS: ["@normal//:normal"]},
+                build_deps_by_target = build_deps,
+                build_aliases_by_target = build_aliases,
+            ),
+        ]),
         _values(),
     )
-    target_call, exec_call = rendered.split("rust_crate(")[1:]
-    for call, normal_label in [(target_call, "@normal//:normal"), (exec_call, "@normal//:normal_exec")]:
-        aliases = call.split("    aliases = ")[1].split("    build_aliases = ")[0]
-        build_aliases = call.split("    build_aliases = ")[1].split("    deps = ")[0]
-        asserts.true(env, '"%s": "renamed"' % normal_label in aliases)
-        asserts.false(env, "@build//:build_exec" in aliases)
-        asserts.true(env, '"@build//:build_exec": "renamed_build"' in build_aliases)
-        asserts.false(env, "@normal//:" in build_aliases)
+    aliases = rendered.split("    aliases = ")[1].split("    build_aliases = ")[0]
+    raw_build_deps = rendered.split("    build_deps_by_target = ")[1].split("    build_aliases_by_target = ")[0]
+    raw_build_aliases = rendered.split("    build_aliases_by_target = ")[1].split("    build_script_env = ")[0]
+    asserts.true(env, '"@normal//:normal": "renamed"' in aliases)
+    asserts.false(env, "@build//:" in aliases)
+    asserts.false(env, "@normal//:" in raw_build_aliases)
+    asserts.equals(env, build_aliases, json.decode(raw_build_aliases.removesuffix(",\n")))
+    asserts.equals(env, build_deps, json.decode(raw_build_deps.removesuffix(",\n")))
+    asserts.false(env, "select(" in rendered)
     return unittest.end(env)
 
 def _merged_resolutions_test_impl(ctx):
     env = unittest.begin(ctx)
     rendered = render_rust_crate_call(
-        _attrs(
-            exec_active = True,
-            crate_features_select = {_LINUX: ["shared", "dep:target_optional"]},
-            exec_crate_features_select = {
-                _LINUX: ["shared", "dep:exec_optional"],
-                _MACOS: ["shared", "macos"],
-            },
-            deps_select = {_LINUX: ["@normal//:normal"]},
-            exec_deps_select = {_LINUX: ["@normal//:normal"], _MACOS: ["@macos//:macos"]},
-            aliases = {"@normal//:normal": "normal_alias"},
-            exec_aliases = {"@macos//:macos": "macos_alias"},
-            build_script_aliases = {"@build//:build": "build_alias"},
-            exec_build_script_aliases = {"@macos_build//:macos_build": "macos_build_alias"},
-        ),
+        _attrs(variants = [
+            _variant(
+                crate_features_select = {
+                    _LINUX: ["shared", "dep:optional"],
+                    _MACOS: ["shared", "macos"],
+                },
+                deps_select = {_LINUX: ["@normal//:normal"], _MACOS: ["@macos//:macos"]},
+                aliases = {"@normal//:normal": "normal_alias", "@macos//:macos": "macos_alias"},
+                build_deps_by_target = {
+                    _LINUX: {_MACOS: ["@build//:build"]},
+                    _MACOS: {_MACOS: ["@macos_build//:macos_build"]},
+                },
+                build_aliases_by_target = {
+                    _LINUX: {"@build//:build": "build_alias"},
+                    _MACOS: {"@macos_build//:macos_build": "macos_build_alias"},
+                },
+            ),
+        ]),
         _values(),
     )
     asserts.equals(env, 1, len(rendered.split("rust_crate(")[1:]))
@@ -154,14 +167,16 @@ def _exec_only_resolution_test_impl(ctx):
     env = unittest.begin(ctx)
     rendered = render_rust_crate_call(
         _attrs(
-            target_active = False,
-            exec_active = True,
             crate_features_select = {},
-            exec_crate_features_select = {_MACOS: ["exec_feature"]},
-            exec_deps_select = {_MACOS: ["@normal//:normal_exec"]},
-            exec_build_script_deps_select = {_MACOS: ["@build//:build_exec"]},
-            exec_aliases = {"@normal//:normal_exec": "normal_alias"},
-            exec_build_script_aliases = {"@build//:build_exec": "build_alias"},
+            variants = [
+                _variant(
+                    crate_features_select = {_MACOS: ["exec_feature"]},
+                    deps_select = {_MACOS: ["@normal//:normal_exec"]},
+                    aliases = {"@normal//:normal_exec": "normal_alias"},
+                    build_deps_by_target = {_MACOS: {_MACOS: ["@build//:build_exec"]}},
+                    build_aliases_by_target = {_MACOS: {"@build//:build_exec": "build_alias"}},
+                ),
+            ],
         ),
         _values(),
     )
@@ -177,7 +192,10 @@ def _exec_only_resolution_test_impl(ctx):
 def _legacy_attributes_test_impl(ctx):
     env = unittest.begin(ctx)
     rendered = render_rust_crate_call(
-        _attrs(legacy = True, aliases = {"@dependency//:dependency": "renamed"}),
+        _attrs(
+            aliases = {"@dependency//:dependency": "renamed"},
+            build_script_deps_select = {_LINUX: ["@dependency//:dependency"]},
+        ),
         _values(),
         extra_deps = "package_metadata_bazel_deps",
         skip_deps_verification = True,
@@ -186,6 +204,23 @@ def _legacy_attributes_test_impl(ctx):
     asserts.true(env, " + package_metadata_bazel_deps" in rendered)
     asserts.true(env, "skip_deps_verification = True" in rendered)
     asserts.true(env, "target_compatible_with = RESOLVED_PLATFORMS" in rendered)
+    asserts.false(env, "build_deps_by_target" in rendered)
+    asserts.false(env, "build_aliases_by_target" in rendered)
+    return unittest.end(env)
+
+def _empty_build_matrices_test_impl(ctx):
+    env = unittest.begin(ctx)
+    rendered = render_rust_crate_call(
+        _attrs(variants = [
+            _variant(
+                build_deps_by_target = {_LINUX: {_LINUX: [], _MACOS: []}},
+                build_aliases_by_target = {_LINUX: {}},
+            ),
+        ]),
+        _values(),
+    )
+    asserts.false(env, "build_deps_by_target" in rendered)
+    asserts.false(env, "build_aliases_by_target" in rendered)
     return unittest.end(env)
 
 _split_dependency_labels_test = unittest.make(_split_dependency_labels_test_impl)
@@ -193,6 +228,7 @@ _separate_build_aliases_test = unittest.make(_separate_build_aliases_test_impl)
 _merged_resolutions_test = unittest.make(_merged_resolutions_test_impl)
 _exec_only_resolution_test = unittest.make(_exec_only_resolution_test_impl)
 _legacy_attributes_test = unittest.make(_legacy_attributes_test_impl)
+_empty_build_matrices_test = unittest.make(_empty_build_matrices_test_impl)
 
 def repository_utils_tests():
     return unittest.suite(
@@ -202,4 +238,5 @@ def repository_utils_tests():
         _merged_resolutions_test,
         _exec_only_resolution_test,
         _legacy_attributes_test,
+        _empty_build_matrices_test,
     )

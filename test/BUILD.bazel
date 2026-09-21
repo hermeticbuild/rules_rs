@@ -1,9 +1,8 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
-load("@build_exec_feature_split//:defs.bzl", split_aliases = "aliases", split_deps = "all_crate_deps")
+load("@build_exec_feature_split//:defs.bzl", split_aliases = "aliases", split_build_script = "cargo_build_script", split_deps = "all_crate_deps")
 load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
 load("@root_package//:defs.bzl", root_package_lint_config = "lint_config")
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("@rules_rs//rs:cargo_build_script.bzl", "cargo_build_script")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 load("@rules_rs//rs:rust_test.bzl", "rust_test")
@@ -15,7 +14,7 @@ load("@target_workspace_dep_feature//:data.bzl", target_workspace_dep_feature_de
 load("@workspace_default_features//:data.bzl", workspace_default_features_dep_data = "DEP_DATA")
 load("@workspace_hyphen_dep_aliases//:defs.bzl", workspace_hyphen_dep_aliases_aliases = "aliases")
 load("@workspace_renamed_path_dep_aliases//:defs.bzl", workspace_renamed_path_dep_aliases_aliases = "aliases")
-load("//:optional_target_build_dep_test.bzl", "optional_target_build_dep_linux_test", "optional_target_build_dep_macos_test")
+load("//:optional_target_build_dep_test.bzl", "optional_target_build_dep_linux_test", "optional_target_build_dep_macos_target_test", "optional_target_build_dep_macos_test")
 load("//:rustdoc_musl_unwind_test.bzl", "rustdoc_musl_unwind_link_flags_test")
 load("//:target_triple_constraints_test.bzl", "target_triple_constraints_test")
 load("//:verify_aliases.bzl", "verify_alias", "verify_alias_absent", "verify_crate_feature_absent", "verify_crate_feature_present", "verify_dep_absent", "verify_dep_present", "verify_dev_dep_absent")
@@ -23,19 +22,12 @@ load("//:workspace_lints_test.bzl", "inherited_workspace_lints_test", "opted_out
 
 target_triple_constraints_test()
 
-cargo_build_script(
+split_build_script(
     name = "build_exec_feature_split_build_script",
+    package_name = "build_exec_feature_split",
     srcs = ["build_exec_feature_split/build.rs"],
-    aliases = split_aliases(
-        package_name = "build_exec_feature_split",
-        build = True,
-    ),
     crate_root = "build_exec_feature_split/build.rs",
     edition = "2024",
-    deps = split_deps(
-        package_name = "build_exec_feature_split",
-        build = True,
-    ),
 )
 
 rust_library(
@@ -60,6 +52,11 @@ optional_target_build_dep_linux_test(
 
 optional_target_build_dep_macos_test(
     name = "optional_target_build_dep_macos_test",
+    target_under_test = "@optional_target_build_dep//:libdbus-sys",
+)
+
+optional_target_build_dep_macos_target_test(
+    name = "optional_target_build_dep_macos_target_test",
     target_under_test = "@optional_target_build_dep//:libdbus-sys",
 )
 

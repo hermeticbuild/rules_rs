@@ -384,14 +384,14 @@ def _resolve_cargo_workspace_members_separates_target_and_exec_features_impl(ctx
     )
 
     target = got.feature_resolutions_by_fq_crate["shared-1.0.0"]
-    execution = got.exec_feature_resolutions_by_fq_crate["shared-1.0.0"]
+    execution = got.exec_resolutions_by_target[linux]["shared-1.0.0"]
     asserts.equals(env, ["dep:target-only", "target"], sorted(target.features_enabled[linux]))
     asserts.equals(env, ["//:target-only-1.0.0"], sorted(target.deps[linux]))
     asserts.equals(env, [], sorted(got.feature_resolutions_by_fq_crate["exec-only-1.0.0"].active))
     for triple in [linux, macos]:
         asserts.equals(env, ["dep:exec-only", "exec"], sorted(execution.features_enabled[triple]))
         asserts.equals(env, ["//:exec-only-1.0.0"], sorted(execution.deps[triple]))
-    asserts.equals(env, [], sorted(got.exec_feature_resolutions_by_fq_crate["target-only-1.0.0"].active))
+    asserts.equals(env, [], sorted(got.exec_resolutions_by_target[linux]["target-only-1.0.0"].active))
     return unittest.end(env)
 
 resolve_cargo_workspace_members_separates_target_and_exec_features_test = unittest.make(_resolve_cargo_workspace_members_separates_target_and_exec_features_impl)
@@ -445,13 +445,13 @@ def _resolve_cargo_workspace_members_preserves_proc_macro_host_dependencies_impl
 
     macro = got.feature_resolutions_by_fq_crate["macro-1.0.0"]
     support = got.feature_resolutions_by_fq_crate["macro-support-1.0.0"]
-    exec_support = got.exec_feature_resolutions_by_fq_crate["macro-support-1.0.0"]
+    exec_support = got.exec_resolutions_by_target[linux]["macro-support-1.0.0"]
     asserts.equals(env, ["//:macro-support-1.0.0"], sorted(macro.deps[linux]))
     asserts.equals(env, ["//:macro-helper-1.0.0", "//:macro-support-1.0.0"], sorted(macro.deps[macos]))
     asserts.equals(env, ["dep:macro-helper", "helper"], sorted(macro.features_enabled[macos]))
-    asserts.equals(env, [], sorted(support.build_deps[linux]))
-    asserts.equals(env, ["//:darwin-build-1.0.0"], sorted(support.build_deps[macos]))
-    asserts.equals(env, [macos], sorted(got.exec_feature_resolutions_by_fq_crate["darwin-build-1.0.0"].active))
+    asserts.equals(env, [], sorted(got.target_build_deps[linux]["macro-support-1.0.0"][linux]))
+    asserts.equals(env, ["//:darwin-build-1.0.0"], sorted(got.target_build_deps[linux]["macro-support-1.0.0"][macos]))
+    asserts.equals(env, [macos], sorted(got.exec_resolutions_by_target[linux]["darwin-build-1.0.0"].active))
 
     # Expanding normal dependencies to other platforms must not process the
     # normal dependencies of a package reached only through a build dependency.
@@ -499,16 +499,19 @@ def _resolve_cargo_workspace_members_keeps_target_optional_build_deps_on_exec_pl
     )
 
     libdbus = got.feature_resolutions_by_fq_crate["libdbus-sys-1.0.0"]
-    cc = got.exec_feature_resolutions_by_fq_crate["cc-1.0.0"]
+    cc = got.exec_resolutions_by_target[linux]["cc-1.0.0"]
     asserts.equals(env, ["cc", "vendored"], sorted(libdbus.features_enabled[linux]))
     asserts.equals(env, [], sorted(libdbus.features_enabled[macos]))
     for triple in [linux, macos]:
-        asserts.equals(env, ["//:cc-1.0.0"], sorted(libdbus.build_deps[triple]))
+        asserts.equals(env, ["//:cc-1.0.0"], sorted(got.target_build_deps[linux]["libdbus-sys-1.0.0"][triple]))
         asserts.true(env, triple in cc.active)
+        asserts.equals(env, [], sorted(libdbus.build_deps[triple]))
+    asserts.equals(env, {}, got.target_build_deps[macos])
+    asserts.equals(env, [], sorted(got.exec_resolutions_by_target[macos]["cc-1.0.0"].active))
     asserts.equals(env, [], sorted(cc.deps[linux]))
     asserts.equals(env, ["//:darwin-helper-1.0.0"], sorted(cc.deps[macos]))
     asserts.equals(env, [], sorted(got.feature_resolutions_by_fq_crate["cc-1.0.0"].active))
-    asserts.equals(env, [], sorted(got.exec_feature_resolutions_by_fq_crate["unused-1.0.0"].active))
+    asserts.equals(env, [], sorted(got.exec_resolutions_by_target[linux]["unused-1.0.0"].active))
     return unittest.end(env)
 
 resolve_cargo_workspace_members_keeps_target_optional_build_deps_on_exec_platform_test = unittest.make(_resolve_cargo_workspace_members_keeps_target_optional_build_deps_on_exec_platform_impl)
@@ -538,9 +541,9 @@ def _resolve_cargo_workspace_members_forwards_features_to_exec_only_build_deps_i
     )
 
     builder = got.feature_resolutions_by_fq_crate["builder-1.0.0"]
-    shared = got.exec_feature_resolutions_by_fq_crate["shared-1.0.0"]
-    asserts.equals(env, [], sorted(builder.build_deps[linux]))
-    asserts.equals(env, ["//:shared-1.0.0"], sorted(builder.build_deps[macos]))
+    shared = got.exec_resolutions_by_target[linux]["shared-1.0.0"]
+    asserts.equals(env, [], sorted(got.target_build_deps[linux]["builder-1.0.0"][linux]))
+    asserts.equals(env, ["//:shared-1.0.0"], sorted(got.target_build_deps[linux]["builder-1.0.0"][macos]))
     asserts.equals(env, [macos], sorted(shared.active))
     asserts.equals(env, ["exec"], sorted(shared.features_enabled[macos]))
     asserts.equals(env, [], sorted(got.feature_resolutions_by_fq_crate["shared-1.0.0"].active))
@@ -580,16 +583,16 @@ def _resolve_cargo_workspace_members_adds_requested_binary_target_roots_impl(ctx
     )
 
     target = got.feature_resolutions_by_fq_crate["bin-helper-1.0.0"]
-    execution = got.exec_feature_resolutions_by_fq_crate["bin-helper-1.0.0"]
+    execution = got.exec_resolutions_by_target[windows]["bin-helper-1.0.0"]
     asserts.equals(env, [windows], sorted(target.active))
     asserts.equals(env, ["annotated", "default", "dep:default-dep"], sorted(target.features_enabled[windows]))
     asserts.equals(env, ["//:default-dep-1.0.0"], sorted(target.deps[windows]))
-    asserts.equals(env, ["//:build-support-1.0.0"], sorted(target.build_deps[linux]))
+    asserts.equals(env, ["//:build-support-1.0.0"], sorted(got.target_build_deps[windows]["bin-helper-1.0.0"][linux]))
     asserts.equals(env, ["annotated", "build-mode"], sorted(execution.features_enabled[linux]))
     asserts.equals(env, [], sorted(execution.deps[linux]))
     asserts.equals(env, [], sorted(got.feature_resolutions_by_fq_crate["build-support-1.0.0"].active))
-    asserts.equals(env, [], sorted(got.exec_feature_resolutions_by_fq_crate["default-dep-1.0.0"].active))
-    asserts.equals(env, ["exec-dep"], sorted(got.exec_feature_resolutions_by_fq_crate["build-support-1.0.0"].features_enabled[linux]))
+    asserts.equals(env, [], sorted(got.exec_resolutions_by_target[windows]["default-dep-1.0.0"].active))
+    asserts.equals(env, ["exec-dep"], sorted(got.exec_resolutions_by_target[windows]["build-support-1.0.0"].features_enabled[linux]))
     return unittest.end(env)
 
 resolve_cargo_workspace_members_adds_requested_binary_target_roots_test = unittest.make(_resolve_cargo_workspace_members_adds_requested_binary_target_roots_impl)
@@ -628,7 +631,7 @@ def _resolve_cargo_workspace_members_preserves_requested_binary_target_features_
     )
 
     target = got.feature_resolutions_by_fq_crate["bin-helper-1.0.0"]
-    execution = got.exec_feature_resolutions_by_fq_crate["bin-helper-1.0.0"]
+    execution = got.exec_resolutions_by_target[windows]["bin-helper-1.0.0"]
     asserts.equals(env, ["requested"], sorted(target.features_enabled[windows]))
     asserts.equals(env, [], sorted(target.deps[windows]))
     asserts.equals(env, ["build-mode"], sorted(execution.features_enabled[linux]))
@@ -665,7 +668,7 @@ def _resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_option
     )
 
     target = got.feature_resolutions_by_fq_crate["flate2-1.0.0"]
-    execution = got.exec_feature_resolutions_by_fq_crate["flate2-1.0.0"]
+    execution = got.exec_resolutions_by_target[linux]["flate2-1.0.0"]
     for resolution, triple in [(target, linux), (execution, macos)]:
         asserts.equals(env, ["runtime_detection"], sorted(resolution.features_enabled[triple]))
         asserts.equals(env, [], sorted(resolution.deps[triple]))
@@ -673,6 +676,168 @@ def _resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_option
     return unittest.end(env)
 
 resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_test = unittest.make(_resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_impl)
+
+def _resolve_cargo_workspace_members_isolates_forwarded_build_features_impl(ctx):
+    env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    macos = "aarch64-apple-darwin"
+    got = _resolve_test_workspace(
+        {
+            "builder": {
+                "dependencies": [{
+                    "default_features": False,
+                    "kind": "build",
+                    "name": "selected",
+                    "package": "helper",
+                    "optional": True,
+                }],
+                "features": {
+                    "linux": ["selected/linux"],
+                    "macos": ["selected/macos"],
+                },
+            },
+            "helper": {
+                "dependencies": [{
+                    "default_features": False,
+                    "name": name,
+                    "optional": True,
+                } for name in ["linux-leaf", "macos-leaf"]],
+                "features": {
+                    "linux": ["dep:linux-leaf"],
+                    "macos": ["dep:macos-leaf"],
+                },
+            },
+            "linux-leaf": {},
+            "macos-leaf": {},
+        },
+        [{"name": "builder"}],
+        [linux, macos],
+        [linux, macos],
+        annotations = {"builder": {"*": struct(
+            crate_features = [],
+            crate_features_select = {linux: ["linux"], macos: ["macos"]},
+        )}},
+    )
+
+    for target_triple, feature in [(linux, "linux"), (macos, "macos")]:
+        helper = got.exec_resolutions_by_target[target_triple]["helper-1.0.0"]
+        for exec_triple in [linux, macos]:
+            asserts.equals(env, ["dep:" + feature + "-leaf", feature], sorted(helper.features_enabled[exec_triple]))
+            asserts.equals(env, ["//:" + feature + "-leaf-1.0.0"], sorted(helper.deps[exec_triple]))
+        asserts.equals(env, {"//:helper-1.0.0": "selected"}, got.target_build_aliases[target_triple]["builder-1.0.0"])
+    return unittest.end(env)
+
+def _resolve_cargo_workspace_members_isolates_weak_build_features_impl(ctx):
+    env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    macos = "aarch64-apple-darwin"
+    windows = "x86_64-pc-windows-gnullvm"
+    got = _resolve_test_workspace(
+        {
+            "builder": {
+                "dependencies": [{
+                    "default_features": False,
+                    "kind": "build",
+                    "name": "helper",
+                    "optional": True,
+                }],
+                "features": {
+                    "enable": ["dep:helper"],
+                    "weak": ["helper?/extra"],
+                },
+            },
+            "helper": {"features": {"extra": []}},
+        },
+        [{"name": "builder"}],
+        [linux, macos, windows],
+        [macos],
+        annotations = {"builder": {"*": struct(
+            crate_features = [],
+            crate_features_select = {
+                linux: ["enable", "weak"],
+                macos: ["enable"],
+                windows: ["weak"],
+            },
+        )}},
+    )
+
+    linux_helper = got.exec_resolutions_by_target[linux]["helper-1.0.0"]
+    macos_helper = got.exec_resolutions_by_target[macos]["helper-1.0.0"]
+    windows_helper = got.exec_resolutions_by_target[windows]["helper-1.0.0"]
+    asserts.equals(env, ["extra"], sorted(linux_helper.features_enabled[macos]))
+    asserts.equals(env, [], sorted(macos_helper.features_enabled[macos]))
+    asserts.equals(env, [macos], sorted(macos_helper.active))
+    asserts.equals(env, [], sorted(windows_helper.active))
+    asserts.equals(env, {}, got.target_build_deps[windows])
+    return unittest.end(env)
+
+def _resolve_cargo_workspace_members_groups_seeds_preserving_owners_impl(ctx):
+    env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    macos = "aarch64-apple-darwin"
+    got = _resolve_test_workspace(
+        {
+            "owner-a": {
+                "dependencies": [{"default_features": False, "kind": "build", "name": "selected-a", "package": "shared", "optional": True}],
+                "features": {"enable": ["selected-a/annotated"]},
+            },
+            "owner-b": {
+                "dependencies": [{"default_features": False, "kind": "build", "name": "selected-b", "package": "shared", "optional": True}],
+                "features": {"enable": ["dep:selected-b"]},
+            },
+            "shared": {"features": {"annotated": []}},
+        },
+        [{"name": "owner-a"}, {"name": "owner-b"}],
+        [linux, macos],
+        [macos],
+        annotations = {
+            "owner-a": {"*": struct(crate_features = [], crate_features_select = {linux: ["enable"]})},
+            "owner-b": {"*": struct(crate_features = [], crate_features_select = {macos: ["enable"]})},
+            "shared": {"*": struct(crate_features = ["annotated"], crate_features_select = {})},
+        },
+    )
+
+    asserts.equals(env, {"owner-a-1.0.0": {macos: set(["//:shared-1.0.0"])}}, got.target_build_deps[linux])
+    asserts.equals(env, {"owner-b-1.0.0": {macos: set(["//:shared-1.0.0"])}}, got.target_build_deps[macos])
+    asserts.equals(env, {"owner-a-1.0.0": {"//:shared-1.0.0": "selected_a"}}, got.target_build_aliases[linux])
+    asserts.equals(env, {"owner-b-1.0.0": {"//:shared-1.0.0": "selected_b"}}, got.target_build_aliases[macos])
+    asserts.equals(env, ["annotated"], sorted(got.exec_resolutions_by_target[linux]["shared-1.0.0"].features_enabled[macos]))
+
+    # Both target triples must reference the same resolved dictionary, not
+    # independently computed dictionaries with equal contents.
+    got.exec_resolutions_by_target[linux]["grouping_test"] = True
+    asserts.equals(env, True, got.exec_resolutions_by_target[macos].get("grouping_test"))
+    return unittest.end(env)
+
+def _resolve_cargo_workspace_members_preserves_no_exec_resolution_impl(ctx):
+    env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    got = _resolve_test_workspace(
+        {
+            "builder": {
+                "dependencies": [{"default_features": False, "kind": "build", "name": "helper"}],
+                "features": {"forward": ["helper/extra"]},
+            },
+            "helper": {"features": {"extra": []}},
+        },
+        [{"features": ["forward"], "name": "builder"}],
+        [linux],
+        [],
+    )
+
+    builder = got.feature_resolutions_by_fq_crate["builder-1.0.0"]
+    helper = got.feature_resolutions_by_fq_crate["helper-1.0.0"]
+    asserts.equals(env, ["//:helper-1.0.0"], sorted(builder.build_deps[linux]))
+    asserts.equals(env, ["extra"], sorted(helper.features_enabled[linux]))
+    asserts.equals(env, {}, got.exec_resolutions_by_target)
+    asserts.equals(env, {}, got.target_build_deps)
+    asserts.equals(env, {}, got.target_build_aliases)
+    return unittest.end(env)
+
+resolve_cargo_workspace_members_isolates_forwarded_build_features_test = unittest.make(_resolve_cargo_workspace_members_isolates_forwarded_build_features_impl)
+resolve_cargo_workspace_members_isolates_weak_build_features_test = unittest.make(_resolve_cargo_workspace_members_isolates_weak_build_features_impl)
+resolve_cargo_workspace_members_groups_seeds_preserving_owners_test = unittest.make(_resolve_cargo_workspace_members_groups_seeds_preserving_owners_impl)
+resolve_cargo_workspace_members_preserves_no_exec_resolution_test = unittest.make(_resolve_cargo_workspace_members_preserves_no_exec_resolution_impl)
 
 def cargo_workspace_graph_tests():
     return unittest.suite(
@@ -683,8 +848,12 @@ def cargo_workspace_graph_tests():
         resolve_cargo_workspace_members_adds_requested_binary_target_roots_test,
         resolve_cargo_workspace_members_forwards_features_to_exec_only_build_deps_test,
         resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_test,
+        resolve_cargo_workspace_members_isolates_forwarded_build_features_test,
+        resolve_cargo_workspace_members_isolates_weak_build_features_test,
+        resolve_cargo_workspace_members_groups_seeds_preserving_owners_test,
         resolve_cargo_workspace_members_keeps_target_optional_build_deps_on_exec_platform_test,
         resolve_cargo_workspace_members_preserves_proc_macro_host_dependencies_test,
+        resolve_cargo_workspace_members_preserves_no_exec_resolution_test,
         resolve_cargo_workspace_members_preserves_requested_binary_target_features_test,
         resolve_cargo_workspace_members_separates_target_and_exec_features_test,
         resolve_package_facts_attaches_feature_resolutions_test,

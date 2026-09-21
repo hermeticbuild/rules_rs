@@ -3,6 +3,10 @@ name = "feature-split-consumer"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+linux_build = ["feature-split-shared/linux_build"]
+darwin_build = ["feature-split-shared/darwin_build"]
+
 [dependencies]
 feature-split-wrapper = { path = "../wrapper" }
 # The target crate must not receive exec_feature from build-dependencies.

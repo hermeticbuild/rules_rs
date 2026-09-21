@@ -5,6 +5,7 @@ load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
 load(":annotations_test.bzl", "annotations_tests")
 load(":bindgen_test.bzl", "bindgen_tests")
 load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
+load(":cargo_build_script_variants_test.bzl", "cargo_build_script_variants_tests")
 load(":cargo_toml_utils_test.bzl", "cargo_toml_utils_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
@@ -41,6 +42,8 @@ annotations_tests()
 bindgen_tests()
 
 bpf_linker_repository_tests()
+
+cargo_build_script_variants_tests()
 
 cargo_toml_utils_tests()
 
@@ -102,6 +105,26 @@ bzl_library(
     srcs = ["bpf_linker_repository_test.bzl"],
     deps = [
         ":bpf_linker_repository",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "cargo_build_script_variants",
+    srcs = ["cargo_build_script_variants.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":select_utils",
+        "//rs:cargo_build_script",
+        "@rules_rust//cargo/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "cargo_build_script_variants_test",
+    srcs = ["cargo_build_script_variants_test.bzl"],
+    deps = [
+        ":cargo_build_script_variants",
         "@bazel_skylib//lib:unittest",
     ],
 )

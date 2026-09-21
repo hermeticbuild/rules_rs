@@ -17,11 +17,10 @@ load(
     _fq_crate = "fq_crate",
     _manifest_package_dir = "manifest_package_dir",
     _normalize_path = "normalize_path",
-    _select = "select_items",
 )
 load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
-load("//rs/private:exec_dependency_labels.bzl", "prepare_exec_dependency_labels")
+load("//rs/private:exec_dependency_labels.bzl", "prepare_dependency_variants")
 load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_repository")
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
@@ -35,22 +34,6 @@ def _spoke_repo(hub_name, name, version):
     if "+" in s:
         s = s.replace("+", "-")
     return s
-
-def _exec_deps_select(deps, exec_labels):
-    return {
-        triple: sorted([exec_labels.get(dep, dep) for dep in labels])
-        for triple, labels in deps.items()
-    }
-
-def _resolved_aliases(aliases, deps, exec_labels = {}):
-    dep_labels = set()
-    for labels in deps.values():
-        dep_labels.update(labels)
-    return {
-        exec_labels.get(label, label): alias
-        for label, alias in aliases.items()
-        if label in dep_labels
-    }
 
 def _git_repo_remote_name(remote):
     scheme_separator = remote.find("://")
@@ -316,15 +299,20 @@ def _generate_hub_and_spokes(
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
     workspace_dep_labels_by_triple = workspace_resolution.workspace_dep_labels_by_triple
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
-    exec_feature_resolutions_by_fq_crate = workspace_resolution.exec_feature_resolutions_by_fq_crate
+    exec_resolutions_by_target = workspace_resolution.exec_resolutions_by_target
 
     package_keys = [_fq_crate(package["name"], package["version"]) for package in packages]
-    exec_dependency_labels = prepare_exec_dependency_labels(
+    dependency_variants = prepare_dependency_variants(
         {fq: feature_resolutions_by_fq_crate[fq] for fq in package_keys},
-        {fq: exec_feature_resolutions_by_fq_crate[fq] for fq in package_keys},
+        {
+            triple: {fq: resolutions[fq] for fq in package_keys}
+            for triple, resolutions in exec_resolutions_by_target.items()
+        },
+        workspace_resolution.target_build_deps,
+        workspace_resolution.target_build_aliases,
         dep_label_prefix = "@%s//:" % hub_name,
     )
-    exec_labels = exec_dependency_labels.exec_labels
+    exec_labels_by_target = dependency_variants.exec_labels_by_target
 
     _date(mctx, "set up initial deps!")
 
@@ -336,9 +324,6 @@ def _generate_hub_and_spokes(
         crate_name = package["name"]
         version = package["version"]
         source = package["source"]
-
-        feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
-        exec_feature_resolutions = exec_feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
         annotation = annotation_for(annotations, crate_name, version, hub_name)
         suggested_annotation = None
@@ -371,10 +356,7 @@ crate.annotation(
             hub_name = hub_name,
             gen_build_script = annotation.gen_build_script,
             build_script_deps = [],
-            build_script_deps_select = _exec_deps_select(feature_resolutions.build_deps, exec_labels),
-            exec_build_script_deps_select = _exec_deps_select(exec_feature_resolutions.build_deps, exec_labels),
-            build_script_aliases = _resolved_aliases(feature_resolutions.aliases, feature_resolutions.build_deps, exec_labels),
-            exec_build_script_aliases = _resolved_aliases(exec_feature_resolutions.aliases, exec_feature_resolutions.build_deps, exec_labels),
+            resolved_crates = json.encode(dependency_variants.variants_by_crate[_fq_crate(crate_name, version)]),
             build_script_data = annotation.build_script_data,
             build_script_data_select = annotation.build_script_data_select,
             build_script_env = annotation.build_script_env,
@@ -391,17 +373,8 @@ crate.annotation(
             data = annotation.data,
             deps = annotation.deps,
             crate_tags = annotation.tags,
-            deps_select = _select(feature_resolutions.deps),
             link_deps = annotation.link_deps,
-            exec_deps_select = _exec_deps_select(exec_feature_resolutions.deps, exec_labels),
-            aliases = _resolved_aliases(feature_resolutions.aliases, feature_resolutions.deps),
-            exec_aliases = _resolved_aliases(exec_feature_resolutions.aliases, exec_feature_resolutions.deps, exec_labels),
             crate_features = annotation.crate_features,
-            crate_features_select = _select(feature_resolutions.features_enabled),
-            exec_crate_features_select = _select(exec_feature_resolutions.features_enabled),
-            target_active = bool(feature_resolutions.active),
-            exec_active = bool(exec_feature_resolutions.active),
-            split_exec = _fq_crate(crate_name, version) in exec_dependency_labels.split_crates,
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
 
@@ -528,12 +501,20 @@ alias(
     actual = "{actual}",
 )""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
 
-            if _fq_crate(name, version) in exec_dependency_labels.split_crates:
+            fq = _fq_crate(name, version)
+            ordinary_label = "@%s//:%s" % (hub_name, fq)
+            emitted_labels = set()
+            for triple, labels in exec_labels_by_target.items():
+                label = labels.get(ordinary_label, ordinary_label)
+                if label == ordinary_label or label in emitted_labels:
+                    continue
+                emitted_labels.add(label)
+                suffix = dependency_variants.exec_suffixes_by_target[triple][fq]
                 hub_contents.append("""
 alias(
-    name = "__exec/{name}-{version}",
-    actual = "{actual}",
-)""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name + "_exec")))
+    name = "%s",
+    actual = "%s",
+)""" % (label.split("//:")[1], _target_label(target_repo_name, target_package_path, name + suffix)))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""
@@ -565,18 +546,25 @@ alias(
     actual = ":{fq}",
 )""".format(name = name, fq = fq))
 
-            exec_versions = sorted([
-                version
-                for version in workspace_versions
-                if exec_feature_resolutions_by_fq_crate[version].active
-            ])
-            if exec_versions:
-                exec_fq = exec_versions[-1]
+            direct_exec_labels = set()
+            for triple, suffixes in dependency_variants.exec_suffixes_by_target.items():
+                exec_versions = sorted([version for version in workspace_versions if version in suffixes])
+                if not exec_versions:
+                    continue
+                ordinary_label = "@%s//:%s" % (hub_name, exec_versions[-1])
+                label = exec_labels_by_target[triple].get(ordinary_label, ordinary_label)
+                direct_exec_labels.add(label)
+                hub_contents.append("""
+alias(
+    name = "__exec/%s/%s",
+    actual = "%s",
+)""" % (triple, name, label))
+            if len(direct_exec_labels) == 1:
                 hub_contents.append("""
 alias(
     name = "__exec/%s",
     actual = "%s",
-)""" % (name, ":__exec/" + exec_fq if exec_fq in exec_dependency_labels.split_crates else ":" + exec_fq))
+)""" % (name, direct_exec_labels.to_list()[0]))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""
@@ -665,34 +653,35 @@ filegroup(
     defs_bzl_contents = \
         """load(":data.bzl", "DEP_DATA")
 load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps", _crate_aliases = "crate_aliases")
+load("@rules_rs//rs/private:cargo_build_script_variants.bzl", _cargo_build_script_for_targets = "cargo_build_script_for_targets")
 
 _PLATFORMS = [
     {platforms}
 ]
 
-def aliases(package_name = None, normal = False, normal_dev = False, build = False):
-    dep_data = DEP_DATA.get(package_name or native.package_name())
+def aliases(package_name = None, normal = False, normal_dev = False, build = False, target_triple = None):
+    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
     if not dep_data:
         return {{}}
 
-    return _crate_aliases(dep_data, normal = normal, normal_dev = normal_dev, build = build)
+    return _crate_aliases(dep_data, normal = normal, normal_dev = normal_dev, build = build, target_triple = target_triple)
 
 def crate_name(package_name = None):
-    dep_data = DEP_DATA.get(package_name or native.package_name())
+    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
     if not dep_data:
         return None
 
     return dep_data["crate_name"]
 
 def edition(package_name = None):
-    dep_data = DEP_DATA.get(package_name or native.package_name())
+    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
     if not dep_data:
         return None
 
     return dep_data["edition"]
 
 def lint_config(package_name = None):
-    dep_data = DEP_DATA.get(package_name or native.package_name())
+    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
     if not dep_data:
         return None
 
@@ -703,9 +692,10 @@ def all_crate_deps(
         normal_dev = False,
         build = False,
         package_name = None,
-        cargo_only = False):
+        cargo_only = False,
+        target_triple = None):
 
-    dep_data = DEP_DATA.get(package_name or native.package_name())
+    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
     if not dep_data:
         return []
 
@@ -716,6 +706,24 @@ def all_crate_deps(
         normal_dev = normal_dev,
         build = build,
         filter_prefix = {this_repo} if cargo_only else None,
+        target_triple = target_triple,
+    )
+
+def cargo_build_script(name, package_name = None, **kwargs):
+    package_name = native.package_name() if package_name == None else package_name
+    dep_data = DEP_DATA.get(package_name)
+    if dep_data == None:
+        fail("No Cargo package found for %r" % package_name)
+    profiles = dep_data["build_script_profiles"]
+    kwargs.setdefault("edition", dep_data["edition"])
+    _cargo_build_script_for_targets(
+        name = name,
+        triples = profiles.keys(),
+        conditional_crate_features = {{triple: profile["features"] for triple, profile in profiles.items()}},
+        deps_by_target = {{triple: profile["deps"] for triple, profile in profiles.items()}},
+        aliases_by_target = {{triple: profile["aliases"] for triple, profile in profiles.items()}},
+        use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
+        **kwargs
     )
 
 RESOLVED_PLATFORMS = select({{
@@ -724,6 +732,7 @@ RESOLVED_PLATFORMS = select({{
 }})
 """.format(
             platforms = render_string_list(resolved_platforms),
+            use_legacy_rules_rust_platforms = repr(use_legacy_rules_rust_platforms),
             target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_platforms]),
             this_repo = repr("@" + hub_name + "//:"),
         )
@@ -740,7 +749,9 @@ RESOLVED_PLATFORMS = select({{
         workspace_package = workspace_package,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         lint_configs = lint_configs,
-        exec_labels = exec_labels,
+        target_build_deps = workspace_resolution.target_build_deps,
+        target_build_aliases = workspace_resolution.target_build_aliases,
+        exec_labels_by_target = exec_labels_by_target,
     ))
 
     if dry_run:

@@ -164,7 +164,7 @@ load("@rules_rs//rs:rust_library.bzl", "rust_library")
 rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
-    aliases = aliases(),
+    aliases = aliases(normal = True),
     deps = all_crate_deps(normal = True),
 )
 
@@ -211,7 +211,7 @@ load("@rules_rs//rs:rust_library.bzl", "rust_library")
 rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
-    aliases = aliases(),
+    aliases = aliases(normal = True),
     deps = all_crate_deps(normal = True),
     lint_config = lint_config(),
 )
@@ -484,28 +484,45 @@ use_repo(rules_rust_pyo3, "rules_rust_pyo3")
 `rules_rs` currently supports Cargo lockfile based resolution through `crate.from_cargo(...)`.
 `crate.spec` and vendoring mode are not currently supported.
 
-Normal dependencies and build dependencies resolve features separately. When a
-crate requires different features or dependencies in those configurations,
-`rules_rs` generates a separate `_exec` target and references it explicitly
-from build dependencies. Crates with identical features and dependencies share
-one target. Build scripts retain the features of the target crate while their
-dependencies compile for the execution platform.
+Normal dependencies and build dependencies resolve features separately for each
+`platform_triples` entry. Crates with compatible features and dependencies share
+one target; differing definitions receive explicit `_exec` targets.
 
-For first-party build scripts, use `all_crate_deps(build = True)` and
-`aliases(build = True)` from the generated `defs.bzl`. Use
-`all_crate_deps(normal = True)` and `aliases(normal = True)` for libraries.
-Handwritten build-script dependencies can reference `@<repository>//:__exec/<crate>`
-for a direct Cargo build dependency. Ordinary public crate labels select target
-features when a target resolution exists, or the sole build resolution otherwise.
+Build scripts are grouped by target features, build dependencies, and aliases.
+The group is selected in the target configuration before its dependencies
+transition to the execution platform. Identical definitions share one target.
+
+For first-party build scripts, load `cargo_build_script` from the generated
+Cargo repository's `defs.bzl`. It selects the package's Cargo features, build
+dependencies, and aliases before the execution transition:
+
+```bzl
+load("@crates//:defs.bzl", "cargo_build_script")
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    crate_root = "build.rs",
+)
+```
+
+Use `all_crate_deps(normal = True)` and `aliases(normal = True)` for libraries.
+`all_crate_deps(build = True)` and `aliases(build = True)` remain available when
+the requested dependencies or aliases are identical across target platforms.
+Otherwise, use the generated `cargo_build_script`, or pass `target_triple`
+explicitly when declaring a build script for one target platform.
+Handwritten build-script dependencies can reference
+`@<repository>//:__exec/<triple>/<crate>` for a direct Cargo build dependency,
+where `<triple>` is the original target triple. `__exec/<crate>` is available
+when all active target resolutions select the same crate definition.
 Annotation-added dependencies retain the labels supplied by the user.
 
-Build-dependency resolution unions the requirements of all `platform_triples`
-in the Cargo repository. A feature enabled for one target can therefore add
-build dependencies for another target. Proc-macro normal dependencies still
-use target feature resolution and do not share features enabled only through
-build dependencies. Such dependencies may need explicit `crate_features`
-annotations. For example, a PyO3 toolchain that sets `PYO3_NO_PYTHON` needs its
-chosen `abi3-py3*` feature on `pyo3-build-config` in both resolutions.
+Proc macros reached through normal dependencies use the existing conservative
+target feature resolution for their normal dependencies. They do not share
+features enabled only through build dependencies, so they may need explicit
+`crate_features` annotations.
+For example, a PyO3 toolchain that sets `PYO3_NO_PYTHON` needs its chosen
+`abi3-py3*` feature on `pyo3-build-config` in both resolutions.
 
 `gen_binaries` makes an otherwise build-only package a target root with its
 default features and `crate_features` annotations. If normal dependencies

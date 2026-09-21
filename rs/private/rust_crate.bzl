@@ -4,10 +4,10 @@ load(
     _rust_library = "rust_library",
     _rust_proc_macro = "rust_proc_macro",
 )
-load("//rs:cargo_build_script.bzl", "cargo_build_script")
 load("//rs:rust_binary.bzl", "rust_binary")
 load("//rs:rust_library.bzl", "rust_library")
 load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
+load(":cargo_build_script_variants.bzl", "cargo_build_script_for_targets")
 
 def _platform(triple, use_legacy_rules_rust_platforms):
     if use_legacy_rules_rust_platforms:
@@ -49,7 +49,9 @@ def rust_crate(
         rustc_env = {},
         skip_deps_verification = False,
         build_aliases = None,
-        name_suffix = ""):
+        name_suffix = "",
+        build_deps_by_target = {},
+        build_aliases_by_target = {}):
     build_script_name = "_bs" + name_suffix
     if target_compatible_with == None:
         target_compatible_with = select({
@@ -91,12 +93,18 @@ def rust_crate(
         "norustfmt",
     ]
     crate_tags = default_tags + tags
-    build_script_target_tags = crate_tags + build_script_tags
 
     if build_script:
-        build_script_kwargs = dict(
+        cargo_build_script_for_targets(
+            name = build_script_name,
+            triples = triples,
+            crate_features = crate_features,
+            conditional_crate_features = conditional_crate_features,
             deps = build_deps,
             aliases = aliases if build_aliases == None else build_aliases,
+            deps_by_target = build_deps_by_target,
+            aliases_by_target = build_aliases_by_target,
+            use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
             compile_data = compile_data,
             crate_name = "build_script_build",
             crate_root = build_script,
@@ -115,54 +123,11 @@ def rust_crate(
             rustc_flags = ["--cap-lints=allow"],
             srcs = srcs,
             target_compatible_with = target_compatible_with,
-            tags = build_script_target_tags + ["manual"],
+            tags = crate_tags + build_script_tags,
             version = version,
         )
 
-        if conditional_crate_features:
-            branches = {}
-
-            # The build script is cfg-exec, but the features must be selected according to the target.
-            # Only stamp out one target per triple when there are per-platform feature deltas.
-            for triple in triples:
-                triple_build_script_name = build_script_name + "_" + triple
-                branches[_platform(triple, use_legacy_rules_rust_platforms)] = triple_build_script_name
-
-                build_script_kwargs_for_triple = dict(build_script_kwargs)
-                build_script_kwargs_for_triple["rustc_flags"] = build_script_kwargs["rustc_flags"] + [
-                    # Avoid metadata generation to clash under the same directory when cross-compiling to multiple targets
-                    # concurrently, see https://github.com/hermeticbuild/rules_rs/issues/161
-                    #
-                    # Alternatively, we could also tweak the `crate_name`, but that would drift away from Cargo's
-                    # convention to compile `build.rs` as `build_script_build`, which could lead to unpredictable
-                    # failures for any buildscript relying on it.
-                    "--codegen=metadata=-" + triple.replace("-", "_"),
-                ]
-
-                cargo_build_script(
-                    name = triple_build_script_name,
-                    crate_features = crate_features + conditional_crate_features.get(triple, []),
-                    **build_script_kwargs_for_triple
-                )
-
-            native.alias(
-                name = build_script_name,
-                actual = select(branches),
-                tags = build_script_target_tags,
-            )
-
-        else:
-            cargo_build_script(
-                name = build_script_name,
-                crate_features = crate_features,
-                **build_script_kwargs
-            )
-
-        maybe_build_script = [build_script_name]
-    else:
-        maybe_build_script = []
-
-    deps = deps + maybe_build_script
+        deps = deps + [build_script_name]
 
     if not has_lib:
         # HACK: create a stub target so the hub's `<crate>-<version>` alias

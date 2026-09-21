@@ -6,3 +6,5 @@ edition = "2024"
 [features]
 exec_feature = []
 target_feature = []
+linux_build = []
+darwin_build = []

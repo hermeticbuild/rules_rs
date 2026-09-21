@@ -11,6 +11,12 @@ exclude = ["vendor/consumer", "vendor/shared", "vendor/build-only-helper", "vend
 selected-shared = { package = "feature-split-shared", path = "vendor/shared", features = ["target_feature"] }
 feature-split-consumer = { path = "vendor/consumer" }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+feature-split-consumer = { path = "vendor/consumer", features = ["linux_build"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+feature-split-consumer = { path = "vendor/consumer", features = ["darwin_build"] }
+
 [build-dependencies]
 selected-shared = { package = "feature-split-shared", path = "vendor/shared", features = ["exec_feature"] }
 
