@@ -3,12 +3,7 @@
 # buildifier: disable=bzl-visibility
 load("@rules_rust//cargo/private:cargo_build_script.bzl", "name_to_crate_name", "name_to_pkg_name")
 load("//rs:cargo_build_script.bzl", "cargo_build_script")
-load(":select_utils.bzl", "compute_select")
-
-def _platform(triple, use_legacy_rules_rust_platforms):
-    if use_legacy_rules_rust_platforms:
-        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
-    return "@rules_rs//rs/platforms/config:" + triple
+load(":select_utils.bzl", "compute_select", "platform_label")
 
 def build_script_variants(
         triples,
@@ -45,7 +40,7 @@ def build_script_variants(
 def _execution_deps(deps, use_legacy_rules_rust_platforms):
     by_platform = {}
     for triple, labels in deps.items():
-        platform = _platform(triple, use_legacy_rules_rust_platforms)
+        platform = platform_label(triple, use_legacy_rules_rust_platforms)
         by_platform.setdefault(platform, []).extend(labels)
     common, branches = compute_select([], by_platform)
     if branches:
@@ -102,13 +97,13 @@ def cargo_build_script_for_targets(
             representative = variant["triples"][0]
             script_name = "%s_%s" % (name, representative)
             for triple in variant["triples"]:
-                branches[_platform(triple, use_legacy_rules_rust_platforms)] = ":%s" % script_name
+                branches[platform_label(triple, use_legacy_rules_rust_platforms)] = ":%s" % script_name
 
             # Distinct build.rs definitions need distinct metadata when their
             # binaries share an exec configuration.
             # https://github.com/hermeticbuild/rules_rs/issues/161
             script_kwargs["rustc_flags"] = kwargs.get("rustc_flags", []) + [
-                "--codegen=metadata=-%s" % representative.replace("-", "_"),
+                "--codegen=metadata=-" + representative.replace("-", "_"),
             ]
         cargo_build_script(
             name = script_name,

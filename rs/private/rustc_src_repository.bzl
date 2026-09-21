@@ -6,7 +6,6 @@ load(
     "fq_crate",
     "manifest_package_dir",
     "normalize_path",
-    "platform_label",
     "resolve_cargo_metadata_packages",
     "resolve_cargo_workspace_members",
     "split_lockfile_packages",
@@ -14,6 +13,7 @@ load(
 )
 load("//rs/private:repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields", "render_rust_crate_call")
 load("//rs/private:rust_repository_utils.bzl", "DEFAULT_STATIC_RUST_URL_TEMPLATES")
+load("//rs/private:select_utils.bzl", "platform_label")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
 _SOURCE_ROOT = "src"

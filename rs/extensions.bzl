@@ -7,7 +7,6 @@ load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
     "cargo_toml_fact",
-    "platform_label",
     "render_dep_data",
     "render_string_list",
     "resolve_cargo_workspace_members",
@@ -27,6 +26,7 @@ load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_to
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
 load("//rs/private:repository_utils.bzl", "render_select")
+load("//rs/private:select_utils.bzl", "platform_label")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
 def _spoke_repo(hub_name, name, version):

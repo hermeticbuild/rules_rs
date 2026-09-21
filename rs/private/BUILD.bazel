@@ -360,6 +360,7 @@ bzl_library(
         ":cargo_workspace_graph",
         ":repository_utils",
         ":rust_repository_utils",
+        ":select_utils",
         ":toml2json",
         "//rs/platforms:triples",
         "@bazel_skylib//lib:paths",

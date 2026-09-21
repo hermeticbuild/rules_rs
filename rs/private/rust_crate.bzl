@@ -8,11 +8,7 @@ load("//rs:rust_binary.bzl", "rust_binary")
 load("//rs:rust_library.bzl", "rust_library")
 load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
 load(":cargo_build_script_variants.bzl", "cargo_build_script_for_targets")
-
-def _platform(triple, use_legacy_rules_rust_platforms):
-    if use_legacy_rules_rust_platforms:
-        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
-    return "@rules_rs//rs/platforms/config:" + triple
+load(":select_utils.bzl", "platform_label")
 
 def rust_crate(
         name,
@@ -55,7 +51,7 @@ def rust_crate(
     build_script_name = "_bs" + name_suffix
     if target_compatible_with == None:
         target_compatible_with = select({
-            _platform(triple, use_legacy_rules_rust_platforms): []
+            platform_label(triple, use_legacy_rules_rust_platforms): []
             for triple in triples
         } | {"//conditions:default": ["@platforms//:incompatible"]})
 
@@ -153,7 +149,7 @@ def rust_crate(
         )
 
     selected_crate_features = crate_features + select(
-        {_platform(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
+        {platform_label(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
         {"//conditions:default": []},
     )
 
