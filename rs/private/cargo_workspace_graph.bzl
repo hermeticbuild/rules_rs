@@ -484,8 +484,8 @@ def _copy_exec_resolutions(template_packages, exec_platform_triples):
             template.possible_features,
             exec_platform_triples,
         )
-        for triple, features in template.features_enabled.items():
-            resolution.features_enabled[triple].update(features)
+        for triple in exec_platform_triples:
+            resolution.features_enabled[triple].update(template.features_enabled.get(triple, []))
         resolutions[fq_crate(package["name"], package["version"])] = resolution
         packages.append(dict(package, feature_resolutions = resolution))
 
@@ -593,16 +593,7 @@ def resolve_cargo_workspace_members(
     exec_templates_by_fq_crate = {}
     exec_template_packages = []
     if exec_platform_triples:
-        for package in resolver_packages:
-            target_resolution = package["feature_resolutions"]
-            exec_resolution = new_feature_resolutions(
-                target_resolution.package_index,
-                [dict(dep) for dep in target_resolution.possible_deps],
-                target_resolution.possible_features,
-                exec_platform_triples,
-            )
-            exec_templates_by_fq_crate[fq_crate(package["name"], package["version"])] = exec_resolution
-            exec_template_packages.append(dict(package, feature_resolutions = exec_resolution))
+        exec_template_packages, exec_templates_by_fq_crate = _copy_exec_resolutions(resolver_packages, exec_platform_triples)
 
     _resolve_possible_deps(
         resolver_packages,

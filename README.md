@@ -511,10 +511,6 @@ Use `all_crate_deps(normal = True)` and `aliases(normal = True)` for libraries.
 the requested dependencies or aliases are identical across target platforms.
 Otherwise, use the generated `cargo_build_script`, or pass `target_triple`
 explicitly when declaring a build script for one target platform.
-Handwritten build-script dependencies can reference
-`@<repository>//:__exec/<triple>/<crate>` for a direct Cargo build dependency,
-where `<triple>` is the original target triple. `__exec/<crate>` is available
-when all active target resolutions select the same crate definition.
 Annotation-added dependencies retain the labels supplied by the user.
 
 Proc macros reached through normal dependencies use the existing conservative

@@ -34,8 +34,6 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
 
     for index in dirty_package_indices:
         package = packages[index]
-        package_changed = False
-
         feature_resolutions = package["feature_resolutions"]
         features_enabled = feature_resolutions.features_enabled
 
@@ -47,7 +45,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
 
         deps = feature_resolutions.deps
 
-        if _propagate_feature_enablement(
+        package_changed = _propagate_feature_enablement(
             new_dirty_package_indices,
             package,
             features_enabled,
@@ -55,8 +53,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
             cfg_attrs_by_triple,
             debug,
             include_build_dependencies,
-        ):
-            package_changed = True
+        )
 
         # Propagate features across currently enabled dependencies.
         for dep in feature_resolutions.possible_deps:

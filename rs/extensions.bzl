@@ -502,14 +502,7 @@ alias(
 )""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
 
             fq = _fq_crate(name, version)
-            ordinary_label = "@%s//:%s" % (hub_name, fq)
-            emitted_labels = set()
-            for triple, labels in exec_labels_by_target.items():
-                label = labels.get(ordinary_label, ordinary_label)
-                if label == ordinary_label or label in emitted_labels:
-                    continue
-                emitted_labels.add(label)
-                suffix = dependency_variants.exec_suffixes_by_target[triple][fq]
+            for label, suffix in dependency_variants.exec_aliases_by_crate[fq].items():
                 hub_contents.append("""
 alias(
     name = "%s",
@@ -545,26 +538,6 @@ alias(
     name = "{name}",
     actual = ":{fq}",
 )""".format(name = name, fq = fq))
-
-            direct_exec_labels = set()
-            for triple, suffixes in dependency_variants.exec_suffixes_by_target.items():
-                exec_versions = sorted([version for version in workspace_versions if version in suffixes])
-                if not exec_versions:
-                    continue
-                ordinary_label = "@%s//:%s" % (hub_name, exec_versions[-1])
-                label = exec_labels_by_target[triple].get(ordinary_label, ordinary_label)
-                direct_exec_labels.add(label)
-                hub_contents.append("""
-alias(
-    name = "__exec/%s/%s",
-    actual = "%s",
-)""" % (triple, name, label))
-            if len(direct_exec_labels) == 1:
-                hub_contents.append("""
-alias(
-    name = "__exec/%s",
-    actual = "%s",
-)""" % (name, direct_exec_labels.to_list()[0]))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""

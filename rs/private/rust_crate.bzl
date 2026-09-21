@@ -55,11 +55,13 @@ def rust_crate(
             for triple in triples
         } | {"//conditions:default": ["@platforms//:incompatible"]})
 
-    package_metadata(
-        name = name + "_package_metadata",
-        purl = purl,
-        visibility = ["//visibility:public"],
-    )
+    package_metadata_name = name.removesuffix(name_suffix) + "_package_metadata"
+    if not name_suffix:
+        package_metadata(
+            name = package_metadata_name,
+            purl = purl,
+            visibility = ["//visibility:public"],
+        )
 
     compile_data = native.glob(
         include = ["**"],
@@ -171,7 +173,7 @@ def rust_crate(
             rustc_flags = rustc_flags + ["--cap-lints=allow"],
             tags = crate_tags,
             target_compatible_with = target_compatible_with,
-            package_metadata = [name + "_package_metadata"],
+            package_metadata = [package_metadata_name],
             skip_deps_verification = skip_deps_verification,
             visibility = ["//visibility:public"],
             skip_per_crate_rustc_flags = True,

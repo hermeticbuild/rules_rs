@@ -94,6 +94,9 @@ def cargo_build_script_for_targets(
         script_name = name
         script_kwargs = dict(kwargs)
         if split:
+            # Wildcard builds must select the target platform through the alias.
+            if "manual" not in kwargs.get("tags", []):
+                script_kwargs["tags"] = kwargs.get("tags", []) + ["manual"]
             representative = variant["triples"][0]
             script_name = "%s_%s" % (name, representative)
             for triple in variant["triples"]:

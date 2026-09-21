@@ -21,7 +21,7 @@ def _prepare(target, execution, build_deps = {}, build_aliases = {}):
     return prepare_dependency_variants(target, execution, build_deps, build_aliases, _PREFIX)
 
 def _variant(result, fq, origin = None):
-    suffix = result.exec_suffixes_by_target[origin][fq] if origin else ""
+    suffix = result.exec_aliases_by_crate[fq].get(_label(result, fq, origin), "") if origin else ""
     return [variant for variant in result.variants_by_crate[fq] if variant["name_suffix"] == suffix][0]
 
 def _label(result, fq, origin):
@@ -49,8 +49,8 @@ def _matching_and_inactive_resolutions_impl(ctx):
         asserts.equals(env, 1, len(variants))
         asserts.equals(env, "", variants[0]["name_suffix"])
     asserts.equals(env, {_LINUX: ["std"]}, _variant(result, "shared-1.0.0")["crate_features_select"])
-    asserts.false(env, "inactive-1.0.0" in result.exec_suffixes_by_target[_LINUX])
-    asserts.false(env, "target-only-1.0.0" in result.exec_suffixes_by_target[_LINUX])
+    asserts.equals(env, {}, result.exec_aliases_by_crate["inactive-1.0.0"])
+    asserts.equals(env, {}, result.exec_aliases_by_crate["target-only-1.0.0"])
     asserts.equals(env, set(["std", "dep:optional"]), target["shared-1.0.0"].features_enabled[_LINUX])
     asserts.equals(env, result.variants_by_crate, json.decode(json.encode(result.variants_by_crate)))
     return unittest.end(env)
@@ -70,7 +70,7 @@ def _normal_dependency_refinement_impl(ctx):
 
     for fq in target:
         asserts.equals(env, 2, len(result.variants_by_crate[fq]))
-        asserts.equals(env, "_exec", result.exec_suffixes_by_target[_LINUX][fq])
+        asserts.equals(env, "_exec", _variant(result, fq, _LINUX)["name_suffix"])
         asserts.equals(env, _label(result, fq, _LINUX), _label(result, fq, _MACOS))
     exec_child = _label(result, "child-1.0.0", _LINUX)
     asserts.equals(env, {_LINUX: [child]}, _variant(result, "parent-1.0.0")["deps_select"])
@@ -116,13 +116,13 @@ def _build_dependency_refinement_impl(ctx):
 
     asserts.equals(env, 3, len(result.variants_by_crate["child-1.0.0"]))
     for triple in [_LINUX, _MACOS]:
-        asserts.equals(env, "_exec_" + triple, result.exec_suffixes_by_target[triple]["child-1.0.0"])
+        asserts.equals(env, "_exec_" + triple, _variant(result, "child-1.0.0", triple)["name_suffix"])
     asserts.equals(env, {_MACOS: ["linux"]}, _variant(result, "child-1.0.0", _LINUX)["crate_features_select"])
     asserts.equals(env, {_MACOS: ["macos"]}, _variant(result, "child-1.0.0", _MACOS)["crate_features_select"])
     for fq in ["parent-1.0.0", "normal-ancestor-1.0.0", "build-ancestor-1.0.0"]:
         asserts.equals(env, 2, len(result.variants_by_crate[fq]))
-        asserts.equals(env, "", result.exec_suffixes_by_target[_MACOS][fq])
-        asserts.equals(env, "_exec", result.exec_suffixes_by_target[_LINUX][fq])
+        asserts.equals(env, "", _variant(result, fq, _MACOS)["name_suffix"])
+        asserts.equals(env, "_exec", _variant(result, fq, _LINUX)["name_suffix"])
 
     linux_child = _label(result, "child-1.0.0", _LINUX)
     macos_child = _label(result, "child-1.0.0", _MACOS)
@@ -162,7 +162,7 @@ def _disjoint_compile_platforms_impl(ctx):
     asserts.equals(env, {child: "normal_child"}, variant["aliases"])
     asserts.equals(env, {}, variant["build_aliases_by_target"][_LINUX])
     asserts.equals(env, {_label(result, "child-1.0.0", _LINUX): "build_child"}, variant["build_aliases_by_target"][_MACOS])
-    asserts.equals(env, "", result.exec_suffixes_by_target[_LINUX]["parent-1.0.0"])
+    asserts.equals(env, "", _variant(result, "parent-1.0.0", _LINUX)["name_suffix"])
     return unittest.end(env)
 
 def _alias_conflicts_and_unused_aliases_impl(ctx):
@@ -219,8 +219,8 @@ def _exec_only_canonical_definition_impl(ctx):
     )
 
     asserts.equals(env, 2, len(result.variants_by_crate["helper-1.0.0"]))
-    asserts.equals(env, "", result.exec_suffixes_by_target[_MACOS]["helper-1.0.0"])
-    asserts.equals(env, "_exec", result.exec_suffixes_by_target[_LINUX]["helper-1.0.0"])
+    asserts.equals(env, "", _variant(result, "helper-1.0.0", _MACOS)["name_suffix"])
+    asserts.equals(env, "_exec", _variant(result, "helper-1.0.0", _LINUX)["name_suffix"])
     asserts.equals(env, {_MACOS: ["macos_target"]}, _variant(result, "helper-1.0.0")["crate_features_select"])
     asserts.equals(env, {}, result.exec_labels_by_target[_MACOS])
     return unittest.end(env)

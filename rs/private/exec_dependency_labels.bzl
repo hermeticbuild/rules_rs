@@ -121,7 +121,7 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
 
     Returns:
         A struct containing JSON-compatible variants_by_crate,
-        exec_labels_by_target, and exec_suffixes_by_target dictionaries.
+        exec_labels_by_target, and exec_aliases_by_crate dictionaries.
     """
     target_triples = sorted(exec_resolutions_by_target)
     crate_names = set(target_resolutions)
@@ -179,17 +179,19 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
                 variants[fq].extend(definitions)
                 changed = changed or len(new_groups) > 1
         if not changed:
-            exec_suffixes = {triple: {} for triple in target_triples}
+            exec_aliases = {}
             for fq, definitions in variants.items():
+                exec_aliases[fq] = {}
                 for index, definition in enumerate(definitions):
                     definition["name_suffix"] = _variant_suffix(groups_by_crate[fq], index)
-                    for node in groups_by_crate[fq][index]:
-                        if node.origin != None:
-                            exec_suffixes[node.origin][fq] = definition["name_suffix"]
+                    if index:
+                        origin = groups_by_crate[fq][index][0].origin
+                        label = exec_labels[origin][dep_label_prefix + fq]
+                        exec_aliases[fq][label] = definition["name_suffix"]
             return struct(
                 variants_by_crate = variants,
                 exec_labels_by_target = exec_labels,
-                exec_suffixes_by_target = exec_suffixes,
+                exec_aliases_by_crate = exec_aliases,
             )
         groups_by_crate = refined
 
