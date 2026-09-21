@@ -493,8 +493,11 @@ dependencies compile for the execution platform.
 
 Build-dependency resolution unions the requirements of all `platform_triples`
 in the Cargo repository. A feature enabled for one target can therefore add
-build dependencies for another target. Proc-macro features are not resolved
-separately by this change.
+build dependencies for another target. Proc-macro normal dependencies still
+use target feature resolution and do not share features enabled only through
+build dependencies. Such dependencies may need explicit `crate_features`
+annotations. For example, a PyO3 toolchain that sets `PYO3_NO_PYTHON` needs its
+chosen `abi3-py3*` feature on `pyo3-build-config` in both resolutions.
 
 Cargo workspaces sometimes use a self-referencing dev-dependency to enable extra features for tests:
 

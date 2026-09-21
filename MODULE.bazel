@@ -158,8 +158,12 @@ crate.annotation(
         "@rules_rust//extensions/pyo3:current_pyo3_toolchain",
     ],
     crate = "pyo3-build-config",
+    # Match rs/private/pyo3/Cargo.toml for the proc-macro dependency as well as
+    # the build dependency: PYO3_NO_PYTHON requires an explicit ABI version.
+    crate_features = ["abi3-py311"],
     patch_args = ["-p1"],
     patches = ["//rs/private/pyo3/patches:resolve_cross_compile_config_path.patch"],
+    repositories = ["rpyo3c"],
 )
 crate.annotation(
     build_script_data = [
