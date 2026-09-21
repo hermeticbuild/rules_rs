@@ -33,17 +33,10 @@ def shared_and_per_platform(platform_items, use_legacy_rules_rust_platforms):
     by_platform = {}
     for triple, items in platform_items.items():
         platform = platform_label(triple, use_legacy_rules_rust_platforms)
-        existing = by_platform.get(platform)
-        if existing == None:
-            by_platform[platform] = set(items)
-        else:
-            existing.update(items)
+        by_platform.setdefault(platform, set()).update(items)
 
     items, per_platform = compute_select([], by_platform)
     return sorted(items), per_platform
-
-def select_items(items):
-    return {k: sorted(v) for k, v in items.items()}
 
 def render_string_list(items):
     return ",\n            ".join(['"%s"' % item for item in sorted(items)])
@@ -854,15 +847,10 @@ def workspace_dep_data(
                 target_deps = deps
                 target_aliases = normal_aliases
 
-            if not is_self_dep:
-                if dep.get("rename"):
-                    alias = dep["rename"].replace("-", "_")
-                    aliases[bazel_target] = alias
-                    target_aliases[bazel_target] = alias
-                elif dep_path:
-                    alias = dep["name"].replace("-", "_")
-                    aliases[bazel_target] = alias
-                    target_aliases[bazel_target] = alias
+            if not is_self_dep and (dep.get("rename") or dep_path):
+                alias = (dep.get("rename") or dep["name"]).replace("-", "_")
+                aliases[bazel_target] = alias
+                target_aliases[bazel_target] = alias
 
             target = dep.get("target")
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)

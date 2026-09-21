@@ -24,7 +24,6 @@ def _resolution_node(fq, origin, resolution, target_build_deps, target_build_ali
         triple: sorted([feature for feature in values if not feature.startswith("dep:")])
         for triple, values in resolution.features_enabled.items()
     }
-    deps = _dependency_map(resolution.deps, features)
     build_deps = {}
     build_aliases = {}
     if origin != None:
@@ -42,8 +41,8 @@ def _resolution_node(fq, origin, resolution, target_build_deps, target_build_ali
     return struct(
         origin = origin,
         crate_features_select = features,
-        deps_select = deps,
-        aliases = _aliases_for_deps(resolution.aliases, deps),
+        deps_select = resolution.deps,
+        aliases = _aliases_for_deps(resolution.aliases, resolution.deps),
         build_deps_by_target = build_deps,
         build_aliases_by_target = build_aliases,
     )

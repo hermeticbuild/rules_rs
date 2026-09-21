@@ -48,7 +48,6 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
         package_changed = _propagate_feature_enablement(
             new_dirty_package_indices,
             package,
-            features_enabled,
             feature_resolutions,
             cfg_attrs_by_triple,
             debug,
@@ -72,17 +71,11 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
             prefixed_dep_alias = "dep:" + dep_name
             optional = dep.get("optional", False)
 
-            if dep.get("feature_sensitive"):
-                match = set([
-                    triple
-                    for triple in dep["target"]
-                    if _dep_target_matches_triple(dep, triple, features_enabled[triple], cfg_attrs_by_triple)
-                ])
-            else:
-                match = dep["target"]
-
-            for triple in match:
+            feature_sensitive = dep.get("feature_sensitive")
+            for triple in dep["target"]:
                 if triple not in feature_resolutions.active:
+                    continue
+                if feature_sensitive and not _dep_target_matches_triple(dep, triple, features_enabled[triple], cfg_attrs_by_triple):
                     continue
 
                 if optional:
@@ -119,7 +112,6 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
 def _propagate_feature_enablement(
         dirty_package_indices,
         package,
-        features_enabled,
         feature_resolutions,
         cfg_attrs_by_triple,
         debug,
@@ -127,7 +119,7 @@ def _propagate_feature_enablement(
     package_changed = False
     possible_features = feature_resolutions.possible_features
 
-    for triple, feature_set in features_enabled.items():
+    for triple, feature_set in feature_resolutions.features_enabled.items():
         if triple not in feature_resolutions.active or not feature_set:
             continue
 

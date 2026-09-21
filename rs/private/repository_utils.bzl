@@ -255,7 +255,7 @@ def _render_rust_crate_call(
         )
     cargo_manifest_env = {"CARGO_MANIFEST_PATH": "$(execpath :Cargo.toml)"}
     rustc_env = cargo_manifest_env | getattr(attr, "rustc_env", {})
-    rustc_env_attr = "%s    rustc_env = %s,\n" % (indent, repr(rustc_env)) if rustc_env else ""
+    rustc_env_attr = "%s    rustc_env = %s,\n" % (indent, repr(rustc_env))
     skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""
     build_deps_by_target_attr = ""
     if any([any(deps.values()) for deps in build_deps_by_target.values()]):
