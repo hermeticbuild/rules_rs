@@ -11,14 +11,13 @@ def crate_aliases(dep_data, normal = False, normal_dev = False, build = False):
     if normal_dev:
         aliases.update(dep_data.get("dev_aliases", {}))
     if build:
-        if "build_script_profiles" in dep_data:
-            profiles = dep_data["build_script_profiles"].values()
-            if profiles:
-                build_aliases = profiles[0]["aliases"]
-                for profile in profiles:
-                    if profile["aliases"] != build_aliases:
-                        fail("Build-script aliases differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl.")
-                aliases.update(build_aliases)
+        if "build_scripts" in dep_data:
+            scripts = dep_data["build_scripts"]
+            build_aliases = scripts[0]["aliases"]
+            for script in scripts:
+                if script["aliases"] != build_aliases:
+                    fail("Build-script aliases differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl.")
+            aliases.update(build_aliases)
         else:
             aliases.update(dep_data.get("build_aliases", {}))
     return aliases
@@ -46,26 +45,26 @@ def all_crate_deps(
         normal = False,
         normal_dev = False,
         build = False,
-        filter_prefix = None):
+        filter_prefix = None,
+        build_platforms = []):
     specs = []
 
     if normal_dev:
         specs.append((dep_data.get("dev_deps", []), dep_data.get("dev_deps_by_platform", {})))
 
     if build:
-        if "build_script_profiles" in dep_data:
-            execution_platforms = dep_data["build_script_platforms"]
-            profiles = dep_data["build_script_profiles"].values()
-            execution_deps = profiles[0]["deps"] if profiles else {}
-            for profile in profiles:
-                if profile["deps"] != execution_deps:
+        if "build_scripts" in dep_data:
+            scripts = dep_data["build_scripts"]
+            build_deps = scripts[0]
+            for script in scripts:
+                if script["deps"] != build_deps["deps"] or script["deps_by_platform"] != build_deps["deps_by_platform"]:
                     fail("Build-script dependencies differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl.")
-            by_platform = {}
-            for triple, deps in execution_deps.items():
-                by_platform.setdefault(execution_platforms[triple], []).extend(deps)
-            specs.append(([], by_platform))
+            specs.append(([], {
+                platform: build_deps["deps"] + build_deps["deps_by_platform"].get(platform, [])
+                for platform in build_platforms
+            }))
             platforms = set(platforms if normal or normal_dev else [])
-            platforms.update(execution_platforms.values())
+            platforms.update(build_platforms)
         else:
             specs.append((dep_data.get("build_deps", []), dep_data.get("build_deps_by_platform", {})))
 

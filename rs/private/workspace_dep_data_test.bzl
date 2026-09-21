@@ -54,7 +54,7 @@ def _workspace_legacy_build_deps_keep_labels_impl(ctx):
     }, crate_aliases(data, build = True))
     return unittest.end(env)
 
-def _workspace_build_profiles_preserve_target_requirements_impl(ctx):
+def _workspace_build_scripts_preserve_target_requirements_impl(ctx):
     env = unittest.begin(ctx)
     linux = "x86_64-unknown-linux-gnu"
     macos = "aarch64-apple-darwin"
@@ -78,8 +78,8 @@ def _workspace_build_profiles_preserve_target_requirements_impl(ctx):
         feature_resolutions_by_fq_crate = {
             "app-1.0.0": struct(
                 features_enabled = {
-                    linux: set(["linux_feature", "dep:build-helper"]),
-                    macos: set(["macos_feature"]),
+                    linux: set(["common_feature", "linux_feature", "dep:build-helper"]),
+                    macos: set(["common_feature", "macos_feature"]),
                 },
                 possible_deps = [{"name": "local-helper", "kind": "build", "bazel_target": "@crates//:local-helper-1.0.0"}],
             ),
@@ -107,22 +107,23 @@ def _workspace_build_profiles_preserve_target_requirements_impl(ctx):
         },
     )["app"]
 
-    asserts.equals(env, {
-        linux: {
-            "deps": {linux: ["//local-helper", linux_dep], macos: ["//local-helper", linux_dep]},
-            "aliases": {linux_dep: "build_helper", "//local-helper": "local_helper"},
-            "features": ["linux_feature"],
-        },
-        macos: {
-            "deps": {linux: [], macos: [macos_dep]},
+    asserts.equals(env, [
+        {
+            "target_triples": [macos],
+            "crate_features": ["common_feature", "macos_feature"],
+            "deps": [],
+            "deps_by_platform": {"@rules_rs//rs/platforms/config:" + macos: [macos_dep]},
             "aliases": {macos_dep: "build_helper"},
-            "features": ["macos_feature"],
         },
-    }, data["build_script_profiles"])
-    asserts.equals(env, {
-        linux: "@rules_rs//rs/platforms/config:" + linux,
-        macos: "@rules_rs//rs/platforms/config:" + macos,
-    }, data["build_script_platforms"])
+        {
+            "target_triples": [linux],
+            "crate_features": ["common_feature", "linux_feature"],
+            "deps": ["//local-helper", linux_dep],
+            "deps_by_platform": {},
+            "aliases": {linux_dep: "build_helper", "//local-helper": "local_helper"},
+        },
+    ], data["build_scripts"])
+    asserts.equals(env, ["common_feature"], data["crate_features"])
     asserts.equals(env, [dep], all_crate_deps(data, [], normal = True))
     asserts.equals(env, ["@crates//:dev-1.0.0"], all_crate_deps(data, [], normal_dev = True))
     asserts.equals(env, {"@crates//:dev-1.0.0": "dev_dep"}, crate_aliases(data, normal_dev = True))
@@ -137,8 +138,10 @@ def _workspace_build_profiles_preserve_target_requirements_impl(ctx):
     asserts.false(env, "build_deps" in data)
     return unittest.end(env)
 
-def _workspace_build_profiles_preserve_empty_targets_impl(ctx):
+def _workspace_build_scripts_preserve_empty_targets_impl(ctx):
     env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    macos = "aarch64-apple-darwin"
     data = workspace_dep_data(
         cargo_metadata = {"packages": [{
             "name": "app",
@@ -147,7 +150,7 @@ def _workspace_build_profiles_preserve_empty_targets_impl(ctx):
             "dependencies": [],
         }]},
         feature_resolutions_by_fq_crate = {},
-        platform_triples = ["x86_64-unknown-linux-gnu"],
+        platform_triples = [linux, macos],
         platform_cfg_attrs = [],
         cfg_match_cache = {},
         repo_root = "/workspace",
@@ -155,22 +158,26 @@ def _workspace_build_profiles_preserve_empty_targets_impl(ctx):
         use_legacy_rules_rust_platforms = False,
         target_build_deps = {},
     )[""]
-    asserts.equals(env, {
-        "x86_64-unknown-linux-gnu": {"deps": {}, "aliases": {}, "features": []},
-    }, data["build_script_profiles"])
+    asserts.equals(env, [{
+        "target_triples": [macos, linux],
+        "crate_features": [],
+        "deps": [],
+        "deps_by_platform": {},
+        "aliases": {},
+    }], data["build_scripts"])
     asserts.equals(env, [], all_crate_deps(data, [], build = True))
     return unittest.end(env)
 
 workspace_aliases_default_preserves_all_kinds_test = unittest.make(_workspace_aliases_default_preserves_all_kinds_impl)
 workspace_legacy_build_deps_keep_labels_test = unittest.make(_workspace_legacy_build_deps_keep_labels_impl)
-workspace_build_profiles_preserve_target_requirements_test = unittest.make(_workspace_build_profiles_preserve_target_requirements_impl)
-workspace_build_profiles_preserve_empty_targets_test = unittest.make(_workspace_build_profiles_preserve_empty_targets_impl)
+workspace_build_scripts_preserve_target_requirements_test = unittest.make(_workspace_build_scripts_preserve_target_requirements_impl)
+workspace_build_scripts_preserve_empty_targets_test = unittest.make(_workspace_build_scripts_preserve_empty_targets_impl)
 
 def workspace_dep_data_tests():
     return unittest.suite(
         "workspace_dep_data_tests",
         workspace_aliases_default_preserves_all_kinds_test,
         workspace_legacy_build_deps_keep_labels_test,
-        workspace_build_profiles_preserve_target_requirements_test,
-        workspace_build_profiles_preserve_empty_targets_test,
+        workspace_build_scripts_preserve_target_requirements_test,
+        workspace_build_scripts_preserve_empty_targets_test,
     )

@@ -1,7 +1,8 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
+load("//rs/private:cargo_build_script_variants.bzl", "build_script_variants")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:resolver.bzl", "collect_exec_build_dependencies", "resolve")
-load("//rs/private:select_utils.bzl", "platform_label", "shared_and_per_platform")
+load("//rs/private:select_utils.bzl", "shared_and_per_platform")
 load("//rs/private:semver.bzl", "select_matching_version")
 
 def fq_crate(name, version):
@@ -755,12 +756,6 @@ def workspace_dep_data(
         target_build_aliases = {},
         exec_labels_by_target = {}):
     dep_data = {}
-    build_script_platforms = {
-        triple: platform_label(triple, use_legacy_rules_rust_platforms)
-        for owners in (target_build_deps or {}).values()
-        for deps_by_triple in owners.values()
-        for triple in deps_by_triple
-    }
     for package in cargo_metadata["packages"]:
         aliases = {}
         normal_aliases = {}
@@ -854,28 +849,23 @@ def workspace_dep_data(
 
         bazel_package = paths.join(workspace_package, package_dir) if package_dir else workspace_package
 
-        build_script_profiles = {}
         if target_build_deps != None:
             for triple in platform_triples:
                 labels = exec_labels_by_target.get(triple, {})
-                profile_deps = {
-                    exec_triple: sorted([local_build_labels.get(label, labels.get(label, label)) for label in items])
+                build_deps[triple] = {
+                    exec_triple: [local_build_labels.get(label, labels.get(label, label)) for label in items]
                     for exec_triple, items in target_build_deps.get(triple, {}).get(package_key, {}).items()
                 }
-                profile_aliases = {
+                build_aliases[triple] = {
                     local_build_labels.get(label, labels.get(label, label)): rename
                     for label, rename in target_build_aliases.get(triple, {}).get(package_key, {}).items()
                 }
-                for items in profile_deps.values():
+                for items in build_deps[triple].values():
                     for label in items:
                         if label in local_build_aliases:
-                            profile_aliases[label] = local_build_aliases[label]
-                aliases.update(profile_aliases)
-                build_script_profiles[triple] = {
-                    "deps": profile_deps,
-                    "aliases": profile_aliases,
-                    "features": sorted(crate_features[triple]),
-                }
+                            build_aliases[triple][label] = local_build_aliases[label]
+                aliases.update(build_aliases[triple])
+            build_scripts = build_script_variants(crate_features, build_deps, build_aliases, use_legacy_rules_rust_platforms)
 
         crate_features, crate_features_by_platform = shared_and_per_platform(crate_features, use_legacy_rules_rust_platforms)
         deps, deps_by_platform = shared_and_per_platform(deps, use_legacy_rules_rust_platforms)
@@ -897,8 +887,7 @@ def workspace_dep_data(
             "shared_libraries": shared_libraries,
         }
         if target_build_deps != None:
-            package_dep_data["build_script_profiles"] = build_script_profiles
-            package_dep_data["build_script_platforms"] = build_script_platforms
+            package_dep_data["build_scripts"] = build_scripts
         else:
             build_deps, build_deps_by_platform = shared_and_per_platform(build_deps, use_legacy_rules_rust_platforms)
             package_dep_data["build_aliases"] = build_aliases

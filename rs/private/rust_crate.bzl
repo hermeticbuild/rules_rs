@@ -30,6 +30,7 @@ def rust_crate(
         target_compatible_with,
         links,
         build_script,
+        build_scripts,
         build_script_data,
         build_deps,
         build_script_env,
@@ -45,9 +46,7 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False,
-        name_suffix = "",
-        build_deps_by_target = {},
-        build_aliases_by_target = {}):
+        name_suffix = ""):
     build_script_name = "_bs" + name_suffix
     if target_compatible_with == None:
         target_compatible_with = select({
@@ -96,15 +95,7 @@ def rust_crate(
     if build_script:
         cargo_build_script_for_targets(
             name = build_script_name,
-            profiles = {
-                triple: {
-                    "features": conditional_crate_features.get(triple, []),
-                    "deps": build_deps_by_target.get(triple, {}),
-                    "aliases": build_aliases_by_target.get(triple, {}),
-                }
-                for triple in triples
-            },
-            crate_features = crate_features,
+            build_scripts = build_scripts,
             deps = build_deps,
             aliases = build_aliases,
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,

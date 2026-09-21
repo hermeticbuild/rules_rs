@@ -1,3 +1,4 @@
+load(":cargo_build_script_variants.bzl", "build_script_variants")
 load(":cargo_toml_utils.bzl", "cargo_toml_is_proc_macro")
 load(":select_utils.bzl", "compute_select", "platform_label")
 load(":semver.bzl", "parse_full_version")
@@ -191,11 +192,12 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    target_compatible_with = {target_compatible_with},
 {indent}    links = {links},
 {indent}    build_script = {build_script},
+{indent}    build_scripts = {build_scripts},
 {indent}    build_script_data = {build_script_data}{conditional_build_script_data},
 {indent}    build_deps = [
 {indent}        {build_deps}
 {indent}    ]{conditional_build_deps},
-{build_deps_by_target_attr}{build_aliases_by_target_attr}{indent}    build_script_env = {build_script_env}{conditional_build_script_env},
+{indent}    build_script_env = {build_script_env}{conditional_build_script_env},
 {indent}    build_script_env_files = {build_script_env_files},
 {indent}    allow_build_script_to_detect_nonhermetic_paths = {allow_build_script_to_detect_nonhermetic_paths},
 {indent}    build_script_toolchains = {build_script_toolchains},
@@ -265,25 +267,17 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     for variant in variants:
         name_suffix = variant["name_suffix"]
         crate_features_select = variant["crate_features_select"]
-        build_deps_by_target = variant["build_deps_by_target"]
-        build_aliases_by_target = variant["build_aliases_by_target"]
-
-        # cargo_build_script_for_targets selects these features before cfg = "exec".
         crate_features, conditional_crate_features = compute_select(common_crate_features, crate_features_select)
         deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), variant["deps_select"], use_legacy_rules_rust_platforms)
-        build_deps_by_target_attr = ""
-        for deps_by_exec in build_deps_by_target.values():
-            for labels in deps_by_exec.values():
-                if labels:
-                    build_deps_by_target_attr = "%s    build_deps_by_target = %s,\n" % (indent, repr(build_deps_by_target))
-                    break
-            if build_deps_by_target_attr:
-                break
-        build_aliases_by_target_attr = ""
-        for aliases_for_target in build_aliases_by_target.values():
-            if aliases_for_target:
-                build_aliases_by_target_attr = "%s    build_aliases_by_target = %s,\n" % (indent, repr(build_aliases_by_target))
-                break
+        build_scripts = []
+        if values["build_script"] != "None":
+            build_scripts = build_script_variants(
+                crate_features_select,
+                variant["build_deps_by_target"],
+                variant["build_aliases_by_target"],
+                use_legacy_rules_rust_platforms,
+                crate_features = common_crate_features,
+            )
 
         calls.append(_RUST_CRATE_MACRO_CALL.format(
             indent = indent,
@@ -311,12 +305,11 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
             target_compatible_with = target_compatible_with,
             links = values["links"],
             build_script = values["build_script"],
+            build_scripts = repr(build_scripts),
             build_script_data = repr(build_script_data),
             conditional_build_script_data = " + " + conditional_build_script_data if conditional_build_script_data else "",
             build_deps = list_indent.join(['"%s"' % d for d in sorted(build_deps)]),
             conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
-            build_deps_by_target_attr = build_deps_by_target_attr,
-            build_aliases_by_target_attr = build_aliases_by_target_attr,
             build_script_env = repr(cargo_manifest_env | attr.build_script_env),
             conditional_build_script_env = " | " + conditional_build_script_env if conditional_build_script_env else "",
             build_script_env_files = repr([str(f) for f in build_script_env_files]),

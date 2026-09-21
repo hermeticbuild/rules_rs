@@ -62,6 +62,9 @@ def _values(binaries = {}):
         "version": repr("1.0.0"),
     }
 
+def _build_scripts(rendered):
+    return json.decode(rendered.split("    build_scripts = ")[1].split(",\n")[0])
+
 def _split_dependency_labels_test_impl(ctx):
     env = unittest.begin(ctx)
     build_deps = {_LINUX: {_MACOS: ["@helper//:helper_exec"]}}
@@ -90,8 +93,14 @@ def _split_dependency_labels_test_impl(ctx):
     asserts.true(env, '"@dependency//:dependency"' in target_call)
     asserts.false(env, '"@dependency//:dependency_exec"' in target_call)
     asserts.true(env, '"@dependency//:dependency_exec"' in exec_call)
-    asserts.true(env, "build_deps_by_target = %s," % repr(build_deps) in target_call)
-    asserts.true(env, "build_deps_by_target = %s," % repr(build_deps) in exec_call)
+    asserts.equals(env, [{
+        "target_triples": [_LINUX],
+        "crate_features": ["shared_feature"],
+        "deps": ["@helper//:helper_exec"],
+        "deps_by_platform": {},
+        "aliases": {},
+    }], _build_scripts(target_call))
+    asserts.equals(env, _build_scripts(target_call), _build_scripts(exec_call))
     asserts.true(env, 'binaries = {"example-cli": "src/main.rs"}' in target_call)
     asserts.true(env, "binaries = {}" in exec_call)
     asserts.true(env, "target_compatible_with = None" in target_call)
@@ -121,13 +130,13 @@ def _separate_build_aliases_test_impl(ctx):
         _values(),
     )
     aliases = rendered.split("    aliases = ")[1].split("    build_aliases = ")[0]
-    raw_build_deps = rendered.split("    build_deps_by_target = ")[1].split("    build_aliases_by_target = ")[0]
-    raw_build_aliases = rendered.split("    build_aliases_by_target = ")[1].split("    build_script_env = ")[0]
+    build_scripts = {script["target_triples"][0]: script for script in _build_scripts(rendered)}
     asserts.true(env, '"@normal//:normal": "renamed"' in aliases)
     asserts.false(env, "@build//:" in aliases)
-    asserts.false(env, "@normal//:" in raw_build_aliases)
-    asserts.equals(env, build_aliases, json.decode(raw_build_aliases.removesuffix(",\n")))
-    asserts.equals(env, build_deps, json.decode(raw_build_deps.removesuffix(",\n")))
+    for triple in [_LINUX, _MACOS]:
+        asserts.equals(env, build_aliases[triple], build_scripts[triple]["aliases"])
+        asserts.equals(env, build_deps[triple][_MACOS], build_scripts[triple]["deps"])
+        asserts.equals(env, {}, build_scripts[triple]["deps_by_platform"])
     asserts.false(env, "select(" in rendered)
     return unittest.end(env)
 
@@ -182,6 +191,7 @@ def _legacy_attributes_test_impl(ctx):
     asserts.equals(env, 2, len(rendered.split('"@dependency//:dependency": "renamed"')) - 1)
     asserts.true(env, " + package_metadata_bazel_deps" in rendered)
     asserts.true(env, 'crate_features = ["shared", "specific"]' in rendered)
+    asserts.equals(env, ["shared", "specific"], _build_scripts(rendered)[0]["crate_features"])
     asserts.false(env, "dep:" in rendered)
     asserts.true(env, "skip_deps_verification = True" in rendered)
     asserts.true(env, "target_compatible_with = RESOLVED_PLATFORMS" in rendered)
@@ -202,6 +212,11 @@ def _empty_build_matrices_test_impl(ctx):
     )
     asserts.false(env, "build_deps_by_target" in rendered)
     asserts.false(env, "build_aliases_by_target" in rendered)
+    asserts.equals(env, [], _build_scripts(rendered)[0]["deps"])
+    asserts.equals(env, {}, _build_scripts(rendered)[0]["deps_by_platform"])
+    asserts.equals(env, {}, _build_scripts(rendered)[0]["aliases"])
+    no_script = render_rust_crate_call(_attrs(variants = [_variant()]), _values() | {"build_script": "None"})
+    asserts.equals(env, [], _build_scripts(no_script))
     return unittest.end(env)
 
 _split_dependency_labels_test = unittest.make(_split_dependency_labels_test_impl)

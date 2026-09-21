@@ -623,6 +623,12 @@ filegroup(
         if platform not in resolved_platforms:
             resolved_platforms.append(platform)
 
+    build_triples = set()
+    for owners in workspace_resolution.target_build_deps.values():
+        for deps_by_triple in owners.values():
+            build_triples.update(deps_by_triple)
+    build_platforms = set([platform_label(triple, use_legacy_rules_rust_platforms) for triple in build_triples])
+
     defs_bzl_contents = \
         """load(":data.bzl", "DEP_DATA")
 load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps", _crate_aliases = "crate_aliases")
@@ -630,6 +636,10 @@ load("@rules_rs//rs/private:cargo_build_script_variants.bzl", _cargo_build_scrip
 
 _PLATFORMS = [
     {platforms}
+]
+
+_BUILD_PLATFORMS = [
+    {build_platforms}
 ]
 
 def aliases(package_name = None, normal = False, normal_dev = False, build = False):
@@ -674,6 +684,7 @@ def all_crate_deps(
     return _all_crate_deps(
         dep_data,
         platforms = _PLATFORMS,
+        build_platforms = _BUILD_PLATFORMS,
         normal = normal,
         normal_dev = normal_dev,
         build = build,
@@ -688,7 +699,7 @@ def cargo_build_script(name, package_name = None, **kwargs):
     kwargs.setdefault("edition", dep_data["edition"])
     _cargo_build_script_for_targets(
         name = name,
-        profiles = dep_data["build_script_profiles"],
+        build_scripts = dep_data["build_scripts"],
         use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
         **kwargs
     )
@@ -699,6 +710,7 @@ RESOLVED_PLATFORMS = select({{
 }})
 """.format(
             platforms = render_string_list(resolved_platforms),
+            build_platforms = render_string_list(build_platforms),
             use_legacy_rules_rust_platforms = repr(use_legacy_rules_rust_platforms),
             target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_platforms]),
             this_repo = repr("@" + hub_name + "//:"),
