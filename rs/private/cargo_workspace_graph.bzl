@@ -672,7 +672,7 @@ def resolve_cargo_workspace_members(
 
     if exec_platform_triples:
         seed_exec_build_dependencies(resolver_packages, exec_resolver_packages, exec_platform_cfg_attrs_by_triple)
-        resolve(ctx, exec_resolver_packages, exec_feature_resolutions_by_fq_crate, exec_platform_cfg_attrs_by_triple, debug)
+        resolve(ctx, exec_resolver_packages, exec_feature_resolutions_by_fq_crate, exec_platform_cfg_attrs_by_triple, debug, restrict_to_active_platforms = True)
 
     for package in packages:
         feature_resolutions = package["feature_resolutions"]

@@ -164,6 +164,28 @@ TESTS = [
 
 [use_repo(crate, test) for test in TESTS]
 
+crate.annotation(
+    crate = "build-only-helper",
+    gen_binaries = ["build-only-helper"],
+    repositories = ["build_exec_feature_split"],
+)
+crate.from_cargo(
+    name = "optional_target_build_dep",
+    cargo_lock = "//:optional_target_build_dep/Cargo.lock",
+    cargo_toml = "//:optional_target_build_dep/Cargo.toml",
+    platform_triples = [
+        "aarch64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+crate.annotation_select(
+    crate = "libdbus-sys",
+    crate_features = ["vendored"],
+    repositories = ["optional_target_build_dep"],
+    triples = ["x86_64-unknown-linux-gnu"],
+)
+use_repo(crate, "optional_target_build_dep")
+
 # Workspace member whose Cargo.toml lives at the bazel workspace root.
 crate.from_cargo(
     name = "root_package",

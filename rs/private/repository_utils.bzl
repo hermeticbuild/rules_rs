@@ -326,7 +326,6 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         crate_features_select = attr.exec_crate_features_select
         deps_select = attr.exec_deps_select
         build_deps_select = attr.exec_build_script_deps_select
-        binaries = "{}"
     elif exec_active:
         merged_crate_features_select = _merge_target_and_exec(crate_features_select, attr.exec_crate_features_select)
         merged_deps_select = _merge_target_and_exec(deps_select, attr.exec_deps_select)

@@ -63,6 +63,8 @@ def rust_crate(
     )
 
     if name_suffix == "_exec":
+        if not hasattr(config.exec(), "and_then"):
+            fail("Separate target and build-dependency features require config.exec().and_then; use Bazel 8.8.x or Bazel 9.2.0 and later")
         target_exec_alias_name = name.removesuffix(name_suffix)
         native.alias(
             name = target_exec_alias_name,

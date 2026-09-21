@@ -484,6 +484,18 @@ use_repo(rules_rust_pyo3, "rules_rust_pyo3")
 `rules_rs` currently supports Cargo lockfile based resolution through `crate.from_cargo(...)`.
 `crate.spec` and vendoring mode are not currently supported.
 
+Normal dependencies and build dependencies resolve features separately. When a
+crate requires different features or dependencies in those configurations,
+`rules_rs` generates separate targets; selecting the build-dependency target
+requires `config.exec().and_then`, available in Bazel 8.8.x and Bazel 9.2.0
+or later. Build scripts retain the features of the target crate while their
+dependencies compile for the execution platform.
+
+Build-dependency resolution unions the requirements of all `platform_triples`
+in the Cargo repository. A feature enabled for one target can therefore add
+build dependencies for another target. Proc-macro features are not resolved
+separately by this change.
+
 Cargo workspaces sometimes use a self-referencing dev-dependency to enable extra features for tests:
 
 ```toml

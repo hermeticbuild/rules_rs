@@ -1,0 +1,7 @@
+[package]
+name = "build-only-helper"
+version = "0.1.0"
+edition = "2024"
+
+[build-dependencies]
+feature-split-shared = { path = "../shared", features = ["exec_feature"] }

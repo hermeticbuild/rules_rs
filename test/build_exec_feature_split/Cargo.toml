@@ -4,10 +4,13 @@ version = "0.1.0"
 
 [workspace]
 resolver = "2"
-exclude = ["vendor/consumer", "vendor/shared"]
+exclude = ["vendor/consumer", "vendor/shared", "vendor/build-only-helper", "vendor/macro", "vendor/macro-helper"]
 
 [dependencies]
 feature-split-consumer = { path = "vendor/consumer" }
 
 [patch.crates-io]
+build-only-helper = { path = "vendor/build-only-helper" }
+feature-split-macro = { path = "vendor/macro" }
+feature-split-macro-helper = { path = "vendor/macro-helper" }
 feature-split-shared = { path = "vendor/shared" }

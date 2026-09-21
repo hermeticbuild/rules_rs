@@ -29,7 +29,7 @@ def _dep_target_matches_triple(dep, triple, package_feature_set, cfg_attrs_by_tr
         features = package_feature_set,
     ).matches)
 
-def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, debug, include_build_dependencies):
+def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, debug, include_build_dependencies, restrict_to_active_platforms):
     new_dirty_package_indices = set()
 
     for index in dirty_package_indices:
@@ -38,6 +38,12 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
 
         feature_resolutions = package["feature_resolutions"]
         features_enabled = feature_resolutions.features_enabled
+
+        # A normal dependency can be a proc macro compiled for an execution
+        # platform. Preserve its dependencies on every configured platform;
+        # proc-macro metadata is only available after fetching its archive.
+        if feature_resolutions.active and not restrict_to_active_platforms:
+            feature_resolutions.active.update(features_enabled.keys())
 
         deps = feature_resolutions.deps
 
@@ -189,7 +195,7 @@ def _propagate_feature_enablement(
 
 _MAX_ROUNDS = 200
 
-def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple, debug, include_build_dependencies = True):
+def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple, debug, include_build_dependencies = True, restrict_to_active_platforms = False):
     # Do some rounds of mutual resolution; bail when no more changes
     dirty_package_indices = range(len(packages))
 
@@ -197,7 +203,7 @@ def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple
         if mctx:
             mctx.report_progress("Running round %s of dependency/feature resolution" % i)
 
-        dirty_package_indices = _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, debug, include_build_dependencies)
+        dirty_package_indices = _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, debug, include_build_dependencies, restrict_to_active_platforms)
         if not dirty_package_indices:
             if debug:
                 count = _count(feature_resolutions_by_fq_crate)

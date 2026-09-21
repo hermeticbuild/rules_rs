@@ -1,4 +1,3 @@
 fn main() {
-    build_only_helper::check();
     feature_split_shared::exec_only();
 }
