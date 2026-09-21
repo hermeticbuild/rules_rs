@@ -487,7 +487,8 @@ crate.annotation(
     for name, versions in versions_by_name.items():
         for version in versions:
             annotation = annotation_for(annotations, name, version, hub_name)
-            package = package_by_fq[_fq_crate(name, version)]
+            fq = _fq_crate(name, version)
+            package = package_by_fq[fq]
             target_repo_name = package["target_repo_name"]
             target_package_path = package["target_package_path"]
 
@@ -497,7 +498,6 @@ alias(
     actual = "{actual}",
 )""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
 
-            fq = _fq_crate(name, version)
             for variant in dependency_variants.variants_by_crate[fq]:
                 suffix = variant["name_suffix"]
                 if not suffix:
@@ -528,7 +528,7 @@ alias(
 
         workspace_versions = workspace_dep_versions_by_name.get(name)
         if workspace_versions:
-            fq = sorted(workspace_versions)[-1]
+            fq = max(workspace_versions)
             default_version = fq[len(name) + 1:]
             annotation = annotation_for(annotations, name, default_version, hub_name)
 
@@ -548,7 +548,7 @@ alias(
         if len(versions) == 1:
             version = versions[0]
             annotation = annotation_for(annotations, name, version, hub_name)
-            for alias_name in sorted(annotation.extra_aliased_targets.keys()):
+            for alias_name in sorted(annotation.extra_aliased_targets):
                 hub_contents.append("""
 alias(
     name = "{alias_name}",

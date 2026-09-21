@@ -121,13 +121,10 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
     for resolutions in exec_resolutions_by_target.values():
         for resolution in resolutions.values():
             exec_triples.update(resolution.features_enabled)
-    exec_triples = sorted(exec_triples)
-
     groups_by_crate = {}
     node_count = 0
-    for fq in sorted(target_resolutions):
+    for fq, target in target_resolutions.items():
         nodes = []
-        target = target_resolutions[fq]
         if target.active:
             nodes.append(_resolution_node(fq, None, target, target_build_deps, target_build_aliases, exec_triples))
         for triple in target_triples:
