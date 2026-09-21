@@ -637,10 +637,6 @@ def resolve_cargo_workspace_members(
                             locked_version,
                         ))
 
-            features = list(dep.get("features", []))
-            if dep.get("uses_default_features"):
-                features.append("default")
-
             if not dep_fq:
                 continue
 
@@ -649,10 +645,6 @@ def resolve_cargo_workspace_members(
 
             if not is_first_party_dep or materialize_workspace_members:
                 dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
-
-            feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
-
-            if not is_first_party_dep or materialize_workspace_members:
                 versions = workspace_dep_versions_by_name.get(dep_name)
                 if not versions:
                     versions = set()
@@ -661,6 +653,11 @@ def resolve_cargo_workspace_members(
 
             if dep.get("kind", "normal") == "build":
                 continue
+
+            feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
+            features = list(dep.get("features", []))
+            if dep.get("uses_default_features"):
+                features.append("default")
 
             target = dep.get("target")
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
@@ -755,8 +752,8 @@ def workspace_dep_data(
         use_legacy_rules_rust_platforms,
         lint_configs = {},
         target_build_deps = None,
-        target_build_aliases = None,
-        exec_labels_by_target = None):
+        target_build_aliases = {},
+        exec_labels_by_target = {}):
     dep_data = {}
     build_script_platforms = {
         triple: platform_label(triple, use_legacy_rules_rust_platforms)
@@ -860,14 +857,14 @@ def workspace_dep_data(
         build_script_profiles = {}
         if target_build_deps != None:
             for triple in platform_triples:
-                labels = (exec_labels_by_target or {}).get(triple, {})
+                labels = exec_labels_by_target.get(triple, {})
                 profile_deps = {
                     exec_triple: sorted([local_build_labels.get(label, labels.get(label, label)) for label in items])
                     for exec_triple, items in target_build_deps.get(triple, {}).get(package_key, {}).items()
                 }
                 profile_aliases = {
                     local_build_labels.get(label, labels.get(label, label)): rename
-                    for label, rename in (target_build_aliases or {}).get(triple, {}).get(package_key, {}).items()
+                    for label, rename in target_build_aliases.get(triple, {}).get(package_key, {}).items()
                 }
                 for items in profile_deps.values():
                     for label in items:

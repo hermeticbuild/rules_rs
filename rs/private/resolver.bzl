@@ -35,12 +35,14 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
     for index in dirty_package_indices:
         package = packages[index]
         feature_resolutions = package["feature_resolutions"]
+        if not feature_resolutions.active:
+            continue
         features_enabled = feature_resolutions.features_enabled
 
         # A normal dependency can be a proc macro compiled for an execution
         # platform. Preserve its dependencies on every configured platform;
         # proc-macro metadata is only available after fetching its archive.
-        if feature_resolutions.active and not restrict_to_active_platforms:
+        if not restrict_to_active_platforms:
             feature_resolutions.active.update(features_enabled)
 
         deps = feature_resolutions.deps

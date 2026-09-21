@@ -76,7 +76,7 @@ def _remap_definition(node, exec_labels):
         build_deps[triple] = _remap_deps(deps, build_labels)
         build_aliases[triple] = _remap_aliases(node.build_aliases_by_target[triple], build_labels)
     return {
-        "crate_features_select": node.crate_features_select,
+        "crate_features_select": dict(node.crate_features_select),
         "deps_select": _remap_deps(node.deps_select, labels),
         "aliases": _remap_aliases(node.aliases, labels),
         "build_deps_by_target": build_deps,
@@ -93,15 +93,11 @@ def _definitions_compatible(left, right):
     return True
 
 def _merge_definitions(left, right):
-    result = {
-        field: left[field] | right[field]
-        for field in ["crate_features_select", "deps_select", "aliases"]
-    }
+    for field in ["crate_features_select", "deps_select", "aliases"]:
+        left[field].update(right[field])
     for field in ["build_deps_by_target", "build_aliases_by_target"]:
-        result[field] = dict(left[field])
         for triple, values in right[field].items():
-            result[field][triple] = result[field].get(triple, {}) | values
-    return result
+            left[field].setdefault(triple, {}).update(values)
 
 def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, target_build_deps, target_build_aliases, dep_label_prefix):
     """Assign explicit labels to compatible target and execution definitions.
@@ -163,7 +159,7 @@ def prepare_dependency_variants(target_resolutions, exec_resolutions_by_target, 
                     for index, merged in enumerate(definitions):
                         if _definitions_compatible(merged, definition):
                             new_groups[index].append(node)
-                            definitions[index] = _merge_definitions(merged, definition)
+                            _merge_definitions(merged, definition)
                             matched = True
                             break
                     if not matched:

@@ -21,15 +21,15 @@ def build_script_variants(profiles):
     for triple in sorted(profiles):
         profile = profiles[triple]
         deps = profile["deps"]
-        aliases = profile["aliases"]
         recipe = {
             "crate_features": sorted(set(profile["features"])),
             "deps": {host: sorted(set(labels)) for host, labels in deps.items()} if any(deps.values()) else {},
-            "aliases": aliases,
+            "aliases": profile["aliases"],
         }
         key = json.encode(recipe)
         if key not in variants:
-            variants[key] = dict(recipe, triples = [])
+            recipe["triples"] = []
+            variants[key] = recipe
         variants[key]["triples"].append(triple)
     return variants.values()
 

@@ -64,6 +64,11 @@ def _normal_dependency_refinement_impl(ctx):
         "child-1.0.0": _resolution(features = {_LINUX: ["target"]}),
     }
     execution = dict(target)
+    execution["parent-1.0.0"] = _resolution(
+        features = {_LINUX: [], _MACOS: ["exec"]},
+        deps = {_LINUX: [child]},
+        aliases = {child: "renamed"},
+    )
     execution["child-1.0.0"] = _resolution(features = {_LINUX: ["exec"]})
     result = _prepare(target, {_LINUX: execution, _MACOS: execution})
 
@@ -72,6 +77,8 @@ def _normal_dependency_refinement_impl(ctx):
         asserts.equals(env, "_exec", _variant(result, fq, _LINUX)["name_suffix"])
         asserts.equals(env, _label(result, fq, _LINUX), _label(result, fq, _MACOS))
     exec_child = _label(result, "child-1.0.0", _LINUX)
+    asserts.equals(env, {_LINUX: []}, _variant(result, "parent-1.0.0")["crate_features_select"])
+    asserts.equals(env, {_LINUX: [], _MACOS: ["exec"]}, _variant(result, "parent-1.0.0", _LINUX)["crate_features_select"])
     asserts.equals(env, {_LINUX: [child]}, _variant(result, "parent-1.0.0")["deps_select"])
     asserts.equals(env, {_LINUX: [exec_child]}, _variant(result, "parent-1.0.0", _LINUX)["deps_select"])
     asserts.equals(env, {exec_child: "renamed"}, _variant(result, "parent-1.0.0", _LINUX)["aliases"])

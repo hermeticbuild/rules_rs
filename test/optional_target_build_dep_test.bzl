@@ -21,9 +21,10 @@ def _build_script_actions_impl(target, ctx):
         if action.mnemonic != "Rustc":
             continue
         arguments = action.argv
-        if not any([arg.endswith("/build.rs") and "libdbus-sys" in arg for arg in arguments]):
-            continue
-        arguments_by_output[action.outputs.to_list()[0].path] = arguments
+        for arg in arguments:
+            if arg.endswith("/build.rs") and "libdbus-sys" in arg:
+                arguments_by_output[action.outputs.to_list()[0].path] = arguments
+                break
 
     return [_BuildScriptActionsInfo(arguments_by_output = arguments_by_output)]
 
@@ -41,12 +42,17 @@ def _optional_target_build_dep_test_impl(ctx):
     asserts.true(env, bool(actions), "Expected a libdbus-sys build-script compiler action")
 
     for output, arguments in actions.items():
+        has_cc = False
+        for arg in arguments:
+            if arg.startswith("--extern=cc="):
+                has_cc = True
+                break
         asserts.equals(env, ctx.attr.vendored, 'feature="vendored"' in arguments, "Unexpected vendored feature in " + output)
         asserts.equals(env, ctx.attr.vendored, 'feature="cc"' in arguments, "Unexpected cc feature in " + output)
         asserts.equals(
             env,
             ctx.attr.vendored,
-            any([arg.startswith("--extern=cc=") for arg in arguments]),
+            has_cc,
             "Only the vendored build script should receive cc on %s: %s" % (ctx.attr.exec_triple, output),
         )
         asserts.true(
