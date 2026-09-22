@@ -40,7 +40,7 @@ def cargo_build_script_for_configurations(
             scripts[key]["conditions"].setdefault(cargo_target_triple, []).append(platform_triple)
 
     split = len(scripts) > 1
-    script_kwargs = dict(kwargs)
+    script_kwargs = dict(kwargs) if split else kwargs
     if split:
         branches = {}
 
