@@ -16,7 +16,7 @@ def cargo_build_script_for_configurations(
         aliases = {},
         use_legacy_rules_rust_platforms = False,
         **kwargs):
-    """Select a build script before changing its compilation platform."""
+    """Select a build script before the exec transition and return its dependency list."""
     scripts = {}
     for cargo_target_triple, configuration in configurations.items():
         build_deps_by_triple = configuration["build_deps_by_triple"]
@@ -41,8 +41,9 @@ def cargo_build_script_for_configurations(
 
     split = len(scripts) > 1
     script_kwargs = dict(kwargs)
-    branches = {}
     if split:
+        branches = {}
+
         # Preserve the environment derived by rules_rust from the original name.
         if kwargs.get("pkg_name") == None:
             script_kwargs["pkg_name"] = name_to_pkg_name(name)
@@ -95,3 +96,4 @@ def cargo_build_script_for_configurations(
             actual = cargo_select(branches, hub_name, use_legacy_rules_rust_platforms),
             **{key: kwargs[key] for key in ["tags", "testonly", "visibility", "target_compatible_with"] if key in kwargs}
         )
+    return [name] if scripts else []

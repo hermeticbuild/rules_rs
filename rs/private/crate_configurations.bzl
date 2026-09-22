@@ -45,16 +45,16 @@ def _merge_configurations(configurations):
         for field, values in configuration.items():
             existing = result[field]
             for platform_triple, value in values.items():
-                if platform_triple in existing and existing[platform_triple] != value:
+                if existing.setdefault(platform_triple, value) != value:
                     return None
-                existing[platform_triple] = value
     return result
 
 def _share_build_deps(build_deps_by_triple):
-    if not build_deps_by_triple:
-        return build_deps_by_triple
-    shared = build_deps_by_triple.values()[0]
-    return {"": shared} | {platform_triple: deps for platform_triple, deps in build_deps_by_triple.items() if deps != shared}
+    result = {}
+    for platform_triple, deps in build_deps_by_triple.items():
+        if deps != result.setdefault("", deps):
+            result[platform_triple] = deps
+    return result
 
 def prepare_crate_configurations(
         target_resolutions,
@@ -89,7 +89,7 @@ def prepare_crate_configurations(
     clear_cargo_target_triples = {cargo_target_triple: "" for cargo_target_triple in cargo_target_triples}
     exec_platform_triples = sorted(exec_platform_triples)
     preserve_cargo_target_triple = set(preserve_cargo_target_triple)
-    preserved_crates = preserve_cargo_target_triple | set(workspace_crates)
+    preserved_crates = preserve_cargo_target_triple.union(workspace_crates)
     configurations_by_crate = {}
     invariant = {}
     for fq, target in target_resolutions.items():
@@ -112,7 +112,7 @@ def prepare_crate_configurations(
 
     # Clearing a crate also requires every normal and build dependency to clear.
     # Handwritten dependency labels are absent from invariant.
-    for _ in range(len(invariant) + 1):
+    for _ in range(len(invariant)):
         previous_size = len(invariant)
         for label, candidate in invariant.items():
             if not candidate.deps.issubset(invariant):

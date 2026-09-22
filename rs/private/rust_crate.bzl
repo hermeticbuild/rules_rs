@@ -41,7 +41,6 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False):
-    build_script_name = "_bs"
     package_metadata_name = name + "_package_metadata"
     package_metadata(
         name = package_metadata_name,
@@ -129,19 +128,11 @@ def rust_crate(
     ]
     crate_tags = default_tags + tags
 
-    active = False
-    for configuration in configurations.values():
-        if configuration["crate_features_by_triple"]:
-            active = True
-            break
-    if not active:
-        build_script = None
-
     if build_script:
-        cargo_build_script_for_configurations(
+        deps = deps + cargo_build_script_for_configurations(
             configurations = configurations,
             hub_name = hub_name,
-            name = build_script_name,
+            name = "_bs",
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
             compile_data = compile_data,
             crate_name = "build_script_build",
@@ -164,8 +155,6 @@ def rust_crate(
             tags = crate_tags + build_script_tags,
             version = version,
         )
-
-        deps = deps + [build_script_name]
 
     if not has_lib:
         # Keep the hub's library label incompatible for binary-only crates.
