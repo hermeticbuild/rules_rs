@@ -72,6 +72,6 @@ def all_crate_deps(
                 platform = platform_label(platform_triple, use_legacy_rules_rust_platforms)
                 deps.update(dep_data["dev_deps_by_platform"].get(platform, {}))
             deps.update(build_deps.get(platform_triple, []))
-            by_triple[platform_triple] = sorted([dep for dep in deps if not filter_prefix or dep.startswith(filter_prefix)])
+            by_triple[platform_triple] = sorted([dep for dep in deps if dep.startswith(filter_prefix)] if filter_prefix else deps)
         values[cargo_target_triple] = by_triple
     return cargo_select(values, hub_name, use_legacy_rules_rust_platforms)

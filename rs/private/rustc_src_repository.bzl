@@ -89,13 +89,10 @@ def _crate_attr(feature_resolutions, extra_compile_data = []):
             platform_triple: sorted([feature for feature in feature_resolutions.features_enabled[platform_triple] if not feature.startswith("dep:")])
             for platform_triple in ALL_TARGET_TRIPLES
         },
-        "deps_by_triple": {platform_triple: dict(sorted(feature_resolutions.deps[platform_triple].items())) for platform_triple in ALL_TARGET_TRIPLES},
+        "deps_by_triple": feature_resolutions.deps,
         # Build dependencies follow the compilation platform in rustc-src's
         # single Cargo resolution, independent of the original target.
-        "build_deps_by_triple": {"": {
-            exec_platform_triple: dict(sorted(feature_resolutions.build_deps[exec_platform_triple].items()))
-            for exec_platform_triple in ALL_TARGET_TRIPLES
-        }},
+        "build_deps_by_triple": {"": feature_resolutions.build_deps},
         "build_cargo_target_triple_required_on": [],
     }
     return struct(

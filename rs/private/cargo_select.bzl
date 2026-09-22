@@ -39,7 +39,7 @@ def cargo_select(values, hub_name, use_legacy_rules_rust_platforms = False, defa
             branches[condition] = value
             if first == None:
                 first = value
-            elif first != value:
+            elif same and first != value:
                 same = False
     if not branches:
         return default
