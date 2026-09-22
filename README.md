@@ -486,9 +486,10 @@ use_repo(rules_rust_pyo3, "rules_rust_pyo3")
 
 Normal dependencies and build dependencies resolve features separately for each
 `platform_triples` entry. Each generated crate has one library target, with
-features and dependencies selected by Cargo resolution. Equivalent resolutions
-share a Bazel configuration; the comparison includes transitive dependencies
-and build-script requirements.
+features and dependencies selected by Cargo resolution. Build resolutions can
+share the default Bazel configuration when features, transitive dependencies,
+and build-script requirements agree. Otherwise, they retain the original target
+triple; equivalent build resolutions do not substitute another target triple.
 Crates unreachable from the Cargo roots on every configured platform are
 incompatible. Generating a Bazel label does not make the crate an additional
 Cargo root.
@@ -516,8 +517,9 @@ Use `all_crate_deps(normal = True)`, `aliases(normal = True)`, and
 a normal dependency and a build dependency, including when a generated crate
 depends back on it. `cargo_execution_target` records the original target triple
 for build dependencies and survives execution transitions. Generated crates
-normalize this setting when their resolutions are equivalent; Rust toolchains
-clear it. C++ toolchains retain their existing configuration.
+clear this setting when the default configuration supplies the same resolution;
+otherwise, they preserve it. Rust toolchains clear it. C++ toolchains retain
+their existing configuration.
 `all_crate_deps(build = True)` is available only when build dependencies need
 the current Cargo resolution and their labels are identical across target
 platforms. Otherwise, use the generated `cargo_build_script`; the raw

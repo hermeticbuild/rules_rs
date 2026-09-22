@@ -27,9 +27,14 @@ def _definition(result, fq, context = ""):
 def _assert_context_maps(env, result):
     asserts.equals(env, result, json.decode(json.encode(result)))
     for crate in result.values():
-        for representative in crate["context_map"].values():
+        for context, representative in crate["context_map"].items():
+            if context:
+                asserts.true(env, representative in ["", context])
             asserts.equals(env, representative, crate["context_map"][representative])
             asserts.true(env, representative in crate["definitions"])
+        for context, definition in crate["definitions"].items():
+            for triple, build_context in definition["build_contexts"].items():
+                asserts.true(env, build_context in ["", context or triple])
 
 def _matching_definitions_impl(ctx):
     env = unittest.begin(ctx)
@@ -57,8 +62,8 @@ def _normal_dependency_identity_impl(ctx):
     result = _prepare(target, {_LINUX: execution, _MACOS: execution})
 
     for fq in target:
-        asserts.equals(env, {"": "", _LINUX: _MACOS, _MACOS: _MACOS}, result[fq]["context_map"])
-        asserts.equals(env, 2, len(result[fq]["definitions"]))
+        asserts.equals(env, {"": "", _LINUX: _LINUX, _MACOS: _MACOS}, result[fq]["context_map"])
+        asserts.equals(env, 3, len(result[fq]["definitions"]))
     for context in ["", _LINUX, _MACOS]:
         definition = _definition(result, "parent-1.0.0", context)
         asserts.equals(env, {_LINUX: [child]}, definition["deps_select"])
@@ -348,6 +353,35 @@ def _annotation_dependencies_preserve_missing_context_impl(ctx):
     _assert_context_maps(env, result)
     return unittest.end(env)
 
+def _missing_execution_context_keeps_transitive_dependencies_impl(ctx):
+    env = unittest.begin(ctx)
+    child = _PREFIX + "child-1.0.0"
+    leaf = _PREFIX + "leaf-1.0.0"
+    target = {
+        "parent-1.0.0": _resolution(features = {_LINUX: ["parent"]}, deps = {_LINUX: [child]}),
+        "child-1.0.0": _resolution(deps = {_LINUX: [leaf]}),
+        "leaf-1.0.0": _resolution(features = {_LINUX: ["normal"]}),
+    }
+    execution = {
+        "parent-1.0.0": _resolution(active = False),
+        "child-1.0.0": _resolution(active = False),
+        "leaf-1.0.0": _resolution(features = {_LINUX: ["build"]}),
+    }
+    result = _prepare(target, {_LINUX: execution, _MACOS: execution})
+
+    # An annotation can reach parent even though Cargo never reaches parent or
+    # child in an execution resolution. Both must preserve leaf's build context.
+    for fq in target:
+        asserts.equals(env, {"": "", _LINUX: _LINUX, _MACOS: _MACOS}, result[fq]["context_map"])
+    for context in [_LINUX, _MACOS]:
+        parent = _definition(result, "parent-1.0.0", context)
+        asserts.equals(env, {_LINUX: ["parent"]}, parent["crate_features_select"])
+        asserts.equals(env, {_LINUX: [child]}, parent["deps_select"])
+        asserts.equals(env, {_LINUX: [leaf]}, _definition(result, "child-1.0.0", context)["deps_select"])
+        asserts.equals(env, {_LINUX: ["build"]}, _definition(result, "leaf-1.0.0", context)["crate_features_select"])
+    _assert_context_maps(env, result)
+    return unittest.end(env)
+
 def _build_script_without_dependencies_clears_context_impl(ctx):
     env = unittest.begin(ctx)
     target = {"parent-1.0.0": _resolution(features = {_LINUX: [], _MACOS: []})}
@@ -391,7 +425,7 @@ def _build_script_invariant_dependencies_clear_context_impl(ctx):
     _assert_context_maps(env, result)
     return unittest.end(env)
 
-def _build_script_dependencies_share_execution_context_impl(ctx):
+def _build_script_dependencies_keep_original_target_impl(ctx):
     env = unittest.begin(ctx)
     child = _PREFIX + "child-1.0.0"
     platforms = {_LINUX: [], _MACOS: []}
@@ -410,7 +444,11 @@ def _build_script_dependencies_share_execution_context_impl(ctx):
         {triple: {"parent-1.0.0": build_deps} for triple in platforms},
     )
 
-    asserts.equals(env, {_LINUX: _MACOS, _MACOS: _MACOS}, _definition(result, "parent-1.0.0")["build_contexts"])
+    for context in ["", _LINUX, _MACOS]:
+        asserts.equals(env, {
+            triple: context or triple
+            for triple in platforms
+        }, _definition(result, "parent-1.0.0", context)["build_contexts"])
     _assert_context_maps(env, result)
     return unittest.end(env)
 
@@ -455,10 +493,11 @@ execution_only_nested_build_script_keeps_origin_test = unittest.make(_execution_
 inactive_crate_has_no_supported_platforms_test = unittest.make(_inactive_crate_has_no_supported_platforms_impl)
 preserved_execution_only_crate_keeps_default_test = unittest.make(_preserved_execution_only_crate_keeps_default_impl)
 annotation_dependencies_preserve_missing_context_test = unittest.make(_annotation_dependencies_preserve_missing_context_impl)
+missing_execution_context_keeps_transitive_dependencies_test = unittest.make(_missing_execution_context_keeps_transitive_dependencies_impl)
 build_script_without_dependencies_clears_context_test = unittest.make(_build_script_without_dependencies_clears_context_impl)
 annotation_build_script_dependencies_keep_context_test = unittest.make(_annotation_build_script_dependencies_keep_context_impl)
 build_script_invariant_dependencies_clear_context_test = unittest.make(_build_script_invariant_dependencies_clear_context_impl)
-build_script_dependencies_share_execution_context_test = unittest.make(_build_script_dependencies_share_execution_context_impl)
+build_script_dependencies_keep_original_target_test = unittest.make(_build_script_dependencies_keep_original_target_impl)
 build_script_workspace_dependencies_keep_context_test = unittest.make(_build_script_workspace_dependencies_keep_context_impl)
 
 def crate_configurations_tests():
@@ -480,9 +519,10 @@ def crate_configurations_tests():
         inactive_crate_has_no_supported_platforms_test,
         preserved_execution_only_crate_keeps_default_test,
         annotation_dependencies_preserve_missing_context_test,
+        missing_execution_context_keeps_transitive_dependencies_test,
         build_script_without_dependencies_clears_context_test,
         annotation_build_script_dependencies_keep_context_test,
         build_script_invariant_dependencies_clear_context_test,
-        build_script_dependencies_share_execution_context_test,
+        build_script_dependencies_keep_original_target_test,
         build_script_workspace_dependencies_keep_context_test,
     )

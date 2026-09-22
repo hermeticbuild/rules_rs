@@ -39,55 +39,58 @@ def _definition(fq, is_exec, resolution, target_build_deps, target_build_aliases
         "build_aliases_by_target": build_aliases,
     }
 
-def _context_maps(groups_by_crate, contexts):
+def _context_maps(nodes_by_crate, cleared):
     result = {}
-    for fq, groups in groups_by_crate.items():
-        context_map = {context: groups[0][0].context for context in contexts}
-        for group in groups:
-            for node in group:
-                context_map[node.context] = group[0].context
+    for fq, nodes in nodes_by_crate.items():
+        context_map = {"": "" if nodes[0].context in cleared[fq] else nodes[0].context}
+        for node in nodes:
+            context_map[node.context] = "" if node.context in cleared[fq] else node.context
         result[fq] = context_map
     return result
-
-def _dependency_context(label, context, contexts_by_label):
-    context_map = contexts_by_label.get(label)
-    if context_map == None:
-        # Handwritten targets can select dependencies using the original context.
-        return context
-    return context_map.get(context, context)
 
 def _dependency_contexts_match(deps, original, representative, contexts_by_label):
     if original == representative:
         return True
     for dep in deps:
-        if _dependency_context(dep, original, contexts_by_label) != _dependency_context(dep, representative, contexts_by_label):
+        context_map = contexts_by_label.get(dep)
+
+        # Handwritten targets can select dependencies using the original context.
+        if context_map == None or context_map.get(original, original) != context_map.get(representative, representative):
             return False
     return True
 
-def _can_inherit_context(node, representative, contexts_by_label):
-    definition = node.definition
-    for deps in definition["deps_select"].values():
-        if not _dependency_contexts_match(deps, node.context, representative, contexts_by_label):
-            return False
+def _resolution_node(context, definition):
+    # Compare each dependency once, even when multiple platforms use it.
+    deps = set()
+    for values in definition["deps_select"].values():
+        deps.update(values)
+    build_deps = {}
     for triple, by_platform in definition["build_deps_by_target"].items():
-        original = node.context or triple
-        build_representative = representative or triple
-        for deps in by_platform.values():
-            if not _dependency_contexts_match(deps, original, build_representative, contexts_by_label):
-                return False
+        labels = set()
+        for values in by_platform.values():
+            labels.update(values)
+        if labels:
+            build_deps[triple] = labels
+    return struct(context = context, definition = definition, deps = deps, build_deps = build_deps)
+
+def _can_clear_context(node, contexts_by_label):
+    if not node.context:
+        return True
+    if not _dependency_contexts_match(node.deps, node.context, "", contexts_by_label):
+        return False
+    for triple, deps in node.build_deps.items():
+        if not _dependency_contexts_match(deps, node.context, triple, contexts_by_label):
+            return False
     return True
 
-def _build_contexts(context, definition, contexts, contexts_by_label):
+def _build_contexts(context, definition, contexts_by_label):
     result = {}
     for triple, by_platform in definition["build_deps_by_target"].items():
         requested = context or triple
-        result[triple] = requested
-        deps = set()
-        for values in by_platform.values():
-            deps.update(values)
-        for representative in contexts:
-            if _dependency_contexts_match(deps, requested, representative, contexts_by_label):
-                result[triple] = representative
+        result[triple] = ""
+        for deps in by_platform.values():
+            if not _dependency_contexts_match(deps, requested, "", contexts_by_label):
+                result[triple] = requested
                 break
     return result
 
@@ -137,7 +140,7 @@ def prepare_crate_configurations(
         dep_label_prefix,
         preserve_context = [],
         workspace_crates = []):
-    """Share compatible definitions when dependencies accept the same context.
+    """Clear Cargo contexts when definitions and dependency configurations agree.
 
     Args:
         target_resolutions: Ordinary resolutions keyed by crate name/version.
@@ -150,8 +153,8 @@ def prepare_crate_configurations(
 
     Returns:
         Crate names/versions mapped to dictionaries with context_map and definitions.
-        context_map maps incoming contexts to idempotent representatives;
-        definitions maps representatives to JSON-compatible crate definitions.
+        Nonempty contexts map to themselves or the default configuration.
+        definitions maps retained contexts to JSON-compatible crate definitions.
     """
     target_triples = sorted(exec_resolutions_by_target)
     exec_triples = set()
@@ -162,98 +165,77 @@ def prepare_crate_configurations(
     contexts = [""] + target_triples
     preserve_context = set(preserve_context)
     workspace_crates = set(workspace_crates)
-    groups_by_crate = {}
+    nodes_by_crate = {}
+    cleared = {}
     node_count = 0
     for fq, target in target_resolutions.items():
         nodes = []
         if target.active:
-            nodes.append(struct(context = "", definition = _definition(fq, False, target, target_build_deps, target_build_aliases, exec_triples)))
+            nodes.append(_resolution_node("", _definition(fq, False, target, target_build_deps, target_build_aliases, exec_triples)))
         for triple in target_triples:
             execution = exec_resolutions_by_target[triple][fq]
             if execution.active:
-                nodes.append(struct(context = triple, definition = _definition(fq, True, execution, target_build_deps, target_build_aliases, exec_triples)))
+                nodes.append(_resolution_node(triple, _definition(fq, True, execution, target_build_deps, target_build_aliases, exec_triples)))
         if not nodes:
-            nodes.append(struct(context = "", definition = _definition(fq, False, target, target_build_deps, target_build_aliases, exec_triples)))
-        if fq in workspace_crates or fq in preserve_context:
-            defined_contexts = set([node.context for node in nodes])
-            nodes += [
-                struct(context = context, definition = nodes[0].definition)
-                for context in contexts
-                if context not in defined_contexts and (context or fq in workspace_crates)
-            ]
-            groups_by_crate[fq] = [[node] for node in nodes]
-        else:
-            groups_by_crate[fq] = [nodes]
+            nodes.append(_resolution_node("", _definition(fq, False, target, target_build_deps, target_build_aliases, exec_triples)))
+        cleared[fq] = set()
+        if fq not in workspace_crates and fq not in preserve_context:
+            cleared[fq].add(nodes[0].context)
+            definition = _copy_definition(nodes[0].definition)
+            for node in nodes:
+                if node.context == nodes[0].context:
+                    continue
+                if _definitions_compatible(definition, node.definition):
+                    cleared[fq].add(node.context)
+                    _merge_definition(definition, node.definition)
+        defined_contexts = set([node.context for node in nodes])
+        for context in contexts:
+            if context in defined_contexts or (not context and fq not in workspace_crates):
+                continue
+            nodes.append(struct(context = context, definition = nodes[0].definition, deps = nodes[0].deps, build_deps = nodes[0].build_deps))
+            if nodes[0].context in cleared[fq]:
+                cleared[fq].add(context)
+        nodes_by_crate[fq] = nodes
         node_count += len(nodes)
 
+    # Removing a clear mapping can prevent a dependent crate from clearing too.
     for _ in range(node_count + 1):
-        context_maps = _context_maps(groups_by_crate, contexts)
+        context_maps = _context_maps(nodes_by_crate, cleared)
         contexts_by_label = {dep_label_prefix + fq: mapping for fq, mapping in context_maps.items()}
-        refined = {}
-        definitions = {}
         changed = False
-        for fq, groups in groups_by_crate.items():
-            refined[fq] = []
-            definitions[fq] = []
-            for group in groups:
-                new_groups = []
-                merged = []
-                for node in group:
-                    matched = False
-                    for index, definition in enumerate(merged):
-                        representative = new_groups[index][0].context
-                        if not _definitions_compatible(definition, node.definition):
-                            continue
-                        if not _can_inherit_context(node, representative, contexts_by_label):
-                            continue
-                        new_groups[index].append(node)
-                        _merge_definition(definition, node.definition)
-                        matched = True
-                        break
-                    if not matched:
-                        new_groups.append([node])
-                        merged.append(_copy_definition(node.definition))
-                refined[fq].extend(new_groups)
-                definitions[fq].extend(merged)
-                changed = changed or len(new_groups) > 1
-        if not changed:
-            # Compare dependencies before renaming any context. Execution-only
-            # crates can then use the default configuration without splitting it.
-            default_contexts = {}
-            for fq, groups in groups_by_crate.items():
-                representative = groups[0][0].context
-                if not representative or fq in preserve_context or fq in workspace_crates:
+        for fq, nodes in nodes_by_crate.items():
+            for node in nodes:
+                if node.context not in cleared[fq] or _can_clear_context(node, contexts_by_label):
                     continue
-                can_clear = True
-                for node in groups[0]:
-                    if not _can_inherit_context(node, "", contexts_by_label):
-                        can_clear = False
-                        break
-                if can_clear:
-                    default_contexts[fq] = representative
-            for fq, representative in default_contexts.items():
-                context_maps[fq] = {
-                    context: "" if value == representative else value
-                    for context, value in context_maps[fq].items()
-                }
-            contexts_by_label = {dep_label_prefix + fq: mapping for fq, mapping in context_maps.items()}
-            result = {}
-            for fq, groups in groups_by_crate.items():
-                crate_definitions = {
-                    "" if group[0].context == default_contexts.get(fq) else group[0].context: definition
-                    for group, definition in zip(groups, definitions[fq])
-                }
-                for context, definition in crate_definitions.items():
-                    definition["build_contexts"] = {
-                        triple: context or triple
-                        for triple in definition["build_deps_by_target"]
-                    } if fq in preserve_context else _build_contexts(context, definition, contexts, contexts_by_label)
-                result[fq] = {
-                    "context_map": context_maps[fq],
-                    "definitions": crate_definitions,
-                    "preserve_context": fq in preserve_context or fq in workspace_crates,
-                }
-            return result
-        groups_by_crate = refined
+                cleared[fq].remove(node.context)
+                changed = True
+            if cleared[fq] and nodes[0].context not in cleared[fq]:
+                # An execution-only crate's default must be a fixed point too.
+                cleared[fq].clear()
+                changed = True
+        if changed:
+            continue
+
+        result = {}
+        for fq, nodes in nodes_by_crate.items():
+            definitions = {}
+            for node in nodes:
+                context = context_maps[fq][node.context]
+                if context not in definitions:
+                    definitions[context] = _copy_definition(node.definition)
+                elif not node.context or exec_resolutions_by_target[node.context][fq].active:
+                    # Missing resolutions reuse the first definition, already merged.
+                    _merge_definition(definitions[context], node.definition)
+            for context, definition in definitions.items():
+                definition["build_contexts"] = {
+                    triple: context or triple
+                    for triple in definition["build_deps_by_target"]
+                } if fq in preserve_context else _build_contexts(context, definition, contexts_by_label)
+            result[fq] = {
+                "context_map": context_maps[fq],
+                "definitions": definitions,
+                "preserve_context": fq in preserve_context or fq in workspace_crates,
+            }
+        return result
 
     fail("Crate configuration refinement did not converge")
