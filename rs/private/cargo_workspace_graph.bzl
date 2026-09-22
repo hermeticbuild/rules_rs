@@ -17,12 +17,6 @@ def manifest_package_dir(manifest_path, repo_root):
 
     return package_dir.removesuffix("/Cargo.toml")
 
-def exclude_deps_from_features(features):
-    return [f for f in features if not f.startswith("dep:")]
-
-def render_string_list(items):
-    return ",\n            ".join(['"%s"' % item for item in sorted(items)])
-
 def cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache):
     match_info = cfg_match_cache.get(target)
     if match_info:
@@ -36,9 +30,9 @@ def new_feature_resolutions(package_index, possible_deps, possible_features, pla
     return struct(
         active = set(),
         features_enabled = {triple: set() for triple in platform_triples},
-        build_deps = {triple: set() for triple in platform_triples},
-        deps = {triple: set() for triple in platform_triples},
-        aliases = {},
+        # Values are explicit Cargo aliases, or None for the library's crate name.
+        build_deps = {triple: {} for triple in platform_triples},
+        deps = {triple: {} for triple in platform_triples},
         package_index = package_index,
         possible_deps = possible_deps,
         possible_features = possible_features,
@@ -463,8 +457,6 @@ def _copy_resolutions(template_packages, platform_triples):
 
     for package in packages:
         for dep in package["feature_resolutions"].possible_deps:
-            # Recompute deferred build features in the new resolution.
-            dep.pop("deferred_features", None)
             if "feature_resolutions" in dep:
                 dep["feature_resolutions"] = packages[dep["feature_resolutions"].package_index]["feature_resolutions"]
 
@@ -473,13 +465,11 @@ def _copy_resolutions(template_packages, platform_triples):
 def _resolve_exec_targets(ctx, target_packages, template_packages, platform_triples, exec_cfg_attrs_by_triple, debug):
     exec_resolutions_by_target = {}
     target_build_deps = {}
-    target_build_aliases = {}
     resolved_seeds = {}
 
     for target_triple in platform_triples:
         seeds = collect_exec_build_dependencies(target_packages, template_packages, exec_cfg_attrs_by_triple, target_triple)
         target_build_deps[target_triple] = seeds.build_deps
-        target_build_aliases[target_triple] = seeds.aliases
         seed_key = tuple([
             (index, triple, tuple(sorted(features)))
             for (index, triple), features in sorted(seeds.features.items())
@@ -497,7 +487,6 @@ def _resolve_exec_targets(ctx, target_packages, template_packages, platform_trip
     return struct(
         exec_resolutions_by_target = exec_resolutions_by_target,
         target_build_deps = target_build_deps,
-        target_build_aliases = target_build_aliases,
     )
 
 def resolve_cargo_workspace_members(
@@ -713,7 +702,6 @@ def resolve_cargo_workspace_members(
         cfg_match_cache = cfg_match_cache,
         exec_resolutions_by_target = exec_targets.exec_resolutions_by_target,
         target_build_deps = exec_targets.target_build_deps,
-        target_build_aliases = exec_targets.target_build_aliases,
         feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,
         platform_cfg_attrs = platform_cfg_attrs,
         workspace_dep_labels_by_triple = workspace_dep_labels_by_triple,
@@ -730,42 +718,17 @@ def workspace_dep_data(
         repo_root,
         workspace_package,
         use_legacy_rules_rust_platforms,
-        lint_configs = {},
-        configurations_by_crate = {}):
+        configurations_by_crate,
+        lint_configs = {}):
     dep_data = {}
     for package in cargo_metadata["packages"]:
-        aliases = {}
-        normal_aliases = {}
-        dev_aliases = {}
-        build_aliases = {}
         local_labels = {}
-        deps = {triple: set() for triple in platform_triples}
-        build_deps = {triple: set() for triple in platform_triples}
-        dev_deps = {triple: set() for triple in platform_triples}
+        local_aliases = {}
+        dev_deps = {triple: {} for triple in platform_triples}
         package_dir = manifest_package_dir(package["manifest_path"], repo_root)
         package_manifest_dir = normalize_path(package["manifest_path"]).removesuffix("/Cargo.toml")
-        binaries = {}
-        shared_libraries = {}
         package_key = fq_crate(package["name"], package["version"])
-        feature_resolutions = feature_resolutions_by_fq_crate.get(package_key)
-
-        for target in package.get("targets", []):
-            kinds = target.get("kind", [])
-            if "cdylib" not in kinds and "bin" not in kinds:
-                continue
-
-            src_path = target.get("src_path")
-            if not src_path:
-                continue
-
-            entrypoint = normalize_path(src_path).removeprefix(repo_root + "/")
-            if package_dir:
-                entrypoint = entrypoint.removeprefix(package_dir + "/")
-
-            if "cdylib" in kinds:
-                shared_libraries[target["name"]] = entrypoint
-            else:
-                binaries[target["name"]] = entrypoint
+        feature_resolutions = feature_resolutions_by_fq_crate[package_key]
 
         for dep in package["dependencies"]:
             bazel_target = dep.get("bazel_target")
@@ -776,117 +739,60 @@ def workspace_dep_data(
                 bazel_target = "//" + paths.join(workspace_package, normalize_path(dep_path).removeprefix(repo_root + "/"))
 
             is_self_dep = dep_path and normalize_path(dep_path) == package_manifest_dir
+            if is_self_dep:
+                continue
 
             if dep_path and not dep.get("bazel_target"):
                 dep_name = dep.get("rename") or dep["name"]
-                for resolved_dep in getattr(feature_resolutions, "possible_deps", []):
+                for resolved_dep in feature_resolutions.possible_deps:
                     if resolved_dep["name"] == dep_name and "bazel_target" in resolved_dep:
                         local_labels[resolved_dep["bazel_target"]] = bazel_target
+                        local_aliases[resolved_dep["bazel_target"]] = dep["name"].replace("-", "_")
 
-            kind = dep["kind"]
-            if kind == "dev":
-                target_deps = dev_deps
-                target_aliases = dev_aliases
-            elif kind == "build":
-                target_deps = build_deps
-                target_aliases = build_aliases
-            else:
-                target_deps = deps
-                target_aliases = normal_aliases
+            if dep["kind"] != "dev":
+                continue
 
-            if not is_self_dep and (dep.get("rename") or dep_path):
-                alias = (dep.get("rename") or dep["name"]).replace("-", "_")
-                aliases[bazel_target] = alias
-                target_aliases[bazel_target] = alias
+            alias = (dep.get("rename") or dep["name"]).replace("-", "_") if dep.get("rename") or dep_path else None
 
-            target = dep.get("target")
-            match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
-            match = match_info.matches
-
-            for triple in match:
-                if dep.get("optional") and feature_resolutions:
-                    dep_name = dep.get("rename") or dep["name"]
-                    triple_features = feature_resolutions.features_enabled[triple]
-                    if dep_name not in triple_features and ("dep:" + dep_name) not in triple_features:
-                        continue
-
-                if is_self_dep:
-                    continue
-
-                target_deps[triple].add(bazel_target)
-
-        crate_features = {
-            triple: exclude_deps_from_features(feature_resolutions.features_enabled[triple]) if feature_resolutions else []
-            for triple in platform_triples
-        }
+            match_info = cfg_match_info_for_target(dep.get("target"), platform_cfg_attrs, cfg_match_cache)
+            for triple in match_info.matches:
+                dev_deps[triple][bazel_target] = alias
 
         bazel_package = paths.join(workspace_package, package_dir) if package_dir else workspace_package
 
-        crate_features, crate_features_by_platform = shared_and_per_platform(crate_features, use_legacy_rules_rust_platforms)
-        deps, deps_by_platform = shared_and_per_platform(deps, use_legacy_rules_rust_platforms)
         dev_deps, dev_deps_by_platform = shared_and_per_platform(dev_deps, use_legacy_rules_rust_platforms)
 
         package_dep_data = {
-            "aliases": aliases,
-            "normal_aliases": normal_aliases,
-            "dev_aliases": dev_aliases,
-            "binaries": binaries,
-            "crate_features": crate_features,
-            "crate_features_by_platform": crate_features_by_platform,
             "crate_name": package["name"].replace("-", "_"),
-            "deps": deps,
-            "deps_by_platform": deps_by_platform,
             "dev_deps": dev_deps,
             "dev_deps_by_platform": dev_deps_by_platform,
             "edition": package.get("edition", "2015"),
-            "shared_libraries": shared_libraries,
         }
         lint_config = lint_configs.get(bazel_package)
         if lint_config:
             package_dep_data["lint_config"] = lint_config
-        configuration = configurations_by_crate.get(package_key)
-        if configuration:
-            definitions = {}
-            for context, definition in configuration["definitions"].items():
-                definition = dict(definition)
-                definition["deps_select"] = {
-                    triple: [local_labels.get(label, label) for label in labels]
-                    for triple, labels in definition["deps_select"].items()
+        definitions = {}
+        for context, definition in configurations_by_crate[package_key]["definitions"].items():
+            definition = dict(definition)
+            definition["deps_select"] = {
+                triple: {
+                    local_labels.get(label, label): alias if alias != None else local_aliases.get(label)
+                    for label, alias in deps.items()
                 }
-                definition["aliases"] = {
-                    local_labels.get(label, label): alias
-                    for label, alias in definition["aliases"].items()
-                }
-                for labels in definition["deps_select"].values():
-                    for label in labels:
-                        if label in normal_aliases:
-                            definition["aliases"][label] = normal_aliases[label]
-                definition["build_deps_by_target"] = {
-                    triple: {
-                        exec_triple: [local_labels.get(label, label) for label in labels]
-                        for exec_triple, labels in deps_by_exec.items()
-                    }
-                    for triple, deps_by_exec in definition["build_deps_by_target"].items()
-                }
-                definition["build_aliases_by_target"] = {
-                    triple: {local_labels.get(label, label): alias for label, alias in aliases.items()}
-                    for triple, aliases in definition["build_aliases_by_target"].items()
-                }
-                for triple, deps_by_exec in definition["build_deps_by_target"].items():
-                    for labels in deps_by_exec.values():
-                        for label in labels:
-                            if label in build_aliases:
-                                definition["build_aliases_by_target"][triple][label] = build_aliases[label]
-                definitions[context] = definition
-            package_dep_data["configurations"] = {
-                context: definitions[representative]
-                for context, representative in configuration["context_map"].items()
+                for triple, deps in definition["deps_select"].items()
             }
-        else:
-            build_deps, build_deps_by_platform = shared_and_per_platform(build_deps, use_legacy_rules_rust_platforms)
-            package_dep_data["build_aliases"] = build_aliases
-            package_dep_data["build_deps"] = build_deps
-            package_dep_data["build_deps_by_platform"] = build_deps_by_platform
+            definition["build_deps_by_target"] = {
+                triple: {
+                    exec_triple: {
+                        local_labels.get(label, label): alias if alias != None else local_aliases.get(label)
+                        for label, alias in deps.items()
+                    }
+                    for exec_triple, deps in deps_by_exec.items()
+                }
+                for triple, deps_by_exec in definition["build_deps_by_target"].items()
+            }
+            definitions[context] = definition
+        package_dep_data["configurations"] = definitions
         dep_data[bazel_package] = package_dep_data
 
     return dep_data

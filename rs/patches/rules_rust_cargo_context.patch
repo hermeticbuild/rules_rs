@@ -28,41 +28,26 @@ diff --git a/cargo/private/cargo_build_script_wrapper.bzl b/cargo/private/cargo_
 diff --git a/cargo/settings/BUILD.bazel b/cargo/settings/BUILD.bazel
 --- a/cargo/settings/BUILD.bazel
 +++ b/cargo/settings/BUILD.bazel
-@@ -2,6 +2,7 @@
+@@ -1,5 +1,6 @@
+ load("@bazel_lib//:bzl_library.bzl", doc_extract_bzl_library = "bzl_library")
  load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
++load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
  load(
      ":settings.bzl",
-+    "cargo_execution_target",
      "cargo_manifest_dir_filename_suffixes_to_retain",
-     "debug_std_streams_output_group",
-     "emit_build_script_warnings",
-@@ -31,6 +32,8 @@
+@@ -31,6 +32,12 @@
      deps = [":bzl_lib"],
  )
  
-+cargo_execution_target()
++string_flag(
++    name = "cargo_target_triple",
++    build_setting_default = "",
++    scope = "universal",
++)
 +
  cargo_manifest_dir_filename_suffixes_to_retain()
  
  debug_std_streams_output_group()
-diff --git a/cargo/settings/settings.bzl b/cargo/settings/settings.bzl
---- a/cargo/settings/settings.bzl
-+++ b/cargo/settings/settings.bzl
-@@ -4,6 +4,14 @@
- """
- 
- load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag", "string_list_flag")
-+
-+def cargo_execution_target():
-+    """Select the Cargo dependency resolution, preserving it through proc-macro exec transitions."""
-+    string_flag(
-+        name = "cargo_execution_target",
-+        build_setting_default = "",
-+        scope = "universal",
-+    )
- 
- def experimental_symlink_execroot():
-     """A flag for which causes `cargo_build_script` to symlink the execroot of the action to \
 diff --git a/rust/private/per_crate_flag_trim.bzl b/rust/private/per_crate_flag_trim.bzl
 --- a/rust/private/per_crate_flag_trim.bzl
 +++ b/rust/private/per_crate_flag_trim.bzl
@@ -89,8 +74,8 @@ diff --git a/rust/private/per_crate_flag_trim.bzl b/rust/private/per_crate_flag_
 +"""Canonicalize per-crate Rust flags and generated Cargo dependency resolutions."""
  
  _PER_CRATE_FLAG_SETTING = "@rules_rust//rust/settings:per_crate_rustc_flag"
-+CARGO_CONTEXT_SETTING = "@rules_rust//cargo/settings:cargo_execution_target"
-+CRATE_SETTINGS = [_PER_CRATE_FLAG_SETTING, CARGO_CONTEXT_SETTING]
++CARGO_TARGET_TRIPLE_SETTING = "@rules_rust//cargo/settings:cargo_target_triple"
++CRATE_SETTINGS = [_PER_CRATE_FLAG_SETTING, CARGO_TARGET_TRIPLE_SETTING]
  
 -def _per_crate_flag_trim_transition_impl(settings, attr):
 -    """Clear per_crate_rustc_flag for targets marked to skip it.
@@ -113,11 +98,11 @@ diff --git a/rust/private/per_crate_flag_trim.bzl b/rust/private/per_crate_flag_
 -    # Otherwise, keep the current value
 +def trim_crate_settings(settings, attr):
 +    """Apply generated context equivalences and preserve first-party settings."""
-+    context = settings[CARGO_CONTEXT_SETTING]
++    context = settings[CARGO_TARGET_TRIPLE_SETTING]
      return {
 -        _PER_CRATE_FLAG_SETTING: settings[_PER_CRATE_FLAG_SETTING],
-+        _PER_CRATE_FLAG_SETTING: [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING],
-+        CARGO_CONTEXT_SETTING: getattr(attr, "cargo_contexts", {}).get(context, context),
++        _PER_CRATE_FLAG_SETTING: [] if attr.skip_per_crate_rustc_flags else settings[_PER_CRATE_FLAG_SETTING],
++        CARGO_TARGET_TRIPLE_SETTING: attr.cargo_contexts.get(context, context),
      }
  
  per_crate_flag_trim_transition = transition(
@@ -313,31 +298,28 @@ diff --git a/rust/private/toolchain.bzl b/rust/private/toolchain.bzl
  load("//rust/platform:triple.bzl", "triple")
  load("//rust/private:common.bzl", "rust_common")
  load("//rust/private:lto.bzl", "RustLtoInfo")
-+load("//rust/private:per_crate_flag_trim.bzl", "CARGO_CONTEXT_SETTING")
++load("//rust/private:per_crate_flag_trim.bzl", "CARGO_TARGET_TRIPLE_SETTING")
  load(
      "//rust/private:rust_allocator_libraries.bzl",
      "make_libstd_and_allocator_ccinfo",
-@@ -699,10 +700,23 @@
+@@ -699,10 +700,20 @@
          make_variable_info,
      ]
  
-+def _clear_cargo_context_impl(_settings, _attr):
-+    return {CARGO_CONTEXT_SETTING: ""}
++def _clear_cargo_target_triple_impl(_settings, _attr):
++    return {CARGO_TARGET_TRIPLE_SETTING: ""}
 +
-+_clear_cargo_context = transition(
-+    implementation = _clear_cargo_context_impl,
++_clear_cargo_target_triple = transition(
++    implementation = _clear_cargo_target_triple_impl,
 +    inputs = [],
-+    outputs = [CARGO_CONTEXT_SETTING],
++    outputs = [CARGO_TARGET_TRIPLE_SETTING],
 +)
 +
  rust_toolchain = rule(
      implementation = _rust_toolchain_impl,
-+    cfg = _clear_cargo_context,
++    cfg = _clear_cargo_target_triple,
      fragments = ["cpp"],
      attrs = {
-+        "_allowlist_function_transition": attr.label(
-+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
-+        ),
          "allocator_library": attr.label(
              doc = "Target that provides allocator functions when `rust_library` targets are embedded in a `cc_binary`.",
              default = Label("//rust/settings:default_allocator_library"),

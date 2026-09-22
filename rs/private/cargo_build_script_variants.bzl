@@ -4,68 +4,7 @@
 load("@rules_rust//cargo/private:cargo_build_script.bzl", "name_to_crate_name", "name_to_pkg_name")
 load("//rs:cargo_build_script.bzl", "cargo_build_script")
 load(":cargo_select.bzl", "cargo_select")
-load(":select_utils.bzl", "platform_label", "shared_and_per_platform")
-
-def build_script_variants(
-        crate_features_select,
-        build_deps_by_target,
-        build_aliases_by_target,
-        use_legacy_rules_rust_platforms,
-        crate_features = []):
-    """Group target triples with equal build-script features, deps, and aliases.
-
-    Args:
-        crate_features_select: Features keyed by every original target triple.
-        build_deps_by_target: Execution-platform dependencies keyed by original target triple.
-        build_aliases_by_target: Aliases keyed by original target triple.
-        use_legacy_rules_rust_platforms: Whether to use rules_rust platform labels.
-        crate_features: Features shared by every target triple.
-
-    Returns:
-        Dictionaries containing target_triples, crate_features, deps,
-        deps_by_platform, and aliases. Each dictionary describes one build script.
-    """
-    if not crate_features_select:
-        crate_features_select = {"": []}
-    variants = {}
-    for triple in sorted(crate_features_select):
-        features = set(crate_features_select[triple])
-        features.update(crate_features)
-        deps, deps_by_platform = shared_and_per_platform(build_deps_by_target.get(triple, {}), use_legacy_rules_rust_platforms)
-        recipe = {
-            "crate_features": sorted(features),
-            "deps": deps,
-            "deps_by_platform": deps_by_platform,
-            "aliases": build_aliases_by_target.get(triple, {}),
-        }
-        key = json.encode(recipe)
-        if key not in variants:
-            recipe["target_triples"] = []
-            variants[key] = recipe
-        variants[key]["target_triples"].append(triple)
-    return variants.values()
-
-def cargo_build_script_for_targets(
-        name,
-        build_scripts,
-        crate_features = [],
-        deps = [],
-        aliases = {},
-        use_legacy_rules_rust_platforms = False,
-        **kwargs):
-    """Declare build scripts selected in the original target configuration.
-
-    Args:
-        name: Build-script target name.
-        build_scripts: Build-script definitions returned by build_script_variants.
-        crate_features: Features shared by every target triple.
-        deps: Additional dependencies shared by every target triple.
-        aliases: Additional dependency aliases shared by every target triple.
-        use_legacy_rules_rust_platforms: Whether to use rules_rust platform labels.
-        **kwargs: Remaining cargo_build_script arguments.
-    """
-
-    _declare_build_scripts(name, build_scripts, crate_features, deps, aliases, use_legacy_rules_rust_platforms, None, kwargs)
+load(":select_utils.bzl", "shared_and_per_platform")
 
 def cargo_build_script_for_configurations(
         name,
@@ -77,20 +16,24 @@ def cargo_build_script_for_configurations(
         aliases = {},
         use_legacy_rules_rust_platforms = False,
         **kwargs):
-    """Select a build script before changing its compilation platform."""
+    """Select a build script before changing its compilation platform.
+
+    An empty target triple in the build maps applies to every target triple.
+    """
     scripts = {}
     for context, definition in configurations.items():
+        build_deps = definition["build_deps_by_target"]
+        common_deps = shared_and_per_platform(build_deps.get("", {}), use_legacy_rules_rust_platforms)
         for triple in sorted(definition["crate_features_select"]):
             script_deps, deps_by_platform = shared_and_per_platform(
-                definition["build_deps_by_target"].get(triple, {}),
+                build_deps[triple],
                 use_legacy_rules_rust_platforms,
-            )
+            ) if triple in build_deps else common_deps
             recipe = {
                 "crate_features": definition["crate_features_select"][triple],
                 "deps": script_deps,
                 "deps_by_platform": deps_by_platform,
-                "aliases": definition["build_aliases_by_target"].get(triple, {}),
-                "context": (context or triple) if preserve_context else definition["build_contexts"][triple],
+                "context": (context or triple) if preserve_context else definition["build_contexts"].get(triple, ""),
             }
             key = json.encode(recipe)
             if key not in scripts:
@@ -98,10 +41,8 @@ def cargo_build_script_for_configurations(
                 recipe["representative"] = context + "_" + triple if context else triple
                 scripts[key] = recipe
             scripts[key]["conditions"].setdefault(context, []).append(triple)
-    _declare_build_scripts(name, scripts.values(), crate_features, deps, aliases, use_legacy_rules_rust_platforms, hub_name, kwargs)
 
-def _declare_build_scripts(name, build_scripts, crate_features, deps, aliases, use_legacy_rules_rust_platforms, hub_name, kwargs):
-    split = len(build_scripts) > 1
+    split = len(scripts) > 1
     script_kwargs = dict(kwargs)
     branches = {}
     if split:
@@ -114,19 +55,15 @@ def _declare_build_scripts(name, build_scripts, crate_features, deps, aliases, u
         if "manual" not in kwargs.get("tags", []):
             script_kwargs["tags"] = kwargs.get("tags", []) + ["manual"]
 
-    for variant in build_scripts:
+    for variant in scripts.values():
         script_name = name
         if split:
-            representative = variant["representative"] if hub_name else variant["target_triples"][0]
+            representative = variant["representative"]
             script_name = name + "_" + representative
-            if hub_name:
-                for context, triples in variant["conditions"].items():
-                    by_triple = branches.setdefault(context, {})
-                    for triple in triples:
-                        by_triple[triple] = ":" + script_name
-            else:
-                for triple in variant["target_triples"]:
-                    branches[triple] = ":" + script_name
+            for context, triples in variant["conditions"].items():
+                by_triple = branches.setdefault(context, {})
+                for triple in triples:
+                    by_triple[triple] = ":" + script_name
 
             # Distinct build.rs definitions need distinct metadata when their
             # binaries share an exec configuration.
@@ -135,30 +72,29 @@ def _declare_build_scripts(name, build_scripts, crate_features, deps, aliases, u
                 "--codegen=metadata=-" + representative.replace("-", "_"),
             ]
         if hub_name:
-            script_kwargs["cargo_contexts"] = {context: variant["context"] for context in variant["conditions"]}
-        script_deps = variant["deps"]
-        script_aliases = {dep: alias for dep, alias in variant["aliases"].items() if dep in script_deps} | aliases
+            script_kwargs["cargo_contexts"] = {context: variant["context"] for context in variant["conditions"] if context != variant["context"]}
+        script_deps = list(variant["deps"])
+        script_aliases = {dep: alias for dep, alias in variant["deps"].items() if alias} | aliases
         if variant["deps_by_platform"]:
             script_aliases = select({
-                platform: {dep: alias for dep, alias in variant["aliases"].items() if dep in script_deps or dep in items} | aliases
+                platform: script_aliases | {dep: alias for dep, alias in items.items() if alias} | aliases
                 for platform, items in variant["deps_by_platform"].items()
             } | {"//conditions:default": script_aliases})
-            script_deps = script_deps + select(variant["deps_by_platform"] | {"//conditions:default": []})
+            script_deps = script_deps + select({
+                platform: list(items)
+                for platform, items in variant["deps_by_platform"].items()
+            } | {"//conditions:default": []})
         cargo_build_script(
             name = script_name,
             crate_features = crate_features + variant["crate_features"],
-            deps = deps + script_deps,
+            deps = deps + script_deps if deps else script_deps,
             aliases = script_aliases,
             **script_kwargs
         )
     if split:
         # The alias selects before cargo_build_script.script applies cfg=exec.
-        actual = cargo_select(branches, hub_name, use_legacy_rules_rust_platforms) if hub_name else select({
-            platform_label(triple, use_legacy_rules_rust_platforms): branches[triple]
-            for triple in sorted(branches)
-        })
         native.alias(
             name = name,
-            actual = actual,
+            actual = cargo_select(branches, hub_name, use_legacy_rules_rust_platforms),
             **{key: kwargs[key] for key in ["tags", "testonly", "visibility", "target_compatible_with"] if key in kwargs}
         )

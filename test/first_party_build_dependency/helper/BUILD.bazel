@@ -4,10 +4,10 @@ load("@rules_rs//rs:rust_library.bzl", "rust_library")
 rust_library(
     name = "helper",
     srcs = ["src/lib.rs"],
-    aliases = aliases(normal = True),
+    aliases = aliases(),
     crate_features = crate_features(),
     crate_root = "src/lib.rs",
     edition = "2021",
     visibility = ["//visibility:public"],
-    deps = all_crate_deps(normal = True),
+    deps = all_crate_deps(),
 )

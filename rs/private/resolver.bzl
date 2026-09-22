@@ -13,7 +13,6 @@ def _count(packages):
         for deps in feature_resolutions.deps.values():
             n += len(deps)
 
-        # No need to count aliases, they only get set when deps are set.
     return n
 
 def _dep_target_matches_triple(dep, triple, package_feature_set, cfg_attrs_by_triple):
@@ -68,8 +67,8 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
             dep_feature_resolutions = dep["feature_resolutions"]
             dep_features = dep.get("features")
 
-            has_alias = "package" in dep
             dep_name = dep["name"]
+            alias = dep_name.replace("-", "_") if "package" in dep else None
             prefixed_dep_alias = "dep:" + dep_name
             optional = dep.get("optional", False)
 
@@ -85,10 +84,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
                     if dep_name not in features_for_triple and prefixed_dep_alias not in features_for_triple:
                         continue
 
-                deps[triple].add(bazel_target)
-
-                if has_alias:
-                    feature_resolutions.aliases[bazel_target] = dep_name.replace("-", "_")
+                deps[triple][bazel_target] = alias
 
                 if triple not in dep_feature_resolutions.active:
                     dep_feature_resolutions.active.add(triple)
@@ -198,7 +194,6 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
     """Collect execution seeds and owner dependencies for one target triple."""
     features = {}
     build_deps = {}
-    aliases = {}
     for package, exec_package in zip(packages, exec_template_packages):
         target_resolution = package["feature_resolutions"]
         exec_resolution = exec_package["feature_resolutions"]
@@ -215,6 +210,7 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
                 continue
 
             dep_name = dep["name"]
+            alias = dep_name.replace("-", "_") if "package" in dep else None
             if dep.get("optional", False) and dep_name not in target_features and ("dep:" + dep_name) not in target_features:
                 continue
 
@@ -224,15 +220,11 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
                 if feature_sensitive and not _dep_target_matches_triple(dep, exec_triple, target_features, exec_cfg_attrs_by_triple):
                     continue
 
-                if owner not in build_deps:
-                    build_deps[owner] = {triple: set() for triple in exec_cfg_attrs_by_triple}
-                build_deps[owner][exec_triple].add(bazel_target)
-                if "package" in dep:
-                    aliases.setdefault(owner, {})[bazel_target] = dep_name.replace("-", "_")
+                build_deps.setdefault(owner, {}).setdefault(exec_triple, {})[bazel_target] = alias
 
                 requested_features = features.setdefault((dep_resolution.package_index, exec_triple), set())
                 requested_features.update(dep_resolution.features_enabled[exec_triple])
                 requested_features.update(dep.get("features", []))
                 requested_features.update(target_dep.get("deferred_features", {}).get(target_triple, []))
 
-    return struct(features = features, build_deps = build_deps, aliases = aliases)
+    return struct(features = features, build_deps = build_deps)

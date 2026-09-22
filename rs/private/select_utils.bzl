@@ -27,9 +27,20 @@ def compute_select(non_platform_items, platform_items):
 
 def shared_and_per_platform(platform_items, use_legacy_rules_rust_platforms):
     by_platform = {}
-    for triple, items in platform_items.items():
+    for triple in sorted(platform_items):
         platform = platform_label(triple, use_legacy_rules_rust_platforms)
-        by_platform.setdefault(platform, set()).update(items)
+        by_platform.setdefault(platform, {}).update(platform_items[triple])
 
-    items, per_platform = compute_select([], by_platform)
-    return sorted(items), per_platform
+    values = by_platform.values()
+    common = {dep: values[0][dep] for dep in sorted(values[0])} if values else {}
+    for deps in values[1:]:
+        if not common:
+            break
+        for dep in list(common):
+            if dep not in deps or common[dep] != deps[dep]:
+                common.pop(dep)
+    return common, {
+        platform: {dep: by_platform[platform][dep] for dep in sorted(by_platform[platform]) if dep not in common}
+        for platform in sorted(by_platform)
+        if by_platform[platform] != common
+    }

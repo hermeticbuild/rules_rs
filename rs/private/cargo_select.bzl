@@ -4,18 +4,18 @@ load("@rules_rust//rust/platform:triple_mappings.bzl", _legacy_constraints = "tr
 load("//rs/platforms:triples.bzl", "triple_to_rust_constraint_set")
 load(":select_utils.bzl", "platform_label")
 
-_SETTING = str(Label("@rules_rust//cargo/settings:cargo_execution_target"))
+_SETTING = str(Label("@rules_rust//cargo/settings:cargo_target_triple"))
 
 def cargo_condition(hub_name, context, triple):
     return "@" + hub_name + "//:__cargo/" + (context or "normal") + "/" + triple
 
 def cargo_config_settings(contexts, triples, use_legacy_rules_rust_platforms = False):
-    for context in contexts:
-        for triple in triples:
-            if use_legacy_rules_rust_platforms:
-                constraints = _legacy_constraints(triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc"))
-            else:
-                constraints = triple_to_rust_constraint_set(triple)
+    for triple in triples:
+        if use_legacy_rules_rust_platforms:
+            constraints = _legacy_constraints(triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc"))
+        else:
+            constraints = triple_to_rust_constraint_set(triple)
+        for context in contexts:
             native.config_setting(
                 name = "__cargo/" + (context or "normal") + "/" + triple,
                 flag_values = {_SETTING: context},
@@ -29,12 +29,14 @@ def cargo_select(values, hub_name, use_legacy_rules_rust_platforms = False, defa
     first = None
     same = True
     for context, by_triple in values.items():
-        by_platform = {}
-        for triple in sorted(by_triple):
-            by_platform[platform_label(triple, use_legacy_rules_rust_platforms)] = triple
-        for triple in by_platform.values():
+        triples = sorted(by_triple)
+        if use_legacy_rules_rust_platforms:
+            by_platform = {platform_label(triple, True): triple for triple in triples}
+            triples = by_platform.values()
+        for triple in triples:
             value = by_triple[triple]
-            branches[cargo_condition(hub_name, context, triple)] = value
+            condition = cargo_condition(hub_name, context, triple) if hub_name else platform_label(triple, use_legacy_rules_rust_platforms)
+            branches[condition] = value
             if first == None:
                 first = value
             elif first != value:

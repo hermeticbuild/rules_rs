@@ -257,7 +257,6 @@ bzl_library(
     srcs = ["repository_utils.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
-        ":cargo_build_script_variants",
         ":cargo_toml_utils",
         ":select_utils",
         ":semver",
@@ -370,7 +369,6 @@ bzl_library(
         ":cargo_workspace_graph",
         ":repository_utils",
         ":rust_repository_utils",
-        ":select_utils",
         ":toml2json",
         "//rs/platforms:triples",
         "@bazel_skylib//lib:paths",

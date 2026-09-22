@@ -7,7 +7,7 @@ load(
 load("//rs:rust_binary.bzl", "rust_binary")
 load("//rs:rust_library.bzl", "rust_library")
 load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
-load(":cargo_build_script_variants.bzl", "cargo_build_script_for_configurations", "cargo_build_script_for_targets")
+load(":cargo_build_script_variants.bzl", "cargo_build_script_for_configurations")
 load(":cargo_select.bzl", "cargo_select")
 
 def rust_crate(
@@ -15,22 +15,19 @@ def rust_crate(
         crate_name,
         purl,
         version,
-        aliases,
-        build_aliases,
+        configurations,
+        cargo_contexts,
+        hub_name,
         deps,
         link_deps,
         data,
-        crate_features,
         crate_root,
         edition,
         rustc_flags,
         tags,
-        target_compatible_with,
         links,
         build_script,
-        build_scripts,
         build_script_data,
-        build_deps,
         build_script_env,
         build_script_env_files,
         allow_build_script_to_detect_nonhermetic_paths,
@@ -43,10 +40,7 @@ def rust_crate(
         use_legacy_rules_rust_platforms,
         extra_compile_data = [],
         rustc_env = {},
-        skip_deps_verification = False,
-        configurations = None,
-        cargo_contexts = {},
-        hub_name = ""):
+        skip_deps_verification = False):
     build_script_name = "_bs"
     package_metadata_name = name + "_package_metadata"
     package_metadata(
@@ -55,52 +49,56 @@ def rust_crate(
         visibility = ["//visibility:public"],
     )
 
-    if configurations != None:
-        resolved_deps = {context: definition["deps_select"] for context, definition in configurations.items()}
-        if deps:
-            deps = list({native.package_relative_label(dep): None for dep in deps})
-            resolved_deps = {}
-            for context, definition in configurations.items():
-                resolved_deps[context] = {}
-                for triple, labels in definition["deps_select"].items():
-                    selected = []
-                    for label in labels:
-                        label = native.package_relative_label(label)
-                        if label not in deps:
-                            selected.append(label)
-                    resolved_deps[context][triple] = selected
-        deps = deps + cargo_select(resolved_deps, hub_name, use_legacy_rules_rust_platforms, default = [])
-        crate_features = crate_features + cargo_select(
-            {context: definition["crate_features_select"] for context, definition in configurations.items()},
-            hub_name,
-            use_legacy_rules_rust_platforms,
-            default = [],
-        )
-        aliases = cargo_select(
-            {
-                context: {
-                    triple: {
-                        dep: alias
-                        for dep, alias in definition["aliases"].items()
-                        if dep in definition["deps_select"].get(triple, [])
-                    } | aliases
-                    for triple in definition["crate_features_select"]
+    if deps:
+        deps = {native.package_relative_label(dep): None for dep in deps}
+        resolved_deps = {}
+        for context, definition in configurations.items():
+            resolved_deps[context] = {}
+            for triple, labels in definition["deps_select"].items():
+                selected = []
+                for label in labels:
+                    label = native.package_relative_label(label)
+                    if label not in deps:
+                        selected.append(label)
+                resolved_deps[context][triple] = selected
+        deps = list(deps)
+    else:
+        resolved_deps = {
+            context: {triple: list(deps) for triple, deps in definition["deps_select"].items()}
+            for context, definition in configurations.items()
+        }
+    deps = deps + cargo_select(resolved_deps, hub_name, use_legacy_rules_rust_platforms, default = [])
+    crate_features = cargo_select(
+        {context: definition["crate_features_select"] for context, definition in configurations.items()},
+        hub_name,
+        use_legacy_rules_rust_platforms,
+        default = [],
+    )
+    aliases = cargo_select(
+        {
+            context: {
+                triple: {
+                    dep: alias
+                    for dep, alias in deps.items()
+                    if alias
                 }
-                for context, definition in configurations.items()
-            },
-            hub_name,
-            use_legacy_rules_rust_platforms,
-            default = {},
-        )
-        target_compatible_with = cargo_select(
-            {
-                context: {triple: [] for triple in definition["crate_features_select"]}
-                for context, definition in configurations.items()
-            },
-            hub_name,
-            use_legacy_rules_rust_platforms,
-            default = ["@platforms//:incompatible"],
-        )
+                for triple, deps in definition["deps_select"].items()
+            }
+            for context, definition in configurations.items()
+        },
+        hub_name,
+        use_legacy_rules_rust_platforms,
+        default = {},
+    )
+    target_compatible_with = cargo_select(
+        {
+            context: {triple: [] for triple in definition["crate_features_select"]}
+            for context, definition in configurations.items()
+        },
+        hub_name,
+        use_legacy_rules_rust_platforms,
+        default = ["@platforms//:incompatible"],
+    ) if hub_name else []
 
     compile_data = native.glob(
         include = ["**"],
@@ -131,20 +129,19 @@ def rust_crate(
     ]
     crate_tags = default_tags + tags
 
-    if configurations != None:
-        active = False
-        for definition in configurations.values():
-            if definition["crate_features_select"]:
-                active = True
-                break
-        if not active:
-            build_script = None
+    active = False
+    for definition in configurations.values():
+        if definition["crate_features_select"]:
+            active = True
+            break
+    if not active:
+        build_script = None
 
     if build_script:
-        script_kwargs = dict(
+        cargo_build_script_for_configurations(
+            configurations = configurations,
+            hub_name = hub_name,
             name = build_script_name,
-            deps = build_deps,
-            aliases = build_aliases,
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
             compile_data = compile_data,
             crate_name = "build_script_build",
@@ -168,40 +165,16 @@ def rust_crate(
             version = version,
         )
 
-        if configurations == None:
-            cargo_build_script_for_targets(build_scripts = build_scripts, **script_kwargs)
-        else:
-            cargo_build_script_for_configurations(
-                configurations = configurations,
-                hub_name = hub_name,
-                **script_kwargs
-            )
-
         deps = deps + [build_script_name]
 
     if not has_lib:
-        # HACK: create a stub target so the hub's `<crate>-<version>` alias
-        # (emitted unconditionally in rs/extensions.bzl) still resolves for
-        # binary-only crates. Marked as incompatible so that library use
-        # fails at analysis time. The descriptive stub name & alias make the
-        # error self-explanatory.
-        #
-        # A cleaner fix would be to make the hub skip the library alias when
-        # the crate has no library, but that is non-trivial.
-        stub_name = name + "_no_library_only_binary"
+        # Keep the hub's library label incompatible for binary-only crates.
         native.filegroup(
-            name = stub_name,
+            name = name,
             tags = crate_tags,
             target_compatible_with = ["@platforms//:incompatible"],
             visibility = ["//visibility:public"],
         )
-        native.alias(
-            name = name,
-            actual = stub_name,
-            tags = crate_tags,
-            visibility = ["//visibility:public"],
-        )
-
     else:
         kwargs = dict(
             name = name,

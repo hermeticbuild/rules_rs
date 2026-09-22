@@ -35,13 +35,11 @@ rust_library(
     srcs = ["build_exec_feature_split/src/lib.rs"],
     aliases = split_aliases(
         package_name = "build_exec_feature_split",
-        normal = True,
     ),
     crate_root = "build_exec_feature_split/src/lib.rs",
     edition = "2024",
     deps = split_deps(
         package_name = "build_exec_feature_split",
-        normal = True,
     ) + [":build_exec_feature_split_build_script"],
 )
 
@@ -142,20 +140,6 @@ DISABLED = [
     "pyo3",
     "prost",
     "wasm_bindgen",
-    #"binaries",
-    #"build_script_aliases",
-    #"build_script_env_select",
-    #"build_script_runtime_env",
-    #"build_dep_features",
-    #"feature_name_overrides_implicit_dep",
-    #"many_workspace_deps",
-    #"multiple_versions_for_dependency",
-    #"multiple_versions_of_optional_dep",
-    #"non_optional_dep_feature",
-    #"optional_build_deps",
-    #"platform_dep_features",
-    #"git_crates",
-    #"uv",
 ]
 
 # Tests whose `_workspace_deps` aggregation intentionally fails analysis.

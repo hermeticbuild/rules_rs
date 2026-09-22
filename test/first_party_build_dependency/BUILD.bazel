@@ -15,10 +15,10 @@ cargo_build_script(
 rust_library(
     name = "first_party_build_dependency",
     srcs = ["src/lib.rs"],
-    aliases = aliases(normal = True),
+    aliases = aliases(),
     crate_features = crate_features(),
     crate_root = "src/lib.rs",
     edition = "2021",
     visibility = ["//visibility:public"],
-    deps = all_crate_deps(normal = True) + [":build_script"],
+    deps = all_crate_deps() + [":build_script"],
 )

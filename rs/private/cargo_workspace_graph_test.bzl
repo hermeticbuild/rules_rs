@@ -447,7 +447,7 @@ def _resolve_cargo_workspace_members_preserves_proc_macro_host_dependencies_impl
     asserts.equals(env, ["//:macro-support-1.0.0"], sorted(macro.deps[linux]))
     asserts.equals(env, ["//:macro-helper-1.0.0", "//:macro-support-1.0.0"], sorted(macro.deps[macos]))
     asserts.equals(env, ["dep:macro-helper", "helper"], sorted(macro.features_enabled[macos]))
-    asserts.equals(env, [], sorted(got.target_build_deps[linux]["macro-support-1.0.0"][linux]))
+    asserts.false(env, linux in got.target_build_deps[linux]["macro-support-1.0.0"])
     asserts.equals(env, ["//:darwin-build-1.0.0"], sorted(got.target_build_deps[linux]["macro-support-1.0.0"][macos]))
     asserts.equals(env, [macos], sorted(got.exec_resolutions_by_target[linux]["darwin-build-1.0.0"].active))
 
@@ -538,9 +538,8 @@ def _resolve_cargo_workspace_members_forwards_features_to_exec_only_build_deps_i
         [linux, macos],
     )
 
-    builder = got.feature_resolutions_by_fq_crate["builder-1.0.0"]
     shared = got.exec_resolutions_by_target[linux]["shared-1.0.0"]
-    asserts.equals(env, [], sorted(got.target_build_deps[linux]["builder-1.0.0"][linux]))
+    asserts.false(env, linux in got.target_build_deps[linux]["builder-1.0.0"])
     asserts.equals(env, ["//:shared-1.0.0"], sorted(got.target_build_deps[linux]["builder-1.0.0"][macos]))
     asserts.equals(env, [macos], sorted(shared.active))
     asserts.equals(env, ["exec"], sorted(shared.features_enabled[macos]))
@@ -722,7 +721,10 @@ def _resolve_cargo_workspace_members_isolates_forwarded_build_features_impl(ctx)
         for exec_triple in [linux, macos]:
             asserts.equals(env, ["dep:" + feature + "-leaf", feature], sorted(helper.features_enabled[exec_triple]))
             asserts.equals(env, ["//:" + feature + "-leaf-1.0.0"], sorted(helper.deps[exec_triple]))
-        asserts.equals(env, {"//:helper-1.0.0": "selected"}, got.target_build_aliases[target_triple]["builder-1.0.0"])
+        asserts.equals(env, {
+            triple: {"//:helper-1.0.0": "selected"}
+            for triple in [linux, macos]
+        }, got.target_build_deps[target_triple]["builder-1.0.0"])
     return unittest.end(env)
 
 def _resolve_cargo_workspace_members_isolates_weak_build_features_impl(ctx):
@@ -796,10 +798,8 @@ def _resolve_cargo_workspace_members_groups_seeds_preserving_owners_impl(ctx):
         },
     )
 
-    asserts.equals(env, {"owner-a-1.0.0": {macos: set(["//:shared-1.0.0"])}}, got.target_build_deps[linux])
-    asserts.equals(env, {"owner-b-1.0.0": {macos: set(["//:shared-1.0.0"])}}, got.target_build_deps[macos])
-    asserts.equals(env, {"owner-a-1.0.0": {"//:shared-1.0.0": "selected_a"}}, got.target_build_aliases[linux])
-    asserts.equals(env, {"owner-b-1.0.0": {"//:shared-1.0.0": "selected_b"}}, got.target_build_aliases[macos])
+    asserts.equals(env, {"owner-a-1.0.0": {macos: {"//:shared-1.0.0": "selected_a"}}}, got.target_build_deps[linux])
+    asserts.equals(env, {"owner-b-1.0.0": {macos: {"//:shared-1.0.0": "selected_b"}}}, got.target_build_deps[macos])
     asserts.equals(env, ["annotated"], sorted(got.exec_resolutions_by_target[linux]["shared-1.0.0"].features_enabled[macos]))
 
     # Both target triples must reference the same resolved dictionary, not
@@ -830,7 +830,40 @@ def _resolve_cargo_workspace_members_preserves_no_exec_resolution_impl(ctx):
     asserts.equals(env, ["extra"], sorted(helper.features_enabled[linux]))
     asserts.equals(env, {}, got.exec_resolutions_by_target)
     asserts.equals(env, {}, got.target_build_deps)
-    asserts.equals(env, {}, got.target_build_aliases)
+    return unittest.end(env)
+
+def _optional_dependency_aliases_follow_enabled_features_impl(ctx):
+    env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    macos = "aarch64-apple-darwin"
+    for selected in ["first-name", "second-name"]:
+        got = _resolve_test_workspace(
+            {
+                "owner": {
+                    "dependencies": [{
+                        "default_features": False,
+                        "kind": kind,
+                        "name": name,
+                        "optional": True,
+                        "package": "helper",
+                    } for kind in ["normal", "build"] for name in ["first-name", "second-name"]],
+                    "features": {"selected": ["dep:" + selected]},
+                },
+                "helper": {},
+            },
+            [{"kind": kind, "name": "owner", "features": ["selected"]} for kind in ["normal", "build"]],
+            [linux, macos],
+            [macos],
+        )
+
+        expected = {"//:helper-1.0.0": selected.replace("-", "_")}
+        owner = got.feature_resolutions_by_fq_crate["owner-1.0.0"]
+        for triple in [linux, macos]:
+            asserts.equals(env, expected, owner.deps[triple])
+            asserts.equals(env, {macos: expected}, got.target_build_deps[triple]["owner-1.0.0"])
+            execution = got.exec_resolutions_by_target[triple]["owner-1.0.0"]
+            for deps in [execution.deps, execution.build_deps]:
+                asserts.equals(env, {macos: expected}, deps)
     return unittest.end(env)
 
 def _inactive_crates_remain_unresolved_impl(ctx):
@@ -876,7 +909,6 @@ def _inactive_crates_remain_unresolved_impl(ctx):
                 asserts.equals(env, [], sorted(resolution.build_deps[triple]))
     for target_triple in [linux, macos]:
         asserts.equals(env, {}, got.target_build_deps[target_triple])
-        asserts.equals(env, {}, got.target_build_aliases[target_triple])
     return unittest.end(env)
 
 def _inactive_crates_do_not_change_active_features_impl(ctx):
@@ -955,7 +987,6 @@ def _inactive_annotations_do_not_activate_dependencies_impl(ctx):
             asserts.equals(env, [], sorted(helper.features_enabled[triple]))
     for target_triple in [linux, macos]:
         asserts.equals(env, {}, got.target_build_deps[target_triple])
-        asserts.equals(env, {}, got.target_build_aliases[target_triple])
     return unittest.end(env)
 
 inactive_crates_remain_unresolved_test = unittest.make(_inactive_crates_remain_unresolved_impl)
@@ -965,6 +996,7 @@ resolve_cargo_workspace_members_isolates_forwarded_build_features_test = unittes
 resolve_cargo_workspace_members_isolates_weak_build_features_test = unittest.make(_resolve_cargo_workspace_members_isolates_weak_build_features_impl)
 resolve_cargo_workspace_members_groups_seeds_preserving_owners_test = unittest.make(_resolve_cargo_workspace_members_groups_seeds_preserving_owners_impl)
 resolve_cargo_workspace_members_preserves_no_exec_resolution_test = unittest.make(_resolve_cargo_workspace_members_preserves_no_exec_resolution_impl)
+optional_dependency_aliases_follow_enabled_features_test = unittest.make(_optional_dependency_aliases_follow_enabled_features_impl)
 
 def cargo_workspace_graph_tests():
     return unittest.suite(
@@ -974,6 +1006,7 @@ def cargo_workspace_graph_tests():
         inactive_crates_remain_unresolved_test,
         inactive_crates_do_not_change_active_features_test,
         inactive_annotations_do_not_activate_dependencies_test,
+        optional_dependency_aliases_follow_enabled_features_test,
         resolve_handles_dependency_chains_deeper_than_previous_round_limit_test,
         resolve_cargo_workspace_members_adds_requested_binary_target_roots_test,
         resolve_cargo_workspace_members_forwards_features_to_exec_only_build_deps_test,

@@ -63,8 +63,8 @@ _verify_present = rule(
 )
 
 def verify_dep_absent(name, dep_data, unexpected):
-    items = list(dep_data.get("deps", []))
-    for values in dep_data.get("deps_by_platform", {}).values():
+    items = []
+    for values in dep_data["configurations"][""]["deps_select"].values():
         items.extend(values)
 
     _verify_absent(
@@ -74,8 +74,8 @@ def verify_dep_absent(name, dep_data, unexpected):
     )
 
 def verify_dev_dep_absent(name, dep_data, unexpected):
-    items = list(dep_data.get("dev_deps", []))
-    for values in dep_data.get("dev_deps_by_platform", {}).values():
+    items = list(dep_data["dev_deps"])
+    for values in dep_data["dev_deps_by_platform"].values():
         items.extend(values)
 
     _verify_absent(
@@ -85,8 +85,8 @@ def verify_dev_dep_absent(name, dep_data, unexpected):
     )
 
 def verify_dep_present(name, dep_data, expected):
-    items = list(dep_data.get("deps", []))
-    for values in dep_data.get("deps_by_platform", {}).values():
+    items = []
+    for values in dep_data["configurations"][""]["deps_select"].values():
         items.extend(values)
 
     _verify_present(
@@ -96,8 +96,8 @@ def verify_dep_present(name, dep_data, expected):
     )
 
 def verify_crate_feature_absent(name, dep_data, unexpected):
-    items = list(dep_data.get("crate_features", []))
-    for values in dep_data.get("crate_features_by_platform", {}).values():
+    items = []
+    for values in dep_data["configurations"][""]["crate_features_select"].values():
         items.extend(values)
 
     _verify_absent(
@@ -107,8 +107,8 @@ def verify_crate_feature_absent(name, dep_data, unexpected):
     )
 
 def verify_crate_feature_present(name, dep_data, expected):
-    items = list(dep_data.get("crate_features", []))
-    for values in dep_data.get("crate_features_by_platform", {}).values():
+    items = []
+    for values in dep_data["configurations"][""]["crate_features_select"].values():
         items.extend(values)
 
     _verify_present(

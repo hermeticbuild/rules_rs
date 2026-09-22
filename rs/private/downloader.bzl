@@ -21,13 +21,10 @@ def parse_git_url(url):
 
     return remote, sha
 
-def _parse_github_url(url):
+def _github_source_to_raw_content_base_url(url):
     remote, sha = parse_git_url(url)
     repo_path = remote.removeprefix("https://github.com/").removesuffix(".git")
-    return repo_path, sha
-
-def _github_source_to_raw_content_base_url(url):
-    return "https://raw.githubusercontent.com/%s/%s/" % _parse_github_url(url)
+    return "https://raw.githubusercontent.com/" + repo_path + "/" + sha + "/"
 
 def _sanitize_path_fragment(path):
     return path.replace("/", "_").replace(":", "_").replace("?", "_")
@@ -74,15 +71,11 @@ def start_github_downloads(
             )
             state.in_flight_git_crate_fetches_by_url[url] = in_flight_fetch
 
-        package["download_token"] = in_flight_fetch
-
 def start_crate_registry_downloads(
         mctx,
         state,
-        annotations,
         packages,
-        cargo_credentials,
-        debug):
+        cargo_credentials):
     existing_facts = getattr(mctx, "facts", {}) or {}
 
     for package in packages:
@@ -258,17 +251,6 @@ def _compute_strip_prefix(annotation, cargo_toml_json, name):
     # TODO(zbarsky): any more cases to handle here?
     return strip_prefix
 
-def _annotations_for_package(annotations_by_hub_name, package):
-    hub_name = package.get("hub_name")
-    if not hub_name:
-        fail("Missing hub_name for package %s" % package.get("name", "<unknown>"))
-
-    annotations = annotations_by_hub_name.get(hub_name)
-    if annotations == None:
-        fail("Missing annotations for hub %s" % hub_name)
-
-    return annotations
-
 def download_metadata_for_git_crates(
         mctx,
         state,
@@ -282,7 +264,7 @@ def download_metadata_for_git_crates(
 
         for package in fetch_state.packages:
             name = package["name"]
-            annotations = _annotations_for_package(annotations_by_hub_name, package)
+            annotations = annotations_by_hub_name[package["hub_name"]]
 
             if cargo_toml_json.get("package", {}).get("name") != name:
                 annotation = annotation_for(annotations, name, package["version"], package["hub_name"])
@@ -321,7 +303,7 @@ def download_metadata_for_git_crates(
 
         # TODO(zbarsky): multiple crates?
         first_pkg = clone_state.packages[0]
-        annotations = _annotations_for_package(annotations_by_hub_name, first_pkg)
+        annotations = annotations_by_hub_name[first_pkg["hub_name"]]
         annotation = annotation_for(annotations, first_pkg["name"], first_pkg["version"], first_pkg["hub_name"])
         cargo_toml_path = clone_dir.get_child(annotation.workspace_cargo_toml)
         _ensure_cargo_toml_exists(cargo_toml_path, clone_state)
@@ -330,7 +312,7 @@ def download_metadata_for_git_crates(
 
         for package in clone_state.packages:
             name = package["name"]
-            annotations = _annotations_for_package(annotations_by_hub_name, package)
+            annotations = annotations_by_hub_name[package["hub_name"]]
 
             if cargo_toml_json.get("package", {}).get("name") != name:
                 annotation = annotation_for(annotations, name, package["version"], package["hub_name"])

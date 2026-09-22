@@ -164,8 +164,8 @@ load("@rules_rs//rs:rust_library.bzl", "rust_library")
 rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
-    aliases = aliases(normal = True),
-    deps = all_crate_deps(normal = True),
+    aliases = aliases(),
+    deps = all_crate_deps(),
 )
 
 rust_binary(
@@ -211,8 +211,8 @@ load("@rules_rs//rs:rust_library.bzl", "rust_library")
 rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
-    aliases = aliases(normal = True),
-    deps = all_crate_deps(normal = True),
+    aliases = aliases(),
+    deps = all_crate_deps(),
     lint_config = lint_config(),
 )
 ```
@@ -494,9 +494,9 @@ Crates unreachable from the Cargo roots on every configured platform are
 incompatible. Generating a Bazel label does not make the crate an additional
 Cargo root.
 
-Build scripts are grouped by target features, build dependencies, and aliases.
-The group is selected in the target configuration before its dependencies
-transition to the execution platform. Identical definitions share one target.
+Build scripts with identical features, dependencies, and `cargo_target_triple` share
+one target. The build script is selected in the target configuration before
+its dependencies transition to the execution platform.
 
 For first-party build scripts, load `cargo_build_script` from the generated
 Cargo repository's `defs.bzl`. It selects the package's Cargo features, build
@@ -512,10 +512,9 @@ cargo_build_script(
 )
 ```
 
-Use `all_crate_deps(normal = True)`, `aliases(normal = True)`, and
-`crate_features()` for libraries. The same first-party library target can be
+Use `all_crate_deps()`, `aliases()`, and `crate_features()` for libraries. The same first-party library target can be
 a normal dependency and a build dependency, including when a generated crate
-depends back on it. `cargo_execution_target` records the original target triple
+depends back on it. `cargo_target_triple` records the original target triple
 for build dependencies and survives execution transitions. Generated crates
 clear this setting when the default configuration supplies the same resolution;
 otherwise, they preserve it. Rust toolchains clear it. C++ toolchains retain
@@ -537,10 +536,10 @@ features enabled only through build dependencies, so they may need explicit
 For example, a PyO3 toolchain that sets `PYO3_NO_PYTHON` needs its chosen
 `abi3-py3*` feature on `pyo3-build-config` in both resolutions.
 
-`gen_binaries` makes an otherwise build-only package a target root with its
-default features and `crate_features` annotations. If normal dependencies
-already reach the package, `gen_binaries` preserves those resolved features,
-including `default-features = false`. Build-only feature requests do not enable
+`gen_binaries` resolves requested binaries for the target platform. For a package
+used only by build dependencies, it enables default features and `crate_features`
+annotations. If normal dependencies already reach the package, it preserves
+those resolved features, including `default-features = false`. Build-only feature requests do not enable
 features on generated binaries.
 
 Cargo workspaces sometimes use a self-referencing dev-dependency to enable extra features for tests:
