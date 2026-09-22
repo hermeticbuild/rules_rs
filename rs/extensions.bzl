@@ -313,6 +313,7 @@ def _generate_hub_and_spokes(
         workspace_resolution.target_build_deps,
         workspace_resolution.target_build_aliases,
         dep_label_prefix = "@%s//:" % hub_name,
+        fallback = workspace_resolution.fallback,
     )
     exec_labels_by_target = dependency_variants.exec_labels_by_target
 

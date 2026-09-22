@@ -445,7 +445,7 @@ def _apply_annotation_features(feature_resolutions, annotation):
         features.update(annotation.crate_features)
         features.update(annotation.crate_features_select.get(triple, []))
 
-def _copy_exec_resolutions(template_packages, exec_platform_triples):
+def _copy_resolutions(template_packages, platform_triples):
     packages = []
     resolutions = {}
     for package in template_packages:
@@ -454,15 +454,17 @@ def _copy_exec_resolutions(template_packages, exec_platform_triples):
             template.package_index,
             [dict(dep) for dep in template.possible_deps],
             template.possible_features,
-            exec_platform_triples,
+            platform_triples,
         )
-        for triple in exec_platform_triples:
+        for triple in platform_triples:
             resolution.features_enabled[triple].update(template.features_enabled.get(triple, []))
         resolutions[fq_crate(package["name"], package["version"])] = resolution
         packages.append(dict(package, feature_resolutions = resolution))
 
     for package in packages:
         for dep in package["feature_resolutions"].possible_deps:
+            # Recompute deferred build features in the new resolution.
+            dep.pop("deferred_features", None)
             if "feature_resolutions" in dep:
                 dep["feature_resolutions"] = packages[dep["feature_resolutions"].package_index]["feature_resolutions"]
 
@@ -483,7 +485,7 @@ def _resolve_exec_targets(ctx, target_packages, template_packages, platform_trip
             for (index, triple), features in sorted(seeds.features.items())
         ])
         if seed_key not in resolved_seeds:
-            exec_packages, exec_resolutions = _copy_exec_resolutions(template_packages, exec_cfg_attrs_by_triple)
+            exec_packages, exec_resolutions = _copy_resolutions(template_packages, exec_cfg_attrs_by_triple)
             for (index, triple), features in seeds.features.items():
                 resolution = exec_packages[index]["feature_resolutions"]
                 resolution.active.add(triple)
@@ -558,7 +560,7 @@ def resolve_cargo_workspace_members(
 
     exec_template_packages = []
     if exec_platform_triples:
-        exec_template_packages, exec_templates_by_fq_crate = _copy_exec_resolutions(resolver_packages, exec_platform_triples)
+        exec_template_packages, exec_templates_by_fq_crate = _copy_resolutions(resolver_packages, exec_platform_triples)
 
     _resolve_possible_deps(
         resolver_packages,
@@ -693,9 +695,44 @@ def resolve_cargo_workspace_members(
         debug,
     )
 
+    # Generated labels remain buildable even when the workspace does not use
+    # their packages. Resolve those packages together without changing features
+    # of packages reached by the workspace's normal or build dependencies.
+    fallback_roots = []
+    if exec_platform_triples:
+        for package in packages:
+            resolution = package["feature_resolutions"]
+            if resolution.active:
+                continue
+            fq = fq_crate(package["name"], package["version"])
+            active = False
+            for resolutions in exec_targets.exec_resolutions_by_target.values():
+                if resolutions[fq].active:
+                    active = True
+                    break
+            if not active:
+                fallback_roots.append(resolution.package_index)
+
+    fallback = None
+    if fallback_roots:
+        fallback_packages, fallback_resolutions = _copy_resolutions(resolver_packages, platform_triples)
+        for index in fallback_roots:
+            fallback_packages[index]["feature_resolutions"].active.update(platform_triples)
+        resolve(ctx, fallback_packages, platform_cfg_attrs_by_triple, debug, include_build_dependencies = False)
+        fallback_exec = _resolve_exec_targets(ctx, fallback_packages, exec_template_packages, platform_triples, exec_platform_cfg_attrs_by_triple, debug)
+        fallback = struct(
+            feature_resolutions_by_fq_crate = fallback_resolutions,
+            exec_resolutions_by_target = fallback_exec.exec_resolutions_by_target,
+            target_build_deps = fallback_exec.target_build_deps,
+            target_build_aliases = fallback_exec.target_build_aliases,
+        )
+
     for package in packages:
         feature_resolutions = package["feature_resolutions"]
         features_enabled = feature_resolutions.features_enabled
+        fallback_features = {}
+        if fallback:
+            fallback_features = fallback.feature_resolutions_by_fq_crate[fq_crate(package["name"], package["version"])].features_enabled
 
         for dep in feature_resolutions.possible_deps:
             if "bazel_target" in dep:
@@ -704,11 +741,12 @@ def resolve_cargo_workspace_members(
             prefixed_dep_alias = "dep:" + dep["name"]
 
             for triple in platform_triples:
-                if prefixed_dep_alias in features_enabled[triple]:
+                if prefixed_dep_alias in features_enabled[triple] or prefixed_dep_alias in fallback_features.get(triple, []):
                     fail("Crate %s has enabled %s but it was not in the lockfile..." % (package["name"], prefixed_dep_alias))
 
     return struct(
         cfg_match_cache = cfg_match_cache,
+        fallback = fallback,
         exec_resolutions_by_target = exec_targets.exec_resolutions_by_target,
         target_build_deps = exec_targets.target_build_deps,
         target_build_aliases = exec_targets.target_build_aliases,

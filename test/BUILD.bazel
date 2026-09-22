@@ -66,6 +66,12 @@ platform_transition_filegroup(
     target_platform = ":x86_64-unknown-linux-gnu",
 )
 
+platform_transition_filegroup(
+    name = "inactive_build_dependency_linux",
+    srcs = ["@inactive_build_dependency//:optional-crate-0.1.0"],
+    target_platform = ":x86_64-unknown-linux-gnu",
+)
+
 sh_test(
     name = "custom_registry_test",
     size = "medium",
@@ -135,6 +141,8 @@ package_lints_test(
 )
 
 DISABLED = [
+    # Build the inactive generated crate explicitly; _workspace_deps is empty.
+    "inactive_build_dependency",
     # Only Linux enables vendored dbus; build it explicitly below.
     "optional_target_build_dep",
     "annotation_crate_features",
@@ -427,6 +435,7 @@ filegroup(
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         ":aws_lc_openssl",
         ":build_exec_feature_split_first_party",
+        ":inactive_build_dependency_linux",
         ":optional_target_build_dep_linux",
         ":rust_binary",
         ":verify_self_dev_dependency_feature_present",

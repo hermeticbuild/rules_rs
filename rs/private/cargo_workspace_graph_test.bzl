@@ -308,11 +308,11 @@ resolve_handles_dependency_chains_deeper_than_previous_round_limit_test = unitte
 
 def _resolve_test_workspace(facts_by_name, root_dependencies, target_triples, exec_triples, annotations = {}):
     packages = [{
-        "dependencies": [
+        "dependencies": sorted(set([
             (dep.get("package") or dep["name"]) + " 1.0.0"
             for dep in facts.get("dependencies", [])
             if (dep.get("package") or dep["name"]) in facts_by_name
-        ],
+        ])),
         "name": name,
         "version": "1.0.0",
     } for name, facts in facts_by_name.items()]
@@ -340,7 +340,7 @@ def _resolve_test_workspace(facts_by_name, root_dependencies, target_triples, ex
         },
         packages = packages,
         workspace_members = [{
-            "dependencies": [dep["name"] + " 1.0.0" for dep in root_dependencies],
+            "dependencies": sorted(set([dep["name"] + " 1.0.0" for dep in root_dependencies])),
             "name": "consumer",
             "version": "0.1.0",
         }],
@@ -833,6 +833,139 @@ def _resolve_cargo_workspace_members_preserves_no_exec_resolution_impl(ctx):
     asserts.equals(env, {}, got.target_build_aliases)
     return unittest.end(env)
 
+def _inactive_crates_keep_required_dependencies_impl(ctx):
+    env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    macos = "aarch64-apple-darwin"
+    got = _resolve_test_workspace(
+        {
+            "inactive": {
+                "dependencies": [
+                    {"name": "normal-helper"},
+                    {"kind": "build", "name": "build-helper"},
+                    {"default_features": False, "name": "unused", "optional": True},
+                    {"default_features": False, "kind": "build", "name": "unused-build", "optional": True},
+                ],
+                "features": {"default": ["dep:unused", "dep:unused-build"]},
+            },
+            "normal-helper": {
+                "dependencies": [{"default_features": False, "name": "normal-leaf"}],
+                "features": {"default": ["required"], "required": []},
+            },
+            "build-helper": {
+                "dependencies": [{"default_features": False, "name": "build-leaf"}],
+                "features": {"default": ["required"], "required": []},
+            },
+            "normal-leaf": {},
+            "build-leaf": {},
+            "unused": {},
+            "unused-build": {},
+        },
+        [{"name": "inactive", "target": 'cfg(target_os = "windows")'}],
+        [linux, macos],
+        [linux, macos],
+    )
+
+    fallback = got.fallback
+    inactive = fallback.feature_resolutions_by_fq_crate["inactive-1.0.0"]
+    normal_helper = fallback.feature_resolutions_by_fq_crate["normal-helper-1.0.0"]
+    asserts.equals(env, [], sorted(got.feature_resolutions_by_fq_crate["inactive-1.0.0"].active))
+    for target_triple in [linux, macos]:
+        # Explicitly building an inactive crate does not enable its own default.
+        asserts.equals(env, [], sorted(inactive.features_enabled[target_triple]))
+        asserts.equals(env, ["//:normal-helper-1.0.0"], sorted(inactive.deps[target_triple]))
+        asserts.equals(env, ["default", "required"], sorted(normal_helper.features_enabled[target_triple]))
+        asserts.equals(env, ["//:normal-leaf-1.0.0"], sorted(normal_helper.deps[target_triple]))
+        asserts.equals(env, {}, got.target_build_deps[target_triple])
+        helper = fallback.exec_resolutions_by_target[target_triple]["build-helper-1.0.0"]
+        for exec_triple in [linux, macos]:
+            asserts.equals(env, ["//:build-helper-1.0.0"], sorted(fallback.target_build_deps[target_triple]["inactive-1.0.0"][exec_triple]))
+            asserts.equals(env, ["default", "required"], sorted(helper.features_enabled[exec_triple]))
+            asserts.equals(env, ["//:build-leaf-1.0.0"], sorted(helper.deps[exec_triple]))
+        asserts.equals(env, [], sorted(fallback.exec_resolutions_by_target[target_triple]["unused-build-1.0.0"].active))
+    return unittest.end(env)
+
+def _inactive_crates_do_not_change_active_features_impl(ctx):
+    env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    macos = "aarch64-apple-darwin"
+    got = _resolve_test_workspace(
+        {
+            "inactive": {
+                "dependencies": [
+                    {"default_features": False, "features": ["extra"], "name": "helper"},
+                    {"default_features": False, "features": ["extra"], "kind": "build", "name": "helper"},
+                ],
+            },
+            "helper": {
+                "dependencies": [{"default_features": False, "name": "extra-leaf", "optional": True}],
+                "features": {"extra": ["dep:extra-leaf"]},
+            },
+            "extra-leaf": {},
+            "build-only": {"features": {"exec": []}},
+        },
+        [
+            {"name": "inactive", "target": 'cfg(target_os = "windows")'},
+            {"name": "helper"},
+            {"kind": "build", "name": "helper"},
+            {"features": ["exec"], "kind": "build", "name": "build-only"},
+        ],
+        [linux, macos],
+        [linux, macos],
+    )
+
+    fallback = got.fallback
+    helper = got.feature_resolutions_by_fq_crate["helper-1.0.0"]
+    fallback_helper = fallback.feature_resolutions_by_fq_crate["helper-1.0.0"]
+    asserts.equals(env, [], sorted(got.feature_resolutions_by_fq_crate["build-only-1.0.0"].active))
+    asserts.equals(env, [], sorted(fallback.feature_resolutions_by_fq_crate["build-only-1.0.0"].active))
+    for target_triple in [linux, macos]:
+        asserts.equals(env, [], sorted(helper.features_enabled[target_triple]))
+        asserts.equals(env, [], sorted(helper.deps[target_triple]))
+        asserts.equals(env, ["dep:extra-leaf", "extra"], sorted(fallback_helper.features_enabled[target_triple]))
+        asserts.equals(env, ["//:extra-leaf-1.0.0"], sorted(fallback_helper.deps[target_triple]))
+        for exec_triple in [linux, macos]:
+            execution = got.exec_resolutions_by_target[target_triple]["helper-1.0.0"]
+            fallback_execution = fallback.exec_resolutions_by_target[target_triple]["helper-1.0.0"]
+            asserts.equals(env, [], sorted(execution.features_enabled[exec_triple]))
+            asserts.equals(env, [], sorted(execution.deps[exec_triple]))
+            asserts.equals(env, ["dep:extra-leaf", "extra"], sorted(fallback_execution.features_enabled[exec_triple]))
+            asserts.equals(env, ["//:extra-leaf-1.0.0"], sorted(fallback_execution.deps[exec_triple]))
+            asserts.equals(env, ["exec"], sorted(got.exec_resolutions_by_target[target_triple]["build-only-1.0.0"].features_enabled[exec_triple]))
+    return unittest.end(env)
+
+def _inactive_crates_keep_per_target_build_features_impl(ctx):
+    env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    macos = "aarch64-apple-darwin"
+    got = _resolve_test_workspace(
+        {
+            "inactive": {
+                "dependencies": [{"default_features": False, "kind": "build", "name": "helper", "optional": True}],
+                "features": {"linux": ["helper/linux"], "macos": ["helper/macos"]},
+            },
+            "helper": {"features": {"linux": [], "macos": []}},
+        },
+        [{"name": "inactive", "target": 'cfg(target_os = "windows")'}],
+        [linux, macos],
+        [linux, macos],
+        annotations = {"inactive": {"*": struct(
+            crate_features = [],
+            crate_features_select = {linux: ["linux"], macos: ["macos"]},
+        )}},
+    )
+
+    for target_triple, feature in [(linux, "linux"), (macos, "macos")]:
+        asserts.equals(env, {}, got.target_build_deps[target_triple])
+        helper = got.fallback.exec_resolutions_by_target[target_triple]["helper-1.0.0"]
+        for exec_triple in [linux, macos]:
+            asserts.equals(env, ["//:helper-1.0.0"], sorted(got.fallback.target_build_deps[target_triple]["inactive-1.0.0"][exec_triple]))
+            asserts.equals(env, [feature], sorted(helper.features_enabled[exec_triple]))
+    return unittest.end(env)
+
+inactive_crates_keep_required_dependencies_test = unittest.make(_inactive_crates_keep_required_dependencies_impl)
+inactive_crates_do_not_change_active_features_test = unittest.make(_inactive_crates_do_not_change_active_features_impl)
+inactive_crates_keep_per_target_build_features_test = unittest.make(_inactive_crates_keep_per_target_build_features_impl)
 resolve_cargo_workspace_members_isolates_forwarded_build_features_test = unittest.make(_resolve_cargo_workspace_members_isolates_forwarded_build_features_impl)
 resolve_cargo_workspace_members_isolates_weak_build_features_test = unittest.make(_resolve_cargo_workspace_members_isolates_weak_build_features_impl)
 resolve_cargo_workspace_members_groups_seeds_preserving_owners_test = unittest.make(_resolve_cargo_workspace_members_groups_seeds_preserving_owners_impl)
@@ -843,6 +976,9 @@ def cargo_workspace_graph_tests():
         "cargo_workspace_graph_tests",
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
+        inactive_crates_keep_required_dependencies_test,
+        inactive_crates_do_not_change_active_features_test,
+        inactive_crates_keep_per_target_build_features_test,
         resolve_handles_dependency_chains_deeper_than_previous_round_limit_test,
         resolve_cargo_workspace_members_adds_requested_binary_target_roots_test,
         resolve_cargo_workspace_members_forwards_features_to_exec_only_build_deps_test,
