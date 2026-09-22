@@ -26,7 +26,7 @@ verify_alias = rule(
 def verify_alias_absent(name, aliases, unexpected_label):
     _verify_absent(
         name = name,
-        items = sorted(aliases.keys()),
+        items = sorted(aliases),
         unexpected = unexpected_label,
     )
 
@@ -64,7 +64,7 @@ _verify_present = rule(
 
 def verify_dep_absent(name, dep_data, unexpected):
     items = []
-    for values in dep_data["configurations"][""]["deps_select"].values():
+    for values in dep_data["configurations"][""]["deps_by_triple"].values():
         items.extend(values)
 
     _verify_absent(
@@ -86,7 +86,7 @@ def verify_dev_dep_absent(name, dep_data, unexpected):
 
 def verify_dep_present(name, dep_data, expected):
     items = []
-    for values in dep_data["configurations"][""]["deps_select"].values():
+    for values in dep_data["configurations"][""]["deps_by_triple"].values():
         items.extend(values)
 
     _verify_present(
@@ -97,7 +97,7 @@ def verify_dep_present(name, dep_data, expected):
 
 def verify_crate_feature_absent(name, dep_data, unexpected):
     items = []
-    for values in dep_data["configurations"][""]["crate_features_select"].values():
+    for values in dep_data["configurations"][""]["crate_features_by_triple"].values():
         items.extend(values)
 
     _verify_absent(
@@ -108,7 +108,7 @@ def verify_crate_feature_absent(name, dep_data, unexpected):
 
 def verify_crate_feature_present(name, dep_data, expected):
     items = []
-    for values in dep_data["configurations"][""]["crate_features_select"].values():
+    for values in dep_data["configurations"][""]["crate_features_by_triple"].values():
         items.extend(values)
 
     _verify_present(

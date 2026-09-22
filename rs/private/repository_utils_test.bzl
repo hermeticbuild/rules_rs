@@ -7,7 +7,7 @@ load(":repository_utils.bzl", "render_rust_crate_call")
 _LINUX = "x86_64-unknown-linux-gnu"
 _MACOS = "aarch64-apple-darwin"
 
-def _attrs(configurations = None, context_map = {}, **kwargs):
+def _attrs(configurations = None, cargo_target_triple_map = {}, **kwargs):
     fields = dict(
         allow_build_script_to_detect_nonhermetic_paths = False,
         build_script_data = [],
@@ -18,6 +18,8 @@ def _attrs(configurations = None, context_map = {}, **kwargs):
         build_script_toolchains = [],
         build_script_tools = [],
         build_script_tools_select = {},
+        cargo_target_triple_map = cargo_target_triple_map,
+        configurations = json.encode({"": _configuration()} if configurations == None else configurations),
         crate_tags = [],
         data = [],
         deps = [],
@@ -27,18 +29,15 @@ def _attrs(configurations = None, context_map = {}, **kwargs):
         rustc_flags_select = {},
         use_legacy_rules_rust_platforms = False,
     )
-    fields["resolved_crates"] = json.encode({
-        "context_map": context_map,
-        "definitions": {"": _definition()} if configurations == None else configurations,
-    })
     fields.update(kwargs)
     return struct(**fields)
 
-def _definition(**kwargs):
+def _configuration(**kwargs):
     return dict(
-        crate_features_select = {_LINUX: []},
-        deps_select = {_LINUX: {}},
-        build_deps_by_target = {},
+        crate_features_by_triple = {_LINUX: []},
+        deps_by_triple = {_LINUX: {}},
+        build_deps_by_triple = {},
+        build_cargo_target_triple_required_on = [],
     ) | kwargs
 
 def _values(binaries = {}):
@@ -61,26 +60,26 @@ def _argument(rendered, name):
 
 def _single_crate_test_impl(ctx):
     env = unittest.begin(ctx)
-    definitions = {
-        "": _definition(
-            crate_features_select = {_LINUX: ["normal_feature"]},
-            deps_select = {_LINUX: {"@dependency//:normal": "normal"}},
-            build_deps_by_target = {_LINUX: {_MACOS: {"@helper//:helper": "helper"}}},
+    configurations = {
+        "": _configuration(
+            crate_features_by_triple = {_LINUX: ["normal_feature"]},
+            deps_by_triple = {_LINUX: {"@dependency//:normal": "normal"}},
+            build_deps_by_triple = {_LINUX: {_MACOS: {"@helper//:helper": "helper"}}},
         ),
-        _LINUX: _definition(
-            crate_features_select = {_MACOS: ["build_feature"]},
-            deps_select = {_MACOS: {"@dependency//:build": "build"}},
+        _LINUX: _configuration(
+            crate_features_by_triple = {_MACOS: ["build_feature"]},
+            deps_by_triple = {_MACOS: {"@dependency//:build": "build"}},
         ),
     }
-    context_map = {_MACOS: ""}
+    cargo_target_triple_map = {_MACOS: ""}
     binaries = {"example-cli": "src/main.rs"}
     rendered = render_rust_crate_call(
-        _attrs(configurations = definitions, context_map = context_map),
+        _attrs(configurations = configurations, cargo_target_triple_map = cargo_target_triple_map),
         _values(binaries = binaries),
     )
     asserts.equals(env, 1, rendered.count("rust_crate("))
-    asserts.equals(env, definitions, _argument(rendered, "configurations"))
-    asserts.equals(env, context_map, _argument(rendered, "cargo_contexts"))
+    asserts.equals(env, configurations, _argument(rendered, "configurations"))
+    asserts.equals(env, cargo_target_triple_map, _argument(rendered, "cargo_target_triple_map"))
     asserts.equals(env, binaries, _argument(rendered, "binaries"))
     asserts.equals(env, "crates", _argument(rendered, "hub_name"))
     asserts.false(env, "name_suffix" in rendered)
@@ -100,8 +99,8 @@ def _annotation_and_git_values_test_impl(ctx):
     }
     rendered = render_rust_crate_call(
         _attrs(
-            configurations = {_LINUX: _definition()},
-            context_map = {"": _LINUX},
+            configurations = {_LINUX: _configuration()},
+            cargo_target_triple_map = {"": _LINUX},
             deps = ["//annotated:dep"],
         ),
         values,
@@ -120,7 +119,7 @@ def _annotation_and_git_values_test_impl(ctx):
 
 def _undeclared_metadata_deps_impl(ctx):
     render_rust_crate_call(
-        _attrs(context_map = {_LINUX: ""}),
+        _attrs(cargo_target_triple_map = {_LINUX: ""}),
         _values(),
         bazel_metadata = {"deps": ["//metadata:dep"]},
     )
@@ -137,15 +136,15 @@ _undeclared_metadata_deps_test = analysistest.make(_undeclared_metadata_deps_tes
 
 def _source_attributes_test_impl(ctx):
     env = unittest.begin(ctx)
-    definition = _definition(
-        crate_features_select = {_LINUX: ["shared", "linux"], _MACOS: ["shared"]},
-        deps_select = {_LINUX: {"//src:helper-1.0.0": "renamed"}, _MACOS: {}},
-        build_deps_by_target = {"": {_LINUX: {"//src:linux-helper-1.0.0": "helper"}, _MACOS: {"//src:macos-helper-1.0.0": "helper"}}},
-        build_contexts = {},
+    configuration = _configuration(
+        crate_features_by_triple = {_LINUX: ["shared", "linux"], _MACOS: ["shared"]},
+        deps_by_triple = {_LINUX: {"//src:helper-1.0.0": "renamed"}, _MACOS: {}},
+        build_deps_by_triple = {"": {_LINUX: {"//src:linux-helper-1.0.0": "helper"}, _MACOS: {"//src:macos-helper-1.0.0": "helper"}}},
+        build_cargo_target_triple_required_on = [],
     )
     rendered = render_rust_crate_call(
         _attrs(
-            configurations = {"": definition},
+            configurations = {"": configuration},
             hub_name = None,
             extra_compile_data = ["//src/library/core:srcs"],
             rustc_env = {"RUSTC_BOOTSTRAP": "1"},
@@ -155,8 +154,8 @@ def _source_attributes_test_impl(ctx):
         extra_deps = "package_metadata_bazel_deps",
         skip_deps_verification = True,
     )
-    asserts.equals(env, {"": definition}, _argument(rendered, "configurations"))
-    asserts.equals(env, {}, _argument(rendered, "cargo_contexts"))
+    asserts.equals(env, {"": configuration}, _argument(rendered, "configurations"))
+    asserts.equals(env, {}, _argument(rendered, "cargo_target_triple_map"))
     asserts.equals(env, ["-Zforce-unstable-if-unmarked"], _argument(rendered, "rustc_flags"))
     asserts.equals(env, "1", _argument(rendered, "rustc_env")["RUSTC_BOOTSTRAP"])
     asserts.true(env, "hub_name = None" in rendered)

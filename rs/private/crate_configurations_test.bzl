@@ -17,30 +17,34 @@ def _resolution(features = None, deps = None, build_deps = None, active = True):
     )
 
 def _prepare(target, execution, build_deps = {}, **kwargs):
-    return prepare_crate_configurations(target, execution, build_deps, _PREFIX, **kwargs)
+    return prepare_crate_configurations(target, {
+        cargo_target_triple: struct(resolutions = resolutions, build_deps = build_deps.get(cargo_target_triple, {}))
+        for cargo_target_triple, resolutions in execution.items()
+    }, _PREFIX, **kwargs)
 
-def _definition(result, fq, context = ""):
+def _configuration(result, fq, cargo_target_triple = ""):
     crate = result[fq]
-    return crate["definitions"][crate["context_map"].get(context, context)]
+    return crate.configurations[crate.cargo_target_triple_map.get(cargo_target_triple, cargo_target_triple)]
 
-def _assert_context_maps(env, result, target_triples = [_LINUX, _MACOS]):
-    asserts.equals(env, result, json.decode(json.encode(result)))
+def _assert_cargo_target_triple_maps(env, result, target_triples = [_LINUX, _MACOS]):
     for crate in result.values():
-        context_map = crate["context_map"]
-        for context, representative in context_map.items():
-            asserts.true(env, context != representative)
-        contexts = set([""] + target_triples)
-        contexts.update(context_map)
-        contexts.update(crate["definitions"])
-        for context in contexts:
-            representative = context_map.get(context, context)
-            if context:
-                asserts.true(env, representative in ["", context])
-            asserts.equals(env, representative, context_map.get(representative, representative))
-            asserts.true(env, representative in crate["definitions"])
-        for context, definition in crate["definitions"].items():
-            for triple in definition["build_deps_by_target"]:
-                asserts.true(env, definition["build_contexts"].get(triple, "") in ["", context or triple])
+        asserts.equals(env, crate.configurations, json.decode(json.encode(crate.configurations)))
+        cargo_target_triple_map = crate.cargo_target_triple_map
+        for cargo_target_triple, representative in cargo_target_triple_map.items():
+            asserts.true(env, cargo_target_triple != representative)
+        cargo_target_triples = set([""] + target_triples)
+        cargo_target_triples.update(cargo_target_triple_map)
+        cargo_target_triples.update(crate.configurations)
+        for cargo_target_triple in cargo_target_triples:
+            representative = cargo_target_triple_map.get(cargo_target_triple, cargo_target_triple)
+            if cargo_target_triple:
+                asserts.true(env, representative in ["", cargo_target_triple])
+            asserts.equals(env, representative, cargo_target_triple_map.get(representative, representative))
+            asserts.true(env, representative in crate.configurations)
+        for configuration in crate.configurations.values():
+            for platform_triple in configuration["build_cargo_target_triple_required_on"]:
+                asserts.true(env, platform_triple in configuration["crate_features_by_triple"])
+                asserts.true(env, platform_triple in configuration["build_deps_by_triple"] or "" in configuration["build_deps_by_triple"])
 
 def _matching_definitions_impl(ctx):
     env = unittest.begin(ctx)
@@ -48,11 +52,11 @@ def _matching_definitions_impl(ctx):
     execution = {"shared-1.0.0": _resolution(features = {_LINUX: ["std"]})}
     result = _prepare(target, {_LINUX: execution, _MACOS: execution})
 
-    asserts.equals(env, {_LINUX: "", _MACOS: ""}, result["shared-1.0.0"]["context_map"])
-    asserts.equals(env, [""], result["shared-1.0.0"]["definitions"].keys())
-    asserts.equals(env, {_LINUX: ["std"]}, _definition(result, "shared-1.0.0")["crate_features_select"])
+    asserts.equals(env, {_LINUX: "", _MACOS: ""}, result["shared-1.0.0"].cargo_target_triple_map)
+    asserts.equals(env, [""], result["shared-1.0.0"].configurations.keys())
+    asserts.equals(env, {_LINUX: ["std"]}, _configuration(result, "shared-1.0.0")["crate_features_by_triple"])
     asserts.equals(env, set(["std", "dep:optional"]), target["shared-1.0.0"].features_enabled[_LINUX])
-    _assert_context_maps(env, result)
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _normal_dependency_identity_impl(ctx):
@@ -68,38 +72,46 @@ def _normal_dependency_identity_impl(ctx):
     result = _prepare(target, {_LINUX: execution, _MACOS: execution})
 
     for fq in target:
-        asserts.equals(env, {}, result[fq]["context_map"])
-        asserts.equals(env, 3, len(result[fq]["definitions"]))
-    for context in ["", _LINUX, _MACOS]:
-        definition = _definition(result, "parent-1.0.0", context)
-        asserts.equals(env, {_LINUX: {child: "renamed"}}, definition["deps_select"])
-    _assert_context_maps(env, result)
+        asserts.equals(env, {}, result[fq].cargo_target_triple_map)
+        asserts.equals(env, 3, len(result[fq].configurations))
+    for cargo_target_triple in ["", _LINUX, _MACOS]:
+        configuration = _configuration(result, "parent-1.0.0", cargo_target_triple)
+        asserts.equals(env, {_LINUX: {child: "renamed"}}, configuration["deps_by_triple"])
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _build_dependency_identity_impl(ctx):
     env = unittest.begin(ctx)
     child = _PREFIX + "child-1.0.0"
     platforms = {_LINUX: [], _MACOS: []}
+    build_deps_by_exec_triple = {_LINUX: {child: "renamed"}, _MACOS: {}}
     target = {
         "parent-1.0.0": _resolution(features = platforms),
         "child-1.0.0": _resolution(features = {_LINUX: ["normal"], _MACOS: ["normal"]}),
     }
     execution = {
         triple: {
-            "parent-1.0.0": _resolution(features = platforms, build_deps = {_LINUX: {child: "renamed"}, _MACOS: {child: "renamed"}}),
+            "parent-1.0.0": _resolution(features = platforms, build_deps = build_deps_by_exec_triple),
             "child-1.0.0": _resolution(features = {_LINUX: [feature], _MACOS: [feature]}),
         }
         for triple, feature in [(_LINUX, "linux"), (_MACOS, "macos")]
     }
-    build_deps = {triple: {"parent-1.0.0": {_LINUX: {child: "renamed"}, _MACOS: {child: "renamed"}}} for triple in platforms}
+    build_deps = {triple: {"parent-1.0.0": build_deps_by_exec_triple} for triple in platforms}
     result = _prepare(target, execution, build_deps)
 
     for fq in target:
-        asserts.equals(env, {}, result[fq]["context_map"])
-    for context in ["", _LINUX, _MACOS]:
-        definition = _definition(result, "parent-1.0.0", context)
-        asserts.equals(env, {_LINUX: {child: "renamed"}, _MACOS: {child: "renamed"}}, definition["build_deps_by_target"][_LINUX])
-    _assert_context_maps(env, result)
+        asserts.equals(env, {}, result[fq].cargo_target_triple_map)
+    for cargo_target_triple in ["", _LINUX, _MACOS]:
+        configuration = _configuration(result, "parent-1.0.0", cargo_target_triple)
+        asserts.equals(env, {"": build_deps_by_exec_triple}, configuration["build_deps_by_triple"])
+        asserts.equals(env, platforms, configuration["crate_features_by_triple"])
+    _assert_cargo_target_triple_maps(env, result)
+
+    macos_build_deps = {_LINUX: {}, _MACOS: {child: "macos_name"}}
+    build_deps[_MACOS]["parent-1.0.0"] = macos_build_deps
+    result = _prepare(target, execution, build_deps)
+    asserts.equals(env, {"": build_deps_by_exec_triple, _MACOS: macos_build_deps}, _configuration(result, "parent-1.0.0")["build_deps_by_triple"])
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _workspace_dependency_preserves_context_impl(ctx):
@@ -112,10 +124,10 @@ def _workspace_dependency_preserves_context_impl(ctx):
     execution = dict(target, **{"workspace-1.0.0": _resolution(active = False)})
     result = _prepare(target, {_LINUX: execution, _MACOS: execution}, workspace_crates = ["workspace-1.0.0"])
 
-    # Workspace BUILD attributes can read context even without a Cargo execution root.
+    # Workspace BUILD attributes can read cargo_target_triple even without a Cargo execution root.
     for fq in target:
-        asserts.equals(env, {}, result[fq]["context_map"])
-    _assert_context_maps(env, result)
+        asserts.equals(env, {}, result[fq].cargo_target_triple_map)
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _unknown_dependency_preserves_context_impl(ctx):
@@ -131,9 +143,9 @@ def _unknown_dependency_preserves_context_impl(ctx):
         {_LINUX: {"build-1.0.0": {_LINUX: {"//helper": None}}}},
     )
 
-    asserts.equals(env, {}, result["normal-1.0.0"]["context_map"])
-    asserts.equals(env, {_LINUX: ""}, result["build-1.0.0"]["context_map"])
-    _assert_context_maps(env, result)
+    asserts.equals(env, {}, result["normal-1.0.0"].cargo_target_triple_map)
+    asserts.equals(env, {_LINUX: ""}, result["build-1.0.0"].cargo_target_triple_map)
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _sparse_leaf_definitions_share_context_impl(ctx):
@@ -142,11 +154,11 @@ def _sparse_leaf_definitions_share_context_impl(ctx):
     execution = {_LINUX: {"leaf-1.0.0": _resolution(features = {_MACOS: ["std"]})}}
     result = _prepare(target, execution)
 
-    asserts.equals(env, {_LINUX: ""}, result["leaf-1.0.0"]["context_map"])
-    asserts.equals(env, [""], result["leaf-1.0.0"]["definitions"].keys())
-    asserts.equals(env, {_LINUX: ["std"], _MACOS: ["std"]}, _definition(result, "leaf-1.0.0")["crate_features_select"])
+    asserts.equals(env, {_LINUX: ""}, result["leaf-1.0.0"].cargo_target_triple_map)
+    asserts.equals(env, [""], result["leaf-1.0.0"].configurations.keys())
+    asserts.equals(env, {_LINUX: ["std"], _MACOS: ["std"]}, _configuration(result, "leaf-1.0.0")["crate_features_by_triple"])
     asserts.equals(env, {_LINUX: set(["std"])}, target["leaf-1.0.0"].features_enabled)
-    _assert_context_maps(env, result, [_LINUX])
+    _assert_cargo_target_triple_maps(env, result, [_LINUX])
     return unittest.end(env)
 
 def _build_script_keeps_original_target_impl(ctx):
@@ -163,11 +175,11 @@ def _build_script_keeps_original_target_impl(ctx):
     result = _prepare(target, {_LINUX: execution}, {_LINUX: {"parent-1.0.0": {_MACOS: {child: None}}}})
 
     # Resetting the parent would make its nested build script set a macOS
-    # context, but this Cargo repository resolves build dependencies for Linux.
-    asserts.equals(env, {}, result["parent-1.0.0"]["context_map"])
-    asserts.equals(env, {_LINUX: ""}, result["child-1.0.0"]["context_map"])
-    asserts.equals(env, {_MACOS: {_MACOS: {child: None}}}, _definition(result, "parent-1.0.0", _LINUX)["build_deps_by_target"])
-    _assert_context_maps(env, result, [_LINUX])
+    # cargo_target_triple, but this Cargo repository resolves build dependencies for Linux.
+    asserts.equals(env, {}, result["parent-1.0.0"].cargo_target_triple_map)
+    asserts.equals(env, {_LINUX: ""}, result["child-1.0.0"].cargo_target_triple_map)
+    asserts.equals(env, {"": {_MACOS: {child: None}}}, _configuration(result, "parent-1.0.0", _LINUX)["build_deps_by_triple"])
+    _assert_cargo_target_triple_maps(env, result, [_LINUX])
     return unittest.end(env)
 
 def _disjoint_platform_dependencies_keep_context_impl(ctx):
@@ -183,11 +195,11 @@ def _disjoint_platform_dependencies_keep_context_impl(ctx):
     }
     result = _prepare(target, {_LINUX: execution})
 
-    # Merging the parent's platform maps would lose the child's required context.
-    asserts.equals(env, {}, result["parent-1.0.0"]["context_map"])
-    asserts.equals(env, {_LINUX: {child: None}}, _definition(result, "parent-1.0.0")["deps_select"])
-    asserts.equals(env, {_MACOS: {child: None}}, _definition(result, "parent-1.0.0", _LINUX)["deps_select"])
-    _assert_context_maps(env, result, [_LINUX])
+    # Merging the parent's platform maps would lose the child's required cargo_target_triple.
+    asserts.equals(env, {}, result["parent-1.0.0"].cargo_target_triple_map)
+    asserts.equals(env, {_LINUX: {child: None}}, _configuration(result, "parent-1.0.0")["deps_by_triple"])
+    asserts.equals(env, {_MACOS: {child: None}}, _configuration(result, "parent-1.0.0", _LINUX)["deps_by_triple"])
+    _assert_cargo_target_triple_maps(env, result, [_LINUX])
     return unittest.end(env)
 
 def _aliases_are_part_of_definition_impl(ctx):
@@ -202,8 +214,8 @@ def _aliases_are_part_of_definition_impl(ctx):
     })
     result = _prepare(target, {_LINUX: execution})
 
-    asserts.equals(env, 2, len(result["parent-1.0.0"]["definitions"]))
-    _assert_context_maps(env, result, [_LINUX])
+    asserts.equals(env, 2, len(result["parent-1.0.0"].configurations))
+    _assert_cargo_target_triple_maps(env, result, [_LINUX])
     return unittest.end(env)
 
 def _direct_execution_only_crate_impl(ctx):
@@ -216,9 +228,9 @@ def _direct_execution_only_crate_impl(ctx):
         },
     )
 
-    asserts.equals(env, {_MACOS: ""}, result["helper-1.0.0"]["context_map"])
-    asserts.equals(env, {_LINUX: ["macos"]}, _definition(result, "helper-1.0.0")["crate_features_select"])
-    _assert_context_maps(env, result)
+    asserts.equals(env, {_MACOS: ""}, result["helper-1.0.0"].cargo_target_triple_map)
+    asserts.equals(env, {_LINUX: ["macos"]}, _configuration(result, "helper-1.0.0")["crate_features_by_triple"])
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _execution_only_dependency_chain_clears_context_impl(ctx):
@@ -234,10 +246,10 @@ def _execution_only_dependency_chain_clears_context_impl(ctx):
     result = _prepare(target, {_LINUX: execution, _MACOS: execution})
 
     for fq in target:
-        asserts.equals(env, {_LINUX: "", _MACOS: ""}, result[fq]["context_map"])
-        asserts.equals(env, [""], result[fq]["definitions"].keys())
-        asserts.equals(env, {}, _definition(result, fq)["build_contexts"])
-    _assert_context_maps(env, result)
+        asserts.equals(env, {_LINUX: "", _MACOS: ""}, result[fq].cargo_target_triple_map)
+        asserts.equals(env, [""], result[fq].configurations.keys())
+        asserts.equals(env, [], _configuration(result, fq)["build_cargo_target_triple_required_on"])
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _execution_only_workspace_dependency_keeps_context_impl(ctx):
@@ -253,9 +265,9 @@ def _execution_only_workspace_dependency_keeps_context_impl(ctx):
     }
     result = _prepare(target, {_LINUX: execution}, workspace_crates = ["helper-1.0.0"])
 
-    asserts.equals(env, {"": _LINUX}, result["parent-1.0.0"]["context_map"])
-    asserts.equals(env, {}, result["helper-1.0.0"]["context_map"])
-    _assert_context_maps(env, result, [_LINUX])
+    asserts.equals(env, {"": _LINUX}, result["parent-1.0.0"].cargo_target_triple_map)
+    asserts.equals(env, {}, result["helper-1.0.0"].cargo_target_triple_map)
+    _assert_cargo_target_triple_maps(env, result, [_LINUX])
     return unittest.end(env)
 
 def _execution_only_nested_build_script_keeps_origin_impl(ctx):
@@ -271,12 +283,12 @@ def _execution_only_nested_build_script_keeps_origin_impl(ctx):
     }
     result = _prepare(target, {_LINUX: execution})
 
-    # Clearing the parent would request a macOS build context that this
-    # repository does not resolve, instead of the original Linux context.
-    asserts.equals(env, {"": _LINUX}, result["parent-1.0.0"]["context_map"])
-    asserts.equals(env, {_MACOS: _LINUX}, _definition(result, "parent-1.0.0")["build_contexts"])
-    asserts.equals(env, {_MACOS: ["build"]}, _definition(result, "child-1.0.0", _LINUX)["crate_features_select"])
-    _assert_context_maps(env, result, [_LINUX])
+    # Clearing the parent would request a macOS build cargo_target_triple that this
+    # repository does not resolve, instead of the original Linux cargo_target_triple.
+    asserts.equals(env, {"": _LINUX}, result["parent-1.0.0"].cargo_target_triple_map)
+    asserts.equals(env, [_MACOS], _configuration(result, "parent-1.0.0")["build_cargo_target_triple_required_on"])
+    asserts.equals(env, {_MACOS: ["build"]}, _configuration(result, "child-1.0.0", _LINUX)["crate_features_by_triple"])
+    _assert_cargo_target_triple_maps(env, result, [_LINUX])
     return unittest.end(env)
 
 def _inactive_crate_has_no_supported_platforms_impl(ctx):
@@ -296,25 +308,26 @@ def _inactive_crate_has_no_supported_platforms_impl(ctx):
         {_LINUX: {"inactive-1.0.0": {_LINUX: {child: None}}}},
     )
 
-    definition = _definition(result, "inactive-1.0.0")
-    for field in ["crate_features_select", "deps_select", "build_deps_by_target", "build_contexts"]:
-        asserts.equals(env, {}, definition[field])
-    asserts.equals(env, {_LINUX: ["normal"]}, _definition(result, "child-1.0.0")["crate_features_select"])
-    asserts.equals(env, {_LINUX: ["build"]}, _definition(result, "child-1.0.0", _LINUX)["crate_features_select"])
+    configuration = _configuration(result, "inactive-1.0.0")
+    for field in ["crate_features_by_triple", "deps_by_triple", "build_deps_by_triple"]:
+        asserts.equals(env, {}, configuration[field])
+    asserts.equals(env, [], configuration["build_cargo_target_triple_required_on"])
+    asserts.equals(env, {_LINUX: ["normal"]}, _configuration(result, "child-1.0.0")["crate_features_by_triple"])
+    asserts.equals(env, {_LINUX: ["build"]}, _configuration(result, "child-1.0.0", _LINUX)["crate_features_by_triple"])
     asserts.equals(env, set(), target["inactive-1.0.0"].active)
     asserts.equals(env, {_LINUX: set(["normal"])}, target["child-1.0.0"].features_enabled)
-    _assert_context_maps(env, result, [_LINUX])
+    _assert_cargo_target_triple_maps(env, result, [_LINUX])
     return unittest.end(env)
 
 def _preserved_execution_only_crate_keeps_default_impl(ctx):
     env = unittest.begin(ctx)
     target = {"helper-1.0.0": _resolution(active = False)}
     execution = {"helper-1.0.0": _resolution(features = {_LINUX: ["build"]})}
-    result = _prepare(target, {_LINUX: execution, _MACOS: execution}, preserve_context = ["helper-1.0.0"])
+    result = _prepare(target, {_LINUX: execution, _MACOS: execution}, preserve_cargo_target_triple = ["helper-1.0.0"])
 
-    asserts.equals(env, {"": _MACOS}, result["helper-1.0.0"]["context_map"])
-    asserts.equals(env, 2, len(result["helper-1.0.0"]["definitions"]))
-    _assert_context_maps(env, result)
+    asserts.equals(env, {"": _MACOS}, result["helper-1.0.0"].cargo_target_triple_map)
+    asserts.equals(env, 2, len(result["helper-1.0.0"].configurations))
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _annotation_dependencies_preserve_missing_context_impl(ctx):
@@ -335,19 +348,19 @@ def _annotation_dependencies_preserve_missing_context_impl(ctx):
     result = _prepare(
         target,
         {_LINUX: execution},
-        preserve_context = ["x-1.0.0", "y-1.0.0"],
+        preserve_cargo_target_triple = ["x-1.0.0", "y-1.0.0"],
         workspace_crates = ["helper-1.0.0"],
     )
 
     # Annotations add Y -> X -> helper after Cargo resolution. X is absent
-    # from Cargo's build dependencies but must preserve Y's build context.
-    context = _LINUX
+    # from Cargo's build dependencies but must preserve Y's build cargo_target_triple.
+    cargo_target_triple = _LINUX
     for fq in ["y-1.0.0", "x-1.0.0", "helper-1.0.0"]:
-        context = result[fq]["context_map"].get(context, context)
-        asserts.equals(env, _LINUX, context)
-    asserts.equals(env, {_LINUX: ["x"]}, _definition(result, "x-1.0.0", _LINUX)["crate_features_select"])
-    asserts.equals(env, {_LINUX: ["build"]}, _definition(result, "shared-1.0.0", context)["crate_features_select"])
-    _assert_context_maps(env, result, [_LINUX])
+        cargo_target_triple = result[fq].cargo_target_triple_map.get(cargo_target_triple, cargo_target_triple)
+        asserts.equals(env, _LINUX, cargo_target_triple)
+    asserts.equals(env, {_LINUX: ["x"]}, _configuration(result, "x-1.0.0", _LINUX)["crate_features_by_triple"])
+    asserts.equals(env, {_LINUX: ["build"]}, _configuration(result, "shared-1.0.0", cargo_target_triple)["crate_features_by_triple"])
+    _assert_cargo_target_triple_maps(env, result, [_LINUX])
     return unittest.end(env)
 
 def _missing_execution_context_keeps_transitive_dependencies_impl(ctx):
@@ -367,16 +380,16 @@ def _missing_execution_context_keeps_transitive_dependencies_impl(ctx):
     result = _prepare(target, {_LINUX: execution, _MACOS: execution})
 
     # An annotation can reach parent even though Cargo never reaches parent or
-    # child in an execution resolution. Both must preserve leaf's build context.
+    # child in an execution resolution. Both must preserve leaf's build cargo_target_triple.
     for fq in target:
-        asserts.equals(env, {}, result[fq]["context_map"])
-    for context in [_LINUX, _MACOS]:
-        parent = _definition(result, "parent-1.0.0", context)
-        asserts.equals(env, {_LINUX: ["parent"]}, parent["crate_features_select"])
-        asserts.equals(env, {_LINUX: {child: None}}, parent["deps_select"])
-        asserts.equals(env, {_LINUX: {leaf: None}}, _definition(result, "child-1.0.0", context)["deps_select"])
-        asserts.equals(env, {_LINUX: ["build"]}, _definition(result, "leaf-1.0.0", context)["crate_features_select"])
-    _assert_context_maps(env, result)
+        asserts.equals(env, {}, result[fq].cargo_target_triple_map)
+    for cargo_target_triple in [_LINUX, _MACOS]:
+        parent = _configuration(result, "parent-1.0.0", cargo_target_triple)
+        asserts.equals(env, {_LINUX: ["parent"]}, parent["crate_features_by_triple"])
+        asserts.equals(env, {_LINUX: {child: None}}, parent["deps_by_triple"])
+        asserts.equals(env, {_LINUX: {leaf: None}}, _configuration(result, "child-1.0.0", cargo_target_triple)["deps_by_triple"])
+        asserts.equals(env, {_LINUX: ["build"]}, _configuration(result, "leaf-1.0.0", cargo_target_triple)["crate_features_by_triple"])
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _build_script_without_dependencies_clears_context_impl(ctx):
@@ -384,22 +397,19 @@ def _build_script_without_dependencies_clears_context_impl(ctx):
     target = {"parent-1.0.0": _resolution(features = {_LINUX: [], _MACOS: []})}
     result = _prepare(target, {_LINUX: target, _MACOS: target})
 
-    asserts.equals(env, {}, _definition(result, "parent-1.0.0")["build_contexts"])
-    _assert_context_maps(env, result)
+    asserts.equals(env, [], _configuration(result, "parent-1.0.0")["build_cargo_target_triple_required_on"])
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _annotation_build_script_dependencies_keep_context_impl(ctx):
     env = unittest.begin(ctx)
     target = {"parent-1.0.0": _resolution(features = {_LINUX: [], _MACOS: []})}
-    result = _prepare(target, {_LINUX: target, _MACOS: target}, preserve_context = ["parent-1.0.0"])
+    result = _prepare(target, {_LINUX: target, _MACOS: target}, preserve_cargo_target_triple = ["parent-1.0.0"])
 
     # Annotation tools and data are absent from Cargo's dependency graph.
-    for context in ["", _LINUX, _MACOS]:
-        asserts.equals(env, {
-            triple: context or triple
-            for triple in [_LINUX, _MACOS]
-        }, _definition(result, "parent-1.0.0", context)["build_contexts"])
-    _assert_context_maps(env, result)
+    for cargo_target_triple in ["", _LINUX, _MACOS]:
+        asserts.equals(env, [_LINUX, _MACOS], _configuration(result, "parent-1.0.0", cargo_target_triple)["build_cargo_target_triple_required_on"])
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _build_script_invariant_dependencies_clear_context_impl(ctx):
@@ -418,8 +428,8 @@ def _build_script_invariant_dependencies_clear_context_impl(ctx):
         {triple: {"parent-1.0.0": build_deps} for triple in platforms},
     )
 
-    asserts.equals(env, {}, _definition(result, "parent-1.0.0")["build_contexts"])
-    _assert_context_maps(env, result)
+    asserts.equals(env, [], _configuration(result, "parent-1.0.0")["build_cargo_target_triple_required_on"])
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _build_script_dependencies_keep_original_target_impl(ctx):
@@ -441,12 +451,9 @@ def _build_script_dependencies_keep_original_target_impl(ctx):
         {triple: {"parent-1.0.0": build_deps} for triple in platforms},
     )
 
-    for context in ["", _LINUX, _MACOS]:
-        asserts.equals(env, {
-            triple: context or triple
-            for triple in platforms
-        }, _definition(result, "parent-1.0.0", context)["build_contexts"])
-    _assert_context_maps(env, result)
+    for cargo_target_triple in ["", _LINUX, _MACOS]:
+        asserts.equals(env, [_LINUX, _MACOS], _configuration(result, "parent-1.0.0", cargo_target_triple)["build_cargo_target_triple_required_on"])
+    _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _build_script_workspace_dependencies_keep_context_impl(ctx):
@@ -466,12 +473,9 @@ def _build_script_workspace_dependencies_keep_context_impl(ctx):
             workspace_crates = ["helper-1.0.0"],
         )
 
-        for context in ["", _LINUX, _MACOS]:
-            asserts.equals(env, {
-                triple: context or triple
-                for triple in platforms
-            }, _definition(result, "parent-1.0.0", context)["build_contexts"])
-        _assert_context_maps(env, result)
+        for cargo_target_triple in ["", _LINUX, _MACOS]:
+            asserts.equals(env, [_LINUX, _MACOS], _configuration(result, "parent-1.0.0", cargo_target_triple)["build_cargo_target_triple_required_on"])
+        _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 matching_definitions_test = unittest.make(_matching_definitions_impl)

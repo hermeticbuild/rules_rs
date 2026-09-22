@@ -16,7 +16,7 @@ def rust_crate(
         purl,
         version,
         configurations,
-        cargo_contexts,
+        cargo_target_triple_map,
         hub_name,
         deps,
         link_deps,
@@ -52,39 +52,39 @@ def rust_crate(
     if deps:
         deps = {native.package_relative_label(dep): None for dep in deps}
         resolved_deps = {}
-        for context, definition in configurations.items():
-            resolved_deps[context] = {}
-            for triple, labels in definition["deps_select"].items():
+        for cargo_target_triple, configuration in configurations.items():
+            resolved_deps[cargo_target_triple] = {}
+            for platform_triple, labels in configuration["deps_by_triple"].items():
                 selected = []
                 for label in labels:
                     label = native.package_relative_label(label)
                     if label not in deps:
                         selected.append(label)
-                resolved_deps[context][triple] = selected
+                resolved_deps[cargo_target_triple][platform_triple] = selected
         deps = list(deps)
     else:
         resolved_deps = {
-            context: {triple: list(deps) for triple, deps in definition["deps_select"].items()}
-            for context, definition in configurations.items()
+            cargo_target_triple: {platform_triple: list(deps) for platform_triple, deps in configuration["deps_by_triple"].items()}
+            for cargo_target_triple, configuration in configurations.items()
         }
     deps = deps + cargo_select(resolved_deps, hub_name, use_legacy_rules_rust_platforms, default = [])
     crate_features = cargo_select(
-        {context: definition["crate_features_select"] for context, definition in configurations.items()},
+        {cargo_target_triple: configuration["crate_features_by_triple"] for cargo_target_triple, configuration in configurations.items()},
         hub_name,
         use_legacy_rules_rust_platforms,
         default = [],
     )
     aliases = cargo_select(
         {
-            context: {
-                triple: {
+            cargo_target_triple: {
+                platform_triple: {
                     dep: alias
                     for dep, alias in deps.items()
                     if alias
                 }
-                for triple, deps in definition["deps_select"].items()
+                for platform_triple, deps in configuration["deps_by_triple"].items()
             }
-            for context, definition in configurations.items()
+            for cargo_target_triple, configuration in configurations.items()
         },
         hub_name,
         use_legacy_rules_rust_platforms,
@@ -92,8 +92,8 @@ def rust_crate(
     )
     target_compatible_with = cargo_select(
         {
-            context: {triple: [] for triple in definition["crate_features_select"]}
-            for context, definition in configurations.items()
+            cargo_target_triple: {platform_triple: [] for platform_triple in configuration["crate_features_by_triple"]}
+            for cargo_target_triple, configuration in configurations.items()
         },
         hub_name,
         use_legacy_rules_rust_platforms,
@@ -130,8 +130,8 @@ def rust_crate(
     crate_tags = default_tags + tags
 
     active = False
-    for definition in configurations.values():
-        if definition["crate_features_select"]:
+    for configuration in configurations.values():
+        if configuration["crate_features_by_triple"]:
             active = True
             break
     if not active:
@@ -178,7 +178,7 @@ def rust_crate(
     else:
         kwargs = dict(
             name = name,
-            cargo_contexts = cargo_contexts,
+            cargo_target_triple_map = cargo_target_triple_map,
             crate_name = crate_name,
             version = version,
             srcs = srcs,
@@ -212,7 +212,7 @@ def rust_crate(
     for binary, crate_root in binaries.items():
         rust_binary(
             name = binary + "__bin",
-            cargo_contexts = cargo_contexts,
+            cargo_target_triple_map = cargo_target_triple_map,
             compile_data = compile_data,
             aliases = aliases,
             deps = binary_lib_dep + deps,

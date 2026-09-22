@@ -190,7 +190,7 @@ def resolve(mctx, packages, cfg_attrs_by_triple, debug, include_build_dependenci
 
     fail("Resolution did not converge after %s rounds! This is likely a bug in rules_rs, please report it to github.com/hermeticbuild/rules_rs" % _MAX_ROUNDS)
 
-def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_attrs_by_triple, target_triple):
+def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_attrs_by_triple, cargo_target_triple):
     """Collect execution seeds and owner dependencies for one target triple."""
     features = {}
     build_deps = {}
@@ -198,10 +198,10 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
         target_resolution = package["feature_resolutions"]
         exec_resolution = exec_package["feature_resolutions"]
 
-        if target_triple not in target_resolution.active:
+        if cargo_target_triple not in target_resolution.active:
             continue
 
-        target_features = target_resolution.features_enabled[target_triple]
+        target_features = target_resolution.features_enabled[cargo_target_triple]
         owner = package["name"] + "-" + package["version"]
 
         for target_dep, dep in zip(target_resolution.possible_deps, exec_resolution.possible_deps):
@@ -216,15 +216,15 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
 
             dep_resolution = dep["feature_resolutions"]
             feature_sensitive = "target_expr" in dep
-            for exec_triple in dep["target"]:
-                if feature_sensitive and not _dep_target_matches_triple(dep, exec_triple, target_features, exec_cfg_attrs_by_triple):
+            for exec_platform_triple in dep["target"]:
+                if feature_sensitive and not _dep_target_matches_triple(dep, exec_platform_triple, target_features, exec_cfg_attrs_by_triple):
                     continue
 
-                build_deps.setdefault(owner, {}).setdefault(exec_triple, {})[bazel_target] = alias
+                build_deps.setdefault(owner, {}).setdefault(exec_platform_triple, {})[bazel_target] = alias
 
-                requested_features = features.setdefault((dep_resolution.package_index, exec_triple), set())
-                requested_features.update(dep_resolution.features_enabled[exec_triple])
+                requested_features = features.setdefault((dep_resolution.package_index, exec_platform_triple), set())
+                requested_features.update(dep_resolution.features_enabled[exec_platform_triple])
                 requested_features.update(dep.get("features", []))
-                requested_features.update(target_dep.get("deferred_features", {}).get(target_triple, []))
+                requested_features.update(target_dep.get("deferred_features", {}).get(cargo_target_triple, []))
 
     return struct(features = features, build_deps = build_deps)

@@ -9,7 +9,7 @@ load(
     "cargo_toml_fact",
     "render_dep_data",
     "resolve_cargo_workspace_members",
-    "resolve_package_facts",
+    "resolve_packages",
     "split_lockfile_packages",
     "workspace_dep_data",
     _fq_crate = "fq_crate",
@@ -251,7 +251,7 @@ def _generate_hub_and_spokes(
 
         facts_by_fq_crate[_fq_crate(name, version)] = fact
 
-    resolved_facts = resolve_package_facts(packages, facts_by_fq_crate, platform_triples)
+    resolved_facts = resolve_packages(packages, facts_by_fq_crate, platform_triples)
     feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate
     versions_by_name = resolved_facts.versions_by_name
 
@@ -278,14 +278,13 @@ def _generate_hub_and_spokes(
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
     workspace_dep_labels_by_triple = workspace_resolution.workspace_dep_labels_by_triple
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
-    exec_resolutions_by_target = workspace_resolution.exec_resolutions_by_target
 
     package_by_fq = {
         _fq_crate(package["name"], package["version"]): package
         for package in packages
     }
     workspace_crates = [fq for fq in feature_resolutions_by_fq_crate if fq not in package_by_fq]
-    preserve_context = []
+    preserve_cargo_target_triple = []
     for fq, package in package_by_fq.items():
         annotation = annotation_for(annotations, package["name"], package["version"], hub_name)
         fact = facts_by_fq_crate[fq]
@@ -295,13 +294,12 @@ def _generate_hub_and_spokes(
                 opaque_deps = True
                 break
         if opaque_deps:
-            preserve_context.append(fq)
+            preserve_cargo_target_triple.append(fq)
     configurations_by_crate = prepare_crate_configurations(
         feature_resolutions_by_fq_crate,
-        exec_resolutions_by_target,
-        workspace_resolution.target_build_deps,
+        workspace_resolution.exec_resolutions_by_cargo_target_triple,
         dep_label_prefix = "@%s//:" % hub_name,
-        preserve_context = preserve_context,
+        preserve_cargo_target_triple = preserve_cargo_target_triple,
         workspace_crates = workspace_crates,
     )
 
@@ -341,10 +339,12 @@ crate.annotation(
                 formatted_well_known_annotation = suggested_annotation,
             ))
 
+        crate_configurations = configurations_by_crate[_fq_crate(crate_name, version)]
         kwargs = dict(
             hub_name = hub_name,
             gen_build_script = annotation.gen_build_script,
-            resolved_crates = json.encode(configurations_by_crate[_fq_crate(crate_name, version)]),
+            cargo_target_triple_map = crate_configurations.cargo_target_triple_map,
+            configurations = json.encode(crate_configurations.configurations),
             build_script_data = annotation.build_script_data,
             build_script_data_select = annotation.build_script_data_select,
             build_script_env = annotation.build_script_env,
@@ -468,12 +468,12 @@ crate.annotation(
                     cargo_toml_lint_flags(cargo_toml_json),
                 ))
 
-    contexts = set()
-    for configurations in configurations_by_crate.values():
-        contexts.update(configurations["definitions"])
+    cargo_target_triples = set()
+    for crate_configurations in configurations_by_crate.values():
+        cargo_target_triples.update(crate_configurations.configurations)
     hub_contents = [
         'load("@rules_rs//rs/private:cargo_select.bzl", "cargo_config_settings")',
-        "cargo_config_settings(%r, %r, %r)" % (sorted(contexts), sorted(set(platform_triples + SUPPORTED_EXEC_TRIPLES)), use_legacy_rules_rust_platforms),
+        "cargo_config_settings(%r, %r, %r)" % (sorted(cargo_target_triples), sorted(set(platform_triples + SUPPORTED_EXEC_TRIPLES)), use_legacy_rules_rust_platforms),
     ]
     for name, versions in versions_by_name.items():
         for version in versions:
@@ -670,7 +670,7 @@ def cargo_build_script(name, package_name = None, **kwargs):
     _cargo_build_script_for_configurations(
         name = name,
         configurations = dep_data["configurations"],
-        preserve_context = True,
+        preserve_cargo_target_triple = True,
         hub_name = {hub_name},
         use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
         **kwargs
@@ -689,7 +689,7 @@ RESOLVED_PLATFORMS = select({{
 
     data_bzl_contents = render_dep_data(workspace_dep_data(
         cargo_metadata = cargo_metadata,
-        feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,
+        dep_label_prefix = "@%s//:" % hub_name,
         platform_triples = platform_triples,
         platform_cfg_attrs = platform_cfg_attrs,
         cfg_match_cache = cfg_match_cache,

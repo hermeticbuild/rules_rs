@@ -190,17 +190,16 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    binaries = {binaries},
 {indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
 {indent}    configurations = {configurations},
-{indent}    cargo_contexts = {cargo_contexts},
+{indent}    cargo_target_triple_map = {cargo_target_triple_map},
 {indent}    hub_name = {hub_name},
 {skip_deps_verification_attr}{indent})
 """
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     use_legacy_rules_rust_platforms = attr.use_legacy_rules_rust_platforms
-    resolved = json.decode(attr.resolved_crates)
     if bazel_metadata.get("deps"):
-        for context in resolved["context_map"]:
-            if context:
+        for cargo_target_triple in attr.cargo_target_triple_map:
+            if cargo_target_triple:
                 fail("Declare package.metadata.bazel.deps in crate.annotation(deps = ...) so Cargo configuration sharing accounts for these dependencies.")
     deps = [str(dep) for dep in attr.deps] + bazel_metadata.get("deps", [])
 
@@ -261,8 +260,8 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         has_lib = values["has_lib"],
         binaries = values["binaries"],
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
-        configurations = repr(resolved["definitions"]),
-        cargo_contexts = repr(resolved["context_map"]),
+        configurations = repr(json.decode(attr.configurations)),
+        cargo_target_triple_map = repr(attr.cargo_target_triple_map),
         hub_name = repr(attr.hub_name),
         skip_deps_verification_attr = skip_deps_verification_attr,
     )
@@ -304,7 +303,8 @@ rust_crate_attrs = {
     "data": attr.label_list(),
     "deps": attr.label_list(),
     "link_deps": attr.string_list(),
-    "resolved_crates": attr.string(mandatory = True),
+    "cargo_target_triple_map": attr.string_dict(),
+    "configurations": attr.string(mandatory = True),
     "use_legacy_rules_rust_platforms": attr.bool(),
 }
 
@@ -312,7 +312,6 @@ common_attrs = rust_crate_attrs | {
     "additive_build_file": attr.label(),
     "additive_build_file_content": attr.string(),
     "gen_binaries": attr.string_list(),
-} | {
     "strip_prefix": attr.string(
         default = "",
         doc = "A directory prefix to strip from the extracted files.",

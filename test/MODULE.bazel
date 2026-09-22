@@ -102,6 +102,15 @@ register_toolchains(
     "@//prost/proto_toolchain",
 )
 
+PLATFORM_TRIPLES = [
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "aarch64-pc-windows-gnullvm",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-gnullvm",
+]
+
 TESTS = [
     # TODO(zbarsky): Figure out how to make this work?
     # "annotation_crate_features",
@@ -147,14 +156,7 @@ TESTS = [
         cargo_lock = "//:%s/Cargo.lock" % test,
         cargo_toml = "//:%s/Cargo.toml" % test,
         generate_lint_config = test == "workspace_lints",
-        platform_triples = [
-            "aarch64-unknown-linux-gnu",
-            "aarch64-apple-darwin",
-            "aarch64-pc-windows-gnullvm",
-            "x86_64-unknown-linux-gnu",
-            "x86_64-apple-darwin",
-            "x86_64-pc-windows-gnullvm",
-        ],
+        platform_triples = PLATFORM_TRIPLES,
     )
     for test in TESTS
 ]
@@ -196,10 +198,7 @@ crate.from_cargo(
     name = "first_party_build_dependency",
     cargo_lock = "//first_party_build_dependency:Cargo.lock",
     cargo_toml = "//first_party_build_dependency:Cargo.toml",
-    platform_triples = [
-        "aarch64-apple-darwin",
-        "x86_64-unknown-linux-gnu",
-    ],
+    platform_triples = PLATFORM_TRIPLES,
 )
 use_repo(crate, "first_party_build_dependency")
 
@@ -209,14 +208,7 @@ crate.from_cargo(
     cargo_lock = "//:Cargo.lock",
     cargo_toml = "//:Cargo.toml",
     generate_lint_config = True,
-    platform_triples = [
-        "aarch64-unknown-linux-gnu",
-        "aarch64-apple-darwin",
-        "aarch64-pc-windows-gnullvm",
-        "x86_64-unknown-linux-gnu",
-        "x86_64-apple-darwin",
-        "x86_64-pc-windows-gnullvm",
-    ],
+    platform_triples = PLATFORM_TRIPLES,
 )
 use_repo(crate, "root_package")
 

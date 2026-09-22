@@ -10,16 +10,16 @@ def _configured_data():
     return {
         "configurations": {
             "": {
-                "crate_features_select": {_LINUX: ["target"], _MACOS: []},
-                "deps_select": {_LINUX: {"@crates//:shared": "selected_shared", "//helper": "renamed_helper"}, _MACOS: {}},
-                "build_deps_by_target": {},
-                "build_contexts": {},
+                "crate_features_by_triple": {_LINUX: ["target"], _MACOS: []},
+                "deps_by_triple": {_LINUX: {"@crates//:shared": "selected_shared", "//helper": "renamed_helper"}, _MACOS: {}},
+                "build_deps_by_triple": {},
+                "build_cargo_target_triple_required_on": [],
             },
             _LINUX: {
-                "crate_features_select": {_MACOS: ["exec"]},
-                "deps_select": {_MACOS: {"@crates//:shared": "selected_shared", "@crates//:optional": "optional", "//helper": "renamed_helper"}},
-                "build_deps_by_target": {},
-                "build_contexts": {},
+                "crate_features_by_triple": {_MACOS: ["exec"]},
+                "deps_by_triple": {_MACOS: {"@crates//:shared": "selected_shared", "@crates//:optional": "optional", "//helper": "renamed_helper"}},
+                "build_deps_by_triple": {},
+                "build_cargo_target_triple_required_on": [],
             },
         },
         "dev_deps": {"@crates//:dev": "dev", "//dev": "local_dev"},
@@ -59,8 +59,8 @@ def _configured_aliases_match_selected_dependencies_impl(ctx):
 def _all_crate_deps_defaults_to_normal_impl(ctx):
     env = unittest.begin(ctx)
     data = _build_data()
-    definition = data["configurations"][""]
-    definition["deps_select"] = {triple: {"//:normal": "normal"} for triple in [_LINUX, _MACOS]}
+    configuration = data["configurations"][""]
+    configuration["deps_by_triple"] = {triple: {"//:normal": "normal"} for triple in [_LINUX, _MACOS]}
     data["dev_deps"] = {"//:dev": "dev"}
 
     asserts.equals(env, ["//:normal"], all_crate_deps(data, hub_name = "crates"))
@@ -71,10 +71,10 @@ def _all_crate_deps_defaults_to_normal_impl(ctx):
 def _all_crate_deps_dedupes_across_selected_kinds_impl(ctx):
     env = unittest.begin(ctx)
     data = _build_data()
-    definition = data["configurations"][""]
-    definition["crate_features_select"] = {_LINUX: []}
-    definition["deps_select"] = {_LINUX: {"@crates//:a": None, "@crates//:b": None, "//:outside": None}}
-    definition["build_deps_by_target"] = {"": {_LINUX: {"@crates//:a": None, "@crates//:c": None}}}
+    configuration = data["configurations"][""]
+    configuration["crate_features_by_triple"] = {_LINUX: []}
+    configuration["deps_by_triple"] = {_LINUX: {"@crates//:a": None, "@crates//:b": None, "//:outside": None}}
+    configuration["build_deps_by_triple"] = {"": {_LINUX: {"@crates//:a": None, "@crates//:c": None}}}
     data["dev_deps"] = {"@crates//:b": None}
     data["dev_deps_by_platform"] = {"@rules_rs//rs/platforms/config:" + _LINUX: {"@crates//:a": None, "@crates//:d": None}}
 
@@ -92,9 +92,9 @@ def _legacy_platform_dev_dependencies_impl(ctx):
     env = unittest.begin(ctx)
     musl = "x86_64-unknown-linux-musl"
     data = _build_data()
-    definition = data["configurations"][""]
-    definition["crate_features_select"] = {_LINUX: [], musl: []}
-    definition["deps_select"] = {_LINUX: {"//:gnu": None}, musl: {"//:musl": None}}
+    configuration = data["configurations"][""]
+    configuration["crate_features_by_triple"] = {_LINUX: [], musl: []}
+    configuration["deps_by_triple"] = {_LINUX: {"//:gnu": None}, musl: {"//:musl": None}}
     data["dev_deps"] = {"//:shared": None}
     data["dev_deps_by_platform"] = {"@rules_rust//rust/platform:" + _LINUX: {"//:gnu_dev": None, "//:musl_dev": None}}
 
@@ -110,7 +110,7 @@ def _legacy_platform_dev_dependencies_impl(ctx):
 def _dev_dependencies_preserve_normal_aliases_impl(ctx):
     env = unittest.begin(ctx)
     data = _build_data()
-    data["configurations"][""]["deps_select"] = {triple: {"//:shared": "normal_name"} for triple in [_LINUX, _MACOS]}
+    data["configurations"][""]["deps_by_triple"] = {triple: {"//:shared": "normal_name"} for triple in [_LINUX, _MACOS]}
     data["dev_deps"] = {"//:shared": None, "//:dev": "dev_name"}
     data["dev_deps_by_platform"] = {"@rules_rs//rs/platforms/config:" + _LINUX: {"//:platform": "platform_name"}}
 
@@ -124,13 +124,13 @@ def _build_data():
     helper = "@crates//:helper"
     return {
         "configurations": {"": {
-            "crate_features_select": {_LINUX: ["linux_feature"], _MACOS: ["macos_feature"]},
-            "deps_select": {},
-            "build_deps_by_target": {
+            "crate_features_by_triple": {_LINUX: ["linux_feature"], _MACOS: ["macos_feature"]},
+            "deps_by_triple": {},
+            "build_deps_by_triple": {
                 triple: {_LINUX: {helper: "helper"}, _MACOS: {helper: "helper"}}
                 for triple in [_LINUX, _MACOS]
             },
-            "build_contexts": {},
+            "build_cargo_target_triple_required_on": [],
         }},
         "dev_deps": {},
         "dev_deps_by_platform": {},
@@ -146,7 +146,7 @@ def _all_crate_deps_invariant_build_deps_ignore_features_impl(ctx):
 def _all_crate_deps_selects_execution_platform_impl(ctx):
     env = unittest.begin(ctx)
     data = _build_data()
-    data["configurations"][""]["build_deps_by_target"] = {
+    data["configurations"][""]["build_deps_by_triple"] = {
         triple: {_LINUX: {"@crates//:linux_helper": "helper"}, _MACOS: {"@crates//:macos_helper": "helper"}}
         for triple in [_LINUX, _MACOS]
     }
@@ -159,38 +159,38 @@ def _all_crate_deps_selects_execution_platform_impl(ctx):
 def _shared_build_rows_impl(ctx):
     env = unittest.begin(ctx)
     data = _build_data()
-    definition = data["configurations"][""]
+    configuration = data["configurations"][""]
     deps = {_LINUX: {"@crates//:linux_helper": "helper"}, _MACOS: {"@crates//:macos_helper": "helper"}}
-    definition["build_deps_by_target"] = {triple: deps for triple in [_LINUX, _MACOS]}
+    configuration["build_deps_by_triple"] = {triple: deps for triple in [_LINUX, _MACOS]}
     expected_deps = str(all_crate_deps(data, build = True, hub_name = "crates"))
     expected_aliases = str(crate_aliases(data, build = True, hub_name = "crates"))
-    definition["build_deps_by_target"] = {"": deps}
+    configuration["build_deps_by_triple"] = {"": deps}
 
     asserts.equals(env, expected_deps, str(all_crate_deps(data, build = True, hub_name = "crates")))
     asserts.equals(env, expected_aliases, str(crate_aliases(data, build = True, hub_name = "crates")))
 
     # Explicit rows override a common row that no owner uses.
-    definition["build_deps_by_target"].update({triple: deps for triple in [_LINUX, _MACOS]})
-    definition["build_deps_by_target"][""] = {_LINUX: {"//:unused": "unused"}}
+    configuration["build_deps_by_triple"].update({triple: deps for triple in [_LINUX, _MACOS]})
+    configuration["build_deps_by_triple"][""] = {_LINUX: {"//:unused": "unused"}}
     asserts.equals(env, expected_deps, str(all_crate_deps(data, build = True, hub_name = "crates")))
     asserts.equals(env, expected_aliases, str(crate_aliases(data, build = True, hub_name = "crates")))
     return unittest.end(env)
 
 def _all_crate_deps_preserves_build_context_impl(ctx):
     env = unittest.begin(ctx)
-    definition = _build_data()["configurations"][""]
-    definition["build_contexts"] = {triple: _LINUX for triple in [_LINUX, _MACOS]}
-    data = {"configurations": {_LINUX: definition}}
+    configuration = _build_data()["configurations"][""]
+    configuration["build_cargo_target_triple_required_on"] = [_LINUX, _MACOS]
+    data = {"configurations": {_LINUX: configuration}}
     asserts.equals(env, ["@crates//:helper"], all_crate_deps(data, build = True, hub_name = "crates"))
     return unittest.end(env)
 
 def _build_aliases_ignore_unrenamed_dependencies_impl(ctx):
     env = unittest.begin(ctx)
     data = _build_data()
-    definition = data["configurations"][""]
-    definition["deps_select"] = {_LINUX: {"//:linux_normal": "normal"}, _MACOS: {"//:macos_normal": "normal"}}
-    definition["build_contexts"] = {_LINUX: _LINUX, _MACOS: _MACOS}
-    definition["build_deps_by_target"] = {
+    configuration = data["configurations"][""]
+    configuration["deps_by_triple"] = {_LINUX: {"//:linux_normal": "normal"}, _MACOS: {"//:macos_normal": "normal"}}
+    configuration["build_cargo_target_triple_required_on"] = [_LINUX, _MACOS]
+    configuration["build_deps_by_triple"] = {
         _LINUX: {_LINUX: {"@crates//:helper": "helper", "//:linux_build": None}, _MACOS: {"//:linux_build": None}},
         _MACOS: {_LINUX: {"@crates//:helper": "helper", "//:macos_build": None}, _MACOS: {"//:macos_build": None}},
     }
@@ -209,16 +209,27 @@ def _all_crate_deps_preserves_build_platform_domain_impl(ctx):
     env = unittest.begin(ctx)
     wasm = "wasm32-unknown-unknown"
     data = _build_data()
-    definition = data["configurations"][""]
-    definition["crate_features_select"] = {wasm: []}
-    definition["deps_select"] = {wasm: {"//:normal": None}}
-    definition["build_deps_by_target"] = {wasm: {_LINUX: {"@crates//:helper": "helper"}, _MACOS: {"@crates//:helper": "helper"}}}
+    configuration = data["configurations"][""]
+    configuration["crate_features_by_triple"] = {wasm: []}
+    configuration["deps_by_triple"] = {wasm: {"//:normal": None}}
+    configuration["build_deps_by_triple"] = {wasm: {_LINUX: {"@crates//:helper": "helper"}, _MACOS: {"@crates//:helper": "helper"}}}
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): ["@crates//:helper"],
         cargo_condition("crates", "", wasm): ["//:normal"],
         cargo_condition("crates", "", _LINUX): ["@crates//:helper"],
     })), str(all_crate_deps(data, normal = True, build = True, hub_name = "crates")))
-    definition["build_deps_by_target"] = {wasm: {_LINUX: {}, _MACOS: {}}}
+    data["dev_deps"] = {"//:dev": "renamed_dev"}
+    asserts.equals(env, str(select({
+        cargo_condition("crates", "", _MACOS): ["//:dev", "@crates//:helper"],
+        cargo_condition("crates", "", wasm): ["//:dev", "//:normal"],
+        cargo_condition("crates", "", _LINUX): ["//:dev", "@crates//:helper"],
+    })), str(all_crate_deps(data, normal = True, normal_dev = True, build = True, hub_name = "crates")))
+    asserts.equals(env, str(select({
+        cargo_condition("crates", "", _MACOS): {"//:dev": "renamed_dev", "@crates//:helper": "helper"},
+        cargo_condition("crates", "", wasm): {"//:dev": "renamed_dev"},
+        cargo_condition("crates", "", _LINUX): {"//:dev": "renamed_dev", "@crates//:helper": "helper"},
+    })), str(crate_aliases(data, normal = True, normal_dev = True, build = True, hub_name = "crates")))
+    configuration["build_deps_by_triple"] = {wasm: {_LINUX: {}, _MACOS: {}}}
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): [],
         cargo_condition("crates", "", wasm): ["//:normal"],
@@ -228,26 +239,26 @@ def _all_crate_deps_preserves_build_platform_domain_impl(ctx):
 
 def _ambiguous_build_script_impl(ctx):
     data = _build_data()
-    definition = data["configurations"][""]
+    configuration = data["configurations"][""]
     if ctx.attr.field == "aliases":
-        definition["build_deps_by_target"][_MACOS][_MACOS]["@crates//:helper"] = "other_name"
+        configuration["build_deps_by_triple"][_MACOS][_MACOS]["@crates//:helper"] = "other_name"
         crate_aliases(data, build = True, hub_name = "crates")
     elif ctx.attr.field == "shared_aliases":
-        definition["build_deps_by_target"] = {"": definition["build_deps_by_target"][_LINUX]}
-        definition["build_deps_by_target"][_MACOS] = {_LINUX: {"@crates//:helper": "helper"}, _MACOS: {"@crates//:helper": "other_name"}}
+        configuration["build_deps_by_triple"] = {"": configuration["build_deps_by_triple"][_LINUX]}
+        configuration["build_deps_by_triple"][_MACOS] = {_LINUX: {"@crates//:helper": "helper"}, _MACOS: {"@crates//:helper": "other_name"}}
         crate_aliases(data, build = True, hub_name = "crates")
     elif ctx.attr.field == "alias_platforms":
-        definition["build_deps_by_target"][_MACOS][_LINUX] = {}
+        configuration["build_deps_by_triple"][_MACOS][_LINUX] = {}
         crate_aliases(data, build = True, hub_name = "crates")
-    elif ctx.attr.field == "context":
-        definition["build_contexts"][_LINUX] = _LINUX
+    elif ctx.attr.field == "cargo_target_triple":
+        configuration["build_cargo_target_triple_required_on"].append(_LINUX)
         all_crate_deps(data, build = True, hub_name = "crates")
     elif ctx.attr.field == "shared_context":
-        definition["build_deps_by_target"] = {"": definition["build_deps_by_target"][_LINUX]}
-        definition["build_contexts"][_LINUX] = _LINUX
+        configuration["build_deps_by_triple"] = {"": configuration["build_deps_by_triple"][_LINUX]}
+        configuration["build_cargo_target_triple_required_on"].append(_LINUX)
         all_crate_deps(data, build = True, hub_name = "crates")
     else:
-        definition["build_deps_by_target"][_MACOS] = {_MACOS: {"@crates//:other_helper": None}}
+        configuration["build_deps_by_triple"][_MACOS] = {_MACOS: {"@crates//:other_helper": None}}
         all_crate_deps(data, build = True, hub_name = "crates")
     return []
 
@@ -277,7 +288,7 @@ configured_dependencies_and_features_test = unittest.make(_configured_dependenci
 configured_aliases_match_selected_dependencies_test = unittest.make(_configured_aliases_match_selected_dependencies_impl)
 
 def all_crate_deps_tests():
-    for field in ["aliases", "shared_aliases", "alias_platforms", "context", "shared_context", "deps"]:
+    for field in ["aliases", "shared_aliases", "alias_platforms", "cargo_target_triple", "shared_context", "deps"]:
         _ambiguous_build_script(
             name = "ambiguous_build_script_" + field,
             field = field,
@@ -301,6 +312,6 @@ def all_crate_deps_tests():
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_aliases"),
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_shared_aliases"),
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_alias_platforms"),
-        partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_context"),
+        partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_cargo_target_triple"),
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_shared_context"),
     )

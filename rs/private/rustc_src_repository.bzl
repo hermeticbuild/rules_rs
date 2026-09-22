@@ -3,11 +3,12 @@ load("@bazel_tools//tools/build_defs/repo:utils.bzl", "get_auth")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
+    "cargo_metadata_dep_to_dep_dict",
     "fq_crate",
     "manifest_package_dir",
     "normalize_path",
-    "resolve_cargo_metadata_packages",
     "resolve_cargo_workspace_members",
+    "resolve_packages",
     "split_lockfile_packages",
 )
 load("//rs/private:repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields", "render_rust_crate_call")
@@ -83,19 +84,19 @@ def _extra_compile_data(package_name, source_root):
     ]
 
 def _crate_attr(feature_resolutions, extra_compile_data = []):
-    definition = {
-        "crate_features_select": {
-            triple: sorted([feature for feature in feature_resolutions.features_enabled[triple] if not feature.startswith("dep:")])
-            for triple in ALL_TARGET_TRIPLES
+    configuration = {
+        "crate_features_by_triple": {
+            platform_triple: sorted([feature for feature in feature_resolutions.features_enabled[platform_triple] if not feature.startswith("dep:")])
+            for platform_triple in ALL_TARGET_TRIPLES
         },
-        "deps_select": {triple: dict(sorted(feature_resolutions.deps[triple].items())) for triple in ALL_TARGET_TRIPLES},
+        "deps_by_triple": {platform_triple: dict(sorted(feature_resolutions.deps[platform_triple].items())) for platform_triple in ALL_TARGET_TRIPLES},
         # Build dependencies follow the compilation platform in rustc-src's
         # single Cargo resolution, independent of the original target.
-        "build_deps_by_target": {"": {
-            triple: dict(sorted(feature_resolutions.build_deps[triple].items()))
-            for triple in ALL_TARGET_TRIPLES
+        "build_deps_by_triple": {"": {
+            exec_platform_triple: dict(sorted(feature_resolutions.build_deps[exec_platform_triple].items()))
+            for exec_platform_triple in ALL_TARGET_TRIPLES
         }},
-        "build_contexts": {},
+        "build_cargo_target_triple_required_on": [],
     }
     return struct(
         allow_build_script_to_detect_nonhermetic_paths = False,
@@ -112,10 +113,8 @@ def _crate_attr(feature_resolutions, extra_compile_data = []):
         deps = [],
         extra_compile_data = extra_compile_data,
         hub_name = None,
-        resolved_crates = json.encode({
-            "context_map": {},
-            "definitions": {"": definition},
-        }),
+        cargo_target_triple_map = {},
+        configurations = json.encode({"": configuration}),
         rustc_env = {"RUSTC_BOOTSTRAP": "1"},
         rustc_flags = ["-Zforce-unstable-if-unmarked"],
         rustc_flags_select = {},
@@ -270,10 +269,11 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
         workspace_package_dir = "library",
     )
     source_packages = _source_packages(source_root, lockfile_package_info.packages)
-    package_metadata_info = resolve_cargo_metadata_packages(
+    package_metadata_info = resolve_packages(
         source_packages,
-        cargo_metadata,
+        {fq_crate(package["name"], package["version"]): package for package in cargo_metadata["packages"]},
         ALL_TARGET_TRIPLES,
+        dep_converter = cargo_metadata_dep_to_dep_dict,
         skip_internal_rustc_placeholder_crates = False,
     )
     resolution = resolve_cargo_workspace_members(

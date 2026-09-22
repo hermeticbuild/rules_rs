@@ -10,37 +10,34 @@ def cargo_build_script_for_configurations(
         name,
         configurations,
         hub_name,
-        preserve_context = False,
+        preserve_cargo_target_triple = False,
         crate_features = [],
         deps = [],
         aliases = {},
         use_legacy_rules_rust_platforms = False,
         **kwargs):
-    """Select a build script before changing its compilation platform.
-
-    An empty target triple in the build maps applies to every target triple.
-    """
+    """Select a build script before changing its compilation platform."""
     scripts = {}
-    for context, definition in configurations.items():
-        build_deps = definition["build_deps_by_target"]
-        common_deps = shared_and_per_platform(build_deps.get("", {}), use_legacy_rules_rust_platforms)
-        for triple in sorted(definition["crate_features_select"]):
+    for cargo_target_triple, configuration in configurations.items():
+        build_deps_by_triple = configuration["build_deps_by_triple"]
+        common_deps = shared_and_per_platform(build_deps_by_triple.get("", {}), use_legacy_rules_rust_platforms)
+        for platform_triple in sorted(configuration["crate_features_by_triple"]):
             script_deps, deps_by_platform = shared_and_per_platform(
-                build_deps[triple],
+                build_deps_by_triple[platform_triple],
                 use_legacy_rules_rust_platforms,
-            ) if triple in build_deps else common_deps
+            ) if platform_triple in build_deps_by_triple else common_deps
             recipe = {
-                "crate_features": definition["crate_features_select"][triple],
+                "crate_features": configuration["crate_features_by_triple"][platform_triple],
                 "deps": script_deps,
                 "deps_by_platform": deps_by_platform,
-                "context": (context or triple) if preserve_context else definition["build_contexts"].get(triple, ""),
+                "cargo_target_triple": (cargo_target_triple or platform_triple) if preserve_cargo_target_triple or platform_triple in configuration["build_cargo_target_triple_required_on"] else "",
             }
             key = json.encode(recipe)
             if key not in scripts:
                 recipe["conditions"] = {}
-                recipe["representative"] = context + "_" + triple if context else triple
+                recipe["script_suffix"] = cargo_target_triple + "_" + platform_triple if cargo_target_triple else platform_triple
                 scripts[key] = recipe
-            scripts[key]["conditions"].setdefault(context, []).append(triple)
+            scripts[key]["conditions"].setdefault(cargo_target_triple, []).append(platform_triple)
 
     split = len(scripts) > 1
     script_kwargs = dict(kwargs)
@@ -58,21 +55,21 @@ def cargo_build_script_for_configurations(
     for variant in scripts.values():
         script_name = name
         if split:
-            representative = variant["representative"]
-            script_name = name + "_" + representative
-            for context, triples in variant["conditions"].items():
-                by_triple = branches.setdefault(context, {})
-                for triple in triples:
-                    by_triple[triple] = ":" + script_name
+            script_suffix = variant["script_suffix"]
+            script_name = name + "_" + script_suffix
+            for cargo_target_triple, platform_triples in variant["conditions"].items():
+                by_triple = branches.setdefault(cargo_target_triple, {})
+                for platform_triple in platform_triples:
+                    by_triple[platform_triple] = ":" + script_name
 
-            # Distinct build.rs definitions need distinct metadata when their
+            # Distinct build.rs configurations need distinct metadata when their
             # binaries share an exec configuration.
             # https://github.com/hermeticbuild/rules_rs/issues/161
             script_kwargs["rustc_flags"] = kwargs.get("rustc_flags", []) + [
-                "--codegen=metadata=-" + representative.replace("-", "_"),
+                "--codegen=metadata=-" + script_suffix.replace("-", "_"),
             ]
         if hub_name:
-            script_kwargs["cargo_contexts"] = {context: variant["context"] for context in variant["conditions"] if context != variant["context"]}
+            script_kwargs["cargo_target_triple_map"] = {cargo_target_triple: variant["cargo_target_triple"] for cargo_target_triple in variant["conditions"] if cargo_target_triple != variant["cargo_target_triple"]}
         script_deps = list(variant["deps"])
         script_aliases = {dep: alias for dep, alias in variant["deps"].items() if alias} | aliases
         if variant["deps_by_platform"]:

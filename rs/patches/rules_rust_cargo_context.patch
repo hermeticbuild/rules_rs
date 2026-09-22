@@ -5,7 +5,7 @@ diff --git a/cargo/private/cargo_build_script_wrapper.bzl b/cargo/private/cargo_
          root_path = None,
          srcs = [],
          crate_features = [],
-+        cargo_contexts = {},
++        cargo_target_triple_map = {},
          version = None,
          deps = [],
          link_deps = [],
@@ -13,7 +13,7 @@ diff --git a/cargo/private/cargo_build_script_wrapper.bzl b/cargo/private/cargo_
          pkg_name (string, optional): Override the package name used for the build script. This is useful if the build target name gets too long otherwise.
          link_deps (list, optional): The subset of the (normal) dependencies of the crate that have the
              links attribute and therefore provide environment variables to this build script.
-+        cargo_contexts (dict, optional): Cargo context mapping applied to the compiled build script after the exec transition.
++        cargo_target_triple_map (dict, optional): cargo_target_triple mapping applied to the compiled build script after the exec transition.
          proc_macro_deps (list of label, optional): List of rust_proc_macro targets used to build the script.
          allow_build_script_to_detect_nonhermetic_paths (bool, optional): Allow the build script to emit absolute host-system paths in rustc-link-search, rustc-env, or metadata directives.
          build_script_env (dict, optional): Environment variables for build scripts.
@@ -21,7 +21,7 @@ diff --git a/cargo/private/cargo_build_script_wrapper.bzl b/cargo/private/cargo_
      # This target exists as the actual build script.
      rust_binary(
          name = name + "_",
-+        cargo_contexts = cargo_contexts,
++        cargo_target_triple_map = cargo_target_triple_map,
          crate_name = crate_name,
          srcs = srcs,
          crate_root = crate_root,
@@ -71,7 +71,7 @@ diff --git a/rust/private/per_crate_flag_trim.bzl b/rust/private/per_crate_flag_
 -    Third-party crate generators (like crate_universe) should set
 -    `skip_per_crate_rustc_flags = True` on generated rust_library targets.
 -"""
-+"""Canonicalize per-crate Rust flags and generated Cargo dependency resolutions."""
++"""Trim per_crate_rustc_flag and apply cargo_target_triple_map."""
  
  _PER_CRATE_FLAG_SETTING = "@rules_rust//rust/settings:per_crate_rustc_flag"
 +CARGO_TARGET_TRIPLE_SETTING = "@rules_rust//cargo/settings:cargo_target_triple"
@@ -97,12 +97,12 @@ diff --git a/rust/private/per_crate_flag_trim.bzl b/rust/private/per_crate_flag_
 -
 -    # Otherwise, keep the current value
 +def trim_crate_settings(settings, attr):
-+    """Apply generated context equivalences and preserve first-party settings."""
-+    context = settings[CARGO_TARGET_TRIPLE_SETTING]
++    """Apply cargo_target_triple_map and trim per_crate_rustc_flag when requested."""
++    cargo_target_triple = settings[CARGO_TARGET_TRIPLE_SETTING]
      return {
 -        _PER_CRATE_FLAG_SETTING: settings[_PER_CRATE_FLAG_SETTING],
 +        _PER_CRATE_FLAG_SETTING: [] if attr.skip_per_crate_rustc_flags else settings[_PER_CRATE_FLAG_SETTING],
-+        CARGO_TARGET_TRIPLE_SETTING: attr.cargo_contexts.get(context, context),
++        CARGO_TARGET_TRIPLE_SETTING: attr.cargo_target_triple_map.get(cargo_target_triple, cargo_target_triple),
      }
  
  per_crate_flag_trim_transition = transition(
@@ -140,8 +140,8 @@ diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
          doc = "A setting used to determine whether or not the `--stamp` flag is enabled",
          default = Label("//rust/private:stamp"),
      ),
-+    "cargo_contexts": attr.string_dict(
-+        doc = "Equivalent Cargo dependency resolutions, mapping incoming context to canonical context. Unlisted contexts are preserved.",
++    "cargo_target_triple_map": attr.string_dict(
++        doc = "Maps incoming cargo_target_triple values to equivalent values. Unlisted values are preserved.",
 +    ),
      "skip_per_crate_rustc_flags": attr.bool(
          doc = dedent("""\
