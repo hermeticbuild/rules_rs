@@ -38,7 +38,7 @@ diff --git a/cargo/settings/BUILD.bazel b/cargo/settings/BUILD.bazel
 @@ -31,6 +32,12 @@
      deps = [":bzl_lib"],
  )
- 
+
 +string_flag(
 +    name = "cargo_target_triple",
 +    build_setting_default = "",
@@ -46,47 +46,37 @@ diff --git a/cargo/settings/BUILD.bazel b/cargo/settings/BUILD.bazel
 +)
 +
  cargo_manifest_dir_filename_suffixes_to_retain()
- 
+
  debug_std_streams_output_group()
 diff --git a/rust/private/per_crate_flag_trim.bzl b/rust/private/per_crate_flag_trim.bzl
 --- a/rust/private/per_crate_flag_trim.bzl
 +++ b/rust/private/per_crate_flag_trim.bzl
-@@ -12,50 +12,22 @@
- # See the License for the specific language governing permissions and
- # limitations under the License.
- 
--"""Transition to trim per_crate_rustc_flag for non-matching targets.
--
--This module provides a configuration trimming mechanism for the
--`per_crate_rustc_flag` setting. When a target has
--`skip_per_crate_rustc_flags = True`, this transition clears the setting,
--putting the target back into a canonical configuration.
--
--This is useful for third-party crates (e.g., from crate_universe) that will
--never match any per-crate flag filter. Without trimming, these crates would
--be rebuilt unnecessarily when any per-crate flag is set, even though the
--filter doesn't match them.
--
--Usage:
--    Third-party crate generators (like crate_universe) should set
--    `skip_per_crate_rustc_flags = True` on generated rust_library targets.
--"""
-+"""Trim per_crate_rustc_flag and apply cargo_target_triple_map."""
- 
+@@ -27,35 +27,33 @@
+ Usage:
+     Third-party crate generators (like crate_universe) should set
+     `skip_per_crate_rustc_flags = True` on generated rust_library targets.
++
++This transition also applies `cargo_target_triple_map` to the
++`cargo_target_triple` setting.
+ """
+
  _PER_CRATE_FLAG_SETTING = "@rules_rust//rust/settings:per_crate_rustc_flag"
 +CARGO_TARGET_TRIPLE_SETTING = "@rules_rust//cargo/settings:cargo_target_triple"
 +CRATE_SETTINGS = [_PER_CRATE_FLAG_SETTING, CARGO_TARGET_TRIPLE_SETTING]
- 
+
 -def _per_crate_flag_trim_transition_impl(settings, attr):
 -    """Clear per_crate_rustc_flag for targets marked to skip it.
--
--    Args:
--        settings: A dict of current build settings.
--        attr: The attributes of the target being configured.
--
--    Returns:
++def trim_crate_settings(settings, attr):
++    """Apply cargo_target_triple_map and trim per_crate_rustc_flag when requested.
+
+     Args:
+         settings: A dict of current build settings.
+         attr: The attributes of the target being configured.
+
+     Returns:
 -        A dict with the per_crate_rustc_flag setting (cleared or preserved).
--    """
++        A dict with the per_crate_rustc_flag and cargo_target_triple settings.
+     """
 -
 -    # If this target is marked to skip per-crate flags, clear the setting
 -    # to return it to a canonical configuration
@@ -96,15 +86,13 @@ diff --git a/rust/private/per_crate_flag_trim.bzl b/rust/private/per_crate_flag_
 -        }
 -
 -    # Otherwise, keep the current value
-+def trim_crate_settings(settings, attr):
-+    """Apply cargo_target_triple_map and trim per_crate_rustc_flag when requested."""
 +    cargo_target_triple = settings[CARGO_TARGET_TRIPLE_SETTING]
      return {
 -        _PER_CRATE_FLAG_SETTING: settings[_PER_CRATE_FLAG_SETTING],
 +        _PER_CRATE_FLAG_SETTING: [] if attr.skip_per_crate_rustc_flags else settings[_PER_CRATE_FLAG_SETTING],
 +        CARGO_TARGET_TRIPLE_SETTING: attr.cargo_target_triple_map.get(cargo_target_triple, cargo_target_triple),
      }
- 
+
  per_crate_flag_trim_transition = transition(
 -    implementation = _per_crate_flag_trim_transition_impl,
 -    inputs = [_PER_CRATE_FLAG_SETTING],
@@ -127,9 +115,9 @@ diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
  load(
      ":providers.bzl",
 @@ -64,9 +66,6 @@
- 
+
  # TODO(marco): Separate each rule into its own file.
- 
+
 -# Setting path for per_crate_rustc_flag, used in transition definitions
 -_PER_CRATE_FLAG_SETTING = "@rules_rust//rust/settings:per_crate_rustc_flag"
 -
@@ -149,7 +137,7 @@ diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
 @@ -1246,31 +1248,22 @@
          platform = "@" + platform
      return platform
- 
+
 -def _rust_static_library_transition_impl(settings, attr):
 -    # Trim per_crate_rustc_flag for third-party crates to improve cache hit rates
 -    per_crate_flags = [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING]
@@ -159,7 +147,7 @@ diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
          "//command_line_option:platforms": _resolve_platform(settings, attr),
 -        _PER_CRATE_FLAG_SETTING: per_crate_flags,
      }
- 
+
 -_rust_static_library_transition = transition(
 -    implementation = _rust_static_library_transition_impl,
 -    inputs = [
@@ -175,7 +163,7 @@ diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
 +    inputs = ["//command_line_option:platforms"] + CRATE_SETTINGS,
 +    outputs = ["//command_line_option:platforms"] + CRATE_SETTINGS,
  )
- 
+
  rust_static_library = rule(
      implementation = _rust_static_library_impl,
      attrs = _COMMON_ATTRS | _PLATFORM_ATTRS,
@@ -188,7 +176,7 @@ diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
 @@ -1292,26 +1285,6 @@
          """),
  )
- 
+
 -def _rust_shared_library_transition_impl(settings, attr):
 -    # Trim per_crate_rustc_flag for third-party crates to improve cache hit rates
 -    per_crate_flags = [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING]
@@ -224,7 +212,7 @@ diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
 @@ -1419,33 +1392,13 @@
      "stamp": _stamp_attribute(default_value = -1),
  } | _EXPERIMENTAL_USE_CC_COMMON_LINK_ATTRS
- 
+
 -def _rust_binary_transition_impl(settings, attr):
 -    # Trim per_crate_rustc_flag for third-party crates to improve cache hit rates
 -    per_crate_flags = [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING]
@@ -259,7 +247,7 @@ diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
 @@ -1668,33 +1621,13 @@
      ],
  )
- 
+
 -def _rust_test_transition_impl(settings, attr):
 -    # Trim per_crate_rustc_flag for third-party crates to improve cache hit rates
 -    per_crate_flags = [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING]
@@ -305,7 +293,7 @@ diff --git a/rust/private/toolchain.bzl b/rust/private/toolchain.bzl
 @@ -699,10 +700,20 @@
          make_variable_info,
      ]
- 
+
 +def _clear_cargo_target_triple_impl(_settings, _attr):
 +    return {CARGO_TARGET_TRIPLE_SETTING: ""}
 +

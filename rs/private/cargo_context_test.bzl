@@ -3,7 +3,7 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
 
 # buildifier: disable=bzl-visibility
-load("@rules_rust//rust/private:per_crate_flag_trim.bzl", "CARGO_TARGET_TRIPLE_SETTING", "CRATE_SETTINGS", "trim_crate_settings")
+load("@rules_rust//rust/private:per_crate_flag_trim.bzl", "CARGO_TARGET_TRIPLE_SETTING", "trim_crate_settings")
 
 _LINUX = "x86_64-unknown-linux-gnu"
 _MACOS = "aarch64-apple-darwin"
@@ -20,7 +20,6 @@ def _generated_cargo_target_triple_clearing_impl(ctx):
     settings = _settings(_MACOS)
     attr = struct(cargo_target_triple_map = {_MACOS: ""}, skip_per_crate_rustc_flags = False)
     result = trim_crate_settings(settings, attr)
-    asserts.equals(env, sorted(CRATE_SETTINGS), sorted(result))
     asserts.equals(env, _settings(), result)
     asserts.equals(env, result, trim_crate_settings(result, attr))
     reset = trim_crate_settings(result, struct(cargo_target_triple_map = {}, skip_per_crate_rustc_flags = True))

@@ -50,6 +50,7 @@ bzl_library(
     srcs = ["rules_rust_reexported_extensions.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        "@bazel_features//:features",
         "@rules_rust//rust:bzl_lib",
     ],
 )
@@ -85,6 +86,7 @@ bzl_library(
     srcs = ["cargo_build_script.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        "@bazel_features//:features",
         "@rules_rust//cargo/private:bzl_lib",
     ],
 )
@@ -94,6 +96,7 @@ bzl_library(
     srcs = ["rust_binary.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        "@bazel_features//:features",
         "@rules_rust//rust:bzl_lib",
     ],
 )
@@ -103,6 +106,7 @@ bzl_library(
     srcs = ["rust_library.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        "@bazel_features//:features",
         "@rules_rust//rust:bzl_lib",
     ],
 )
@@ -112,6 +116,7 @@ bzl_library(
     srcs = ["rust_proc_macro.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        "@bazel_features//:features",
         "@rules_rust//rust:bzl_lib",
     ],
 )
@@ -121,6 +126,7 @@ bzl_library(
     srcs = ["rust_test.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        "@bazel_features//:features",
         "@rules_rust//rust:bzl_lib",
     ],
 )
@@ -130,6 +136,7 @@ bzl_library(
     srcs = ["rust_shared_library.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        "@bazel_features//:features",
         "@rules_rust//rust:bzl_lib",
     ],
 )
@@ -139,6 +146,7 @@ bzl_library(
     srcs = ["rust_static_library.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        "@bazel_features//:features",
         "@rules_rust//rust:bzl_lib",
     ],
 )

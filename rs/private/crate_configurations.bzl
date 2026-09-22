@@ -23,64 +23,32 @@ def _configuration(fq, is_exec, resolution, exec_resolutions_by_cargo_target_tri
         "build_deps_by_triple": build_deps,
     }
 
-def _dependency_target_triples_match(deps, cargo_target_triple, mapped_target_triple, cargo_target_triple_maps_by_label):
-    if cargo_target_triple == mapped_target_triple:
-        return True
-    for dep in deps:
-        cargo_target_triple_map = cargo_target_triple_maps_by_label.get(dep)
-
-        # Handwritten targets can select dependencies using cargo_target_triple.
-        if cargo_target_triple_map == None or cargo_target_triple_map.get(cargo_target_triple, cargo_target_triple) != cargo_target_triple_map.get(mapped_target_triple, mapped_target_triple):
-            return False
-    return True
-
-def _resolution_node(cargo_target_triple, configuration):
-    # Compare each dependency once, even when multiple platforms use it.
+def _dependency_labels(configuration):
     deps = set()
     for values in configuration["deps_by_triple"].values():
         deps.update(values)
-    build_deps = {}
-    for platform_triple, deps_by_exec_triple in configuration["build_deps_by_triple"].items():
-        labels = set()
+    for deps_by_exec_triple in configuration["build_deps_by_triple"].values():
         for values in deps_by_exec_triple.values():
-            labels.update(values)
-        if labels:
-            build_deps[platform_triple] = labels
-    return struct(cargo_target_triple = cargo_target_triple, configuration = configuration, deps = deps, build_deps = build_deps)
+            deps.update(values)
+    return deps
 
-def _can_clear_cargo_target_triple(node, cargo_target_triple_maps_by_label):
-    if not _dependency_target_triples_match(node.deps, node.cargo_target_triple, "", cargo_target_triple_maps_by_label):
-        return False
-    for platform_triple, deps in node.build_deps.items():
-        if not _dependency_target_triples_match(deps, node.cargo_target_triple, platform_triple, cargo_target_triple_maps_by_label):
-            return False
-    return True
-
-def _build_cargo_target_triple_required_on(cargo_target_triple, configuration, cargo_target_triple_maps_by_label):
-    result = []
-    for platform_triple, deps_by_exec_triple in configuration["build_deps_by_triple"].items():
-        requested = cargo_target_triple or platform_triple
-        for deps in deps_by_exec_triple.values():
-            if not _dependency_target_triples_match(deps, requested, "", cargo_target_triple_maps_by_label):
-                result.append(platform_triple)
-                break
-    return result
-
-def _configurations_compatible(left, right):
-    # _configuration includes every exec_platform_triple in build_deps_by_triple.
-    for field, values in right.items():
-        existing = left[field]
-        for platform_triple, value in values.items():
-            if platform_triple in existing and existing[platform_triple] != value:
+def _dependencies_invariant(deps_by_triple, invariant):
+    for deps in deps_by_triple.values():
+        for dep in deps:
+            if dep not in invariant:
                 return False
     return True
 
-def _copy_configuration(configuration):
-    return {field: dict(values) for field, values in configuration.items()}
-
-def _merge_configuration(left, right):
-    for field, values in right.items():
-        left[field].update(values)
+def _merge_configurations(configurations):
+    result = {field: {} for field in configurations.values()[0]}
+    for configuration in configurations.values():
+        for field, values in configuration.items():
+            existing = result[field]
+            for platform_triple, value in values.items():
+                if platform_triple in existing and existing[platform_triple] != value:
+                    return None
+                existing[platform_triple] = value
+    return result
 
 def _share_build_deps(build_deps_by_triple):
     if not build_deps_by_triple:
@@ -94,7 +62,7 @@ def prepare_crate_configurations(
         dep_label_prefix,
         preserve_cargo_target_triple = [],
         workspace_crates = []):
-    """Clear cargo_target_triple when crate and dependency configurations agree.
+    """Clear cargo_target_triple for crates with invariant configurations and dependencies.
 
     Args:
         target_resolutions: Ordinary resolutions keyed by crate name/version.
@@ -116,81 +84,63 @@ def prepare_crate_configurations(
         build scripts must preserve the original cargo_target_triple.
     """
     cargo_target_triples = sorted(exec_resolutions_by_cargo_target_triple)
+    clear_cargo_target_triples = {cargo_target_triple: "" for cargo_target_triple in cargo_target_triples}
     exec_platform_triples = set()
     for execution in exec_resolutions_by_cargo_target_triple.values():
         for resolution in execution.resolutions.values():
             exec_platform_triples.update(resolution.features_enabled)
     exec_platform_triples = sorted(exec_platform_triples)
-    cargo_target_values = [""] + cargo_target_triples
     preserve_cargo_target_triple = set(preserve_cargo_target_triple)
-    workspace_crates = set(workspace_crates)
-    crates = {}
+    preserved_crates = preserve_cargo_target_triple | set(workspace_crates)
+    configurations_by_crate = {}
+    invariant = {}
     for fq, target in target_resolutions.items():
-        nodes = []
+        configurations = {}
         if target.active:
-            nodes.append(_resolution_node("", _configuration(fq, False, target, exec_resolutions_by_cargo_target_triple, exec_platform_triples)))
+            configurations[""] = _configuration(fq, False, target, exec_resolutions_by_cargo_target_triple, exec_platform_triples)
         for cargo_target_triple in cargo_target_triples:
             execution = exec_resolutions_by_cargo_target_triple[cargo_target_triple].resolutions[fq]
             if execution.active:
-                nodes.append(_resolution_node(cargo_target_triple, _configuration(fq, True, execution, exec_resolutions_by_cargo_target_triple, exec_platform_triples)))
-        if not nodes:
-            nodes.append(_resolution_node("", _configuration(fq, False, target, exec_resolutions_by_cargo_target_triple, exec_platform_triples)))
-        cargo_target_triple_map = {node.cargo_target_triple: node.cargo_target_triple for node in nodes}
-        preserve = fq in workspace_crates or fq in preserve_cargo_target_triple
-        if not preserve:
-            cargo_target_triple_map[nodes[0].cargo_target_triple] = ""
-            configuration = _copy_configuration(nodes[0].configuration)
-            for node in nodes:
-                if node.cargo_target_triple == nodes[0].cargo_target_triple:
-                    continue
-                if _configurations_compatible(configuration, node.configuration):
-                    cargo_target_triple_map[node.cargo_target_triple] = ""
-                    _merge_configuration(configuration, node.configuration)
-        for cargo_target_triple in cargo_target_triples:
-            if cargo_target_triple in cargo_target_triple_map:
-                continue
-            nodes.append(struct(cargo_target_triple = cargo_target_triple, configuration = nodes[0].configuration, deps = nodes[0].deps, build_deps = nodes[0].build_deps))
-            cargo_target_triple_map[cargo_target_triple] = cargo_target_triple if preserve else ""
-        cargo_target_triple_map.setdefault("", cargo_target_triple_map[nodes[0].cargo_target_triple])
-        crates[fq] = struct(nodes = nodes, cargo_target_triple_map = cargo_target_triple_map)
-
-    cargo_target_triple_maps_by_label = {dep_label_prefix + fq: crate.cargo_target_triple_map for fq, crate in crates.items()}
-
-    # Removing a clear mapping can prevent a dependent crate from clearing too.
-    for _ in range(len(crates) * len(cargo_target_values) + 1):
-        changed = False
-        for crate in crates.values():
-            cargo_target_triple_map = crate.cargo_target_triple_map
-            for node in crate.nodes:
-                if not node.cargo_target_triple or cargo_target_triple_map[node.cargo_target_triple] or _can_clear_cargo_target_triple(node, cargo_target_triple_maps_by_label):
-                    continue
-                changed = True
-                if node.cargo_target_triple == crate.nodes[0].cargo_target_triple:
-                    # Keep the execution-only default and its source equivalent.
-                    for cargo_target_triple in cargo_target_values:
-                        cargo_target_triple_map[cargo_target_triple] = cargo_target_triple or node.cargo_target_triple
-                    break
-                cargo_target_triple_map[node.cargo_target_triple] = node.cargo_target_triple
-        if changed:
-            continue
-
-        result = {}
-        for fq, crate in crates.items():
-            configurations = {}
-            for node in crate.nodes:
-                cargo_target_triple = crate.cargo_target_triple_map[node.cargo_target_triple]
-                if cargo_target_triple not in configurations:
-                    configurations[cargo_target_triple] = _copy_configuration(node.configuration)
-                elif not node.cargo_target_triple or exec_resolutions_by_cargo_target_triple[node.cargo_target_triple].resolutions[fq].active:
-                    # Missing resolutions reuse the first configuration, already merged.
-                    _merge_configuration(configurations[cargo_target_triple], node.configuration)
-            for cargo_target_triple, configuration in configurations.items():
-                configuration["build_cargo_target_triple_required_on"] = list(configuration["build_deps_by_triple"]) if fq in preserve_cargo_target_triple else _build_cargo_target_triple_required_on(cargo_target_triple, configuration, cargo_target_triple_maps_by_label)
-                configuration["build_deps_by_triple"] = _share_build_deps(configuration["build_deps_by_triple"])
-            result[fq] = struct(
-                cargo_target_triple_map = {cargo_target_triple: mapped_target_triple for cargo_target_triple, mapped_target_triple in crate.cargo_target_triple_map.items() if cargo_target_triple != mapped_target_triple},
-                configurations = configurations,
+                configurations[cargo_target_triple] = _configuration(fq, True, execution, exec_resolutions_by_cargo_target_triple, exec_platform_triples)
+        if not configurations:
+            configurations[""] = _configuration(fq, False, target, exec_resolutions_by_cargo_target_triple, exec_platform_triples)
+        shared_configuration = None if fq in preserved_crates else _merge_configurations(configurations)
+        configurations_by_crate[fq] = configurations
+        if shared_configuration != None:
+            invariant[dep_label_prefix + fq] = struct(
+                configuration = shared_configuration,
+                deps = _dependency_labels(shared_configuration),
             )
-        return result
 
-    fail("Crate configuration refinement did not converge")
+    # Clearing a crate also requires every normal and build dependency to clear.
+    # Handwritten dependency labels are absent from invariant.
+    for _ in range(len(invariant) + 1):
+        previous_size = len(invariant)
+        for label, candidate in invariant.items():
+            if not candidate.deps.issubset(invariant):
+                invariant.pop(label)
+        if len(invariant) == previous_size:
+            break
+
+    result = {}
+    for fq, configurations in configurations_by_crate.items():
+        candidate = invariant.get(dep_label_prefix + fq)
+        if candidate:
+            configurations = {"": candidate.configuration}
+            cargo_target_triple_map = clear_cargo_target_triples
+        else:
+            first_triple = configurations.keys()[0]
+            cargo_target_triple_map = {"": first_triple} if first_triple else {}
+        for configuration in configurations.values():
+            configuration["build_cargo_target_triple_required_on"] = [] if candidate else [
+                platform_triple
+                for platform_triple, deps_by_exec_triple in configuration["build_deps_by_triple"].items()
+                if fq in preserve_cargo_target_triple or not _dependencies_invariant(deps_by_exec_triple, invariant)
+            ]
+            configuration["build_deps_by_triple"] = _share_build_deps(configuration["build_deps_by_triple"])
+        if not candidate:
+            first_configuration = configurations.values()[0]
+            for cargo_target_triple in cargo_target_triples:
+                configurations.setdefault(cargo_target_triple, first_configuration)
+        result[fq] = struct(cargo_target_triple_map = cargo_target_triple_map, configurations = configurations)
+    return result

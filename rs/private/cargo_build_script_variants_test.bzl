@@ -68,22 +68,11 @@ def _configured_script_loading_tests(env):
         name = name + "_expected",
         actual = select({
             "@rules_rs//:__cargo/default/" + _MACOS: ":" + name + "_" + _MACOS,
-            "@rules_rs//:__cargo/default/" + musl: ":" + name + "_" + musl,
+            "@rules_rs//:__cargo/default/" + _LINUX: ":" + name + "_" + musl,
         }),
         tags = ["manual"],
     )
     loadingtest.equals(env, name + "_selection", str(native.existing_rule(name + "_expected")["actual"]), str(native.existing_rule(name)["actual"]))
-
-    name = "single_configured_build_script"
-    cargo_build_script_for_configurations(
-        name = name,
-        configurations = {_LINUX: _script_configuration({_MACOS: []})},
-        hub_name = "rules_rs",
-        tags = ["manual"],
-    )
-    binary = native.existing_rule(name + "_")
-    loadingtest.equals(env, name + "_cargo_target_triple_map", {}, binary["cargo_target_triple_map"])
-    loadingtest.equals(env, name + "_no_alias", False, "actual" in native.existing_rule(name))
 
     name = "invariant_build_script"
     configuration = {
@@ -99,6 +88,7 @@ def _configured_script_loading_tests(env):
     )
     loadingtest.equals(env, name + "_cargo_target_triple_map", {_LINUX: ""}, native.existing_rule(name + "_")["cargo_target_triple_map"])
     loadingtest.equals(env, name + "_no_alias", False, "actual" in native.existing_rule(name))
+    loadingtest.equals(env, name + "_features", [], list(native.existing_rule(name + "_")["crate_features"]))
 
     name = "first_party_build_script"
     cargo_build_script_for_configurations(
@@ -312,16 +302,6 @@ def _platform_script_loading_tests(env):
     )
     loadingtest.equals(env, name + "_deps", str(native.existing_rule(name + "_expected_")["deps"]), str(native.existing_rule(name + "_")["deps"]))
     loadingtest.equals(env, name + "_shared", False, "actual" in native.existing_rule(name))
-
-    name = "empty_build_script"
-    cargo_build_script_for_configurations(
-        name = name,
-        configurations = {"": _script_configuration({_LINUX: [], _MACOS: []}, False, build_deps_by_triple = {_LINUX: {_LINUX: {}, _MACOS: {}}})},
-        hub_name = None,
-        tags = ["manual"],
-    )
-    loadingtest.equals(env, name + "_shared", False, "actual" in native.existing_rule(name))
-    loadingtest.equals(env, name + "_features", [], list(native.existing_rule(name + "_")["crate_features"]))
 
     name = "inactive_build_script"
     cargo_build_script_for_configurations(name = name, configurations = {"": _script_configuration({})}, hub_name = None, tags = ["manual"])

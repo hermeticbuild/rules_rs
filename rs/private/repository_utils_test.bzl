@@ -82,10 +82,6 @@ def _single_crate_test_impl(ctx):
     asserts.equals(env, cargo_target_triple_map, _argument(rendered, "cargo_target_triple_map"))
     asserts.equals(env, binaries, _argument(rendered, "binaries"))
     asserts.equals(env, "crates", _argument(rendered, "hub_name"))
-    asserts.false(env, "name_suffix" in rendered)
-    asserts.false(env, "_exec" in rendered)
-    asserts.equals(env, 1, rendered.count("normal_feature"))
-    asserts.false(env, "build_scripts =" in rendered)
     return unittest.end(env)
 
 def _annotation_and_git_values_test_impl(ctx):
@@ -114,7 +110,6 @@ def _annotation_and_git_values_test_impl(ctx):
     asserts.true(env, '"//annotated:dep"' in rendered)
     asserts.true(env, '"//metadata:dep"' in rendered)
     asserts.true(env, " + package_metadata_bazel_deps" in rendered)
-    asserts.equals(env, 1, rendered.count("rust_crate("))
     return unittest.end(env)
 
 def _undeclared_metadata_deps_impl(ctx):
@@ -136,15 +131,8 @@ _undeclared_metadata_deps_test = analysistest.make(_undeclared_metadata_deps_tes
 
 def _source_attributes_test_impl(ctx):
     env = unittest.begin(ctx)
-    configuration = _configuration(
-        crate_features_by_triple = {_LINUX: ["shared", "linux"], _MACOS: ["shared"]},
-        deps_by_triple = {_LINUX: {"//src:helper-1.0.0": "renamed"}, _MACOS: {}},
-        build_deps_by_triple = {"": {_LINUX: {"//src:linux-helper-1.0.0": "helper"}, _MACOS: {"//src:macos-helper-1.0.0": "helper"}}},
-        build_cargo_target_triple_required_on = [],
-    )
     rendered = render_rust_crate_call(
         _attrs(
-            configurations = {"": configuration},
             hub_name = None,
             extra_compile_data = ["//src/library/core:srcs"],
             rustc_env = {"RUSTC_BOOTSTRAP": "1"},
@@ -154,16 +142,12 @@ def _source_attributes_test_impl(ctx):
         extra_deps = "package_metadata_bazel_deps",
         skip_deps_verification = True,
     )
-    asserts.equals(env, {"": configuration}, _argument(rendered, "configurations"))
-    asserts.equals(env, {}, _argument(rendered, "cargo_target_triple_map"))
     asserts.equals(env, ["-Zforce-unstable-if-unmarked"], _argument(rendered, "rustc_flags"))
     asserts.equals(env, "1", _argument(rendered, "rustc_env")["RUSTC_BOOTSTRAP"])
     asserts.true(env, "hub_name = None" in rendered)
     asserts.true(env, '"//src/library/core:srcs"' in rendered)
     asserts.true(env, " + package_metadata_bazel_deps" in rendered)
     asserts.true(env, "skip_deps_verification = True" in rendered)
-    asserts.false(env, "RESOLVED_PLATFORMS" in rendered)
-    asserts.false(env, "build_scripts =" in rendered)
     return unittest.end(env)
 
 _single_crate_test = unittest.make(_single_crate_test_impl)

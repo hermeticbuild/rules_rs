@@ -7,7 +7,10 @@ def _render_label_list(labels):
     return ",\n        ".join(['"%s"' % label for label in sorted(labels)])
 
 def _spoke_repo(hub_name, name, version):
-    return (hub_name + "__" + name + "-" + version).replace("+", "-")
+    s = "%s__%s-%s" % (hub_name, name, version)
+    if "+" in s:
+        s = s.replace("+", "-")
+    return s
 
 def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, workspace_cargo_toml):
     package_path = rctx.path(dest).dirname

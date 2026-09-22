@@ -26,7 +26,7 @@ verify_alias = rule(
 def verify_alias_absent(name, aliases, unexpected_label):
     _verify_absent(
         name = name,
-        items = sorted(aliases),
+        items = sorted(aliases.keys()),
         unexpected = unexpected_label,
     )
 

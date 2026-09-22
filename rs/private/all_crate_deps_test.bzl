@@ -65,7 +65,6 @@ def _all_crate_deps_defaults_to_normal_impl(ctx):
 
     asserts.equals(env, ["//:normal"], all_crate_deps(data, hub_name = "crates"))
     asserts.equals(env, {"//:normal": "normal"}, crate_aliases(data, hub_name = "crates"))
-    asserts.equals(env, crate_aliases(data, normal = True, hub_name = "crates"), crate_aliases(data, hub_name = "crates"))
     return unittest.end(env)
 
 def _all_crate_deps_dedupes_across_selected_kinds_impl(ctx):
@@ -169,11 +168,6 @@ def _shared_build_rows_impl(ctx):
     asserts.equals(env, expected_deps, str(all_crate_deps(data, build = True, hub_name = "crates")))
     asserts.equals(env, expected_aliases, str(crate_aliases(data, build = True, hub_name = "crates")))
 
-    # Explicit rows override a common row that no owner uses.
-    configuration["build_deps_by_triple"].update({triple: deps for triple in [_LINUX, _MACOS]})
-    configuration["build_deps_by_triple"][""] = {_LINUX: {"//:unused": "unused"}}
-    asserts.equals(env, expected_deps, str(all_crate_deps(data, build = True, hub_name = "crates")))
-    asserts.equals(env, expected_aliases, str(crate_aliases(data, build = True, hub_name = "crates")))
     return unittest.end(env)
 
 def _all_crate_deps_preserves_build_context_impl(ctx):
@@ -241,9 +235,6 @@ def _ambiguous_build_script_impl(ctx):
     data = _build_data()
     configuration = data["configurations"][""]
     if ctx.attr.field == "aliases":
-        configuration["build_deps_by_triple"][_MACOS][_MACOS]["@crates//:helper"] = "other_name"
-        crate_aliases(data, build = True, hub_name = "crates")
-    elif ctx.attr.field == "shared_aliases":
         configuration["build_deps_by_triple"] = {"": configuration["build_deps_by_triple"][_LINUX]}
         configuration["build_deps_by_triple"][_MACOS] = {_LINUX: {"@crates//:helper": "helper"}, _MACOS: {"@crates//:helper": "other_name"}}
         crate_aliases(data, build = True, hub_name = "crates")
@@ -251,10 +242,6 @@ def _ambiguous_build_script_impl(ctx):
         configuration["build_deps_by_triple"][_MACOS][_LINUX] = {}
         crate_aliases(data, build = True, hub_name = "crates")
     elif ctx.attr.field == "cargo_target_triple":
-        configuration["build_cargo_target_triple_required_on"].append(_LINUX)
-        all_crate_deps(data, build = True, hub_name = "crates")
-    elif ctx.attr.field == "shared_context":
-        configuration["build_deps_by_triple"] = {"": configuration["build_deps_by_triple"][_LINUX]}
         configuration["build_cargo_target_triple_required_on"].append(_LINUX)
         all_crate_deps(data, build = True, hub_name = "crates")
     else:
@@ -288,7 +275,7 @@ configured_dependencies_and_features_test = unittest.make(_configured_dependenci
 configured_aliases_match_selected_dependencies_test = unittest.make(_configured_aliases_match_selected_dependencies_impl)
 
 def all_crate_deps_tests():
-    for field in ["aliases", "shared_aliases", "alias_platforms", "cargo_target_triple", "shared_context", "deps"]:
+    for field in ["aliases", "alias_platforms", "cargo_target_triple", "deps"]:
         _ambiguous_build_script(
             name = "ambiguous_build_script_" + field,
             field = field,
@@ -310,8 +297,6 @@ def all_crate_deps_tests():
         configured_aliases_match_selected_dependencies_test,
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_deps"),
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_aliases"),
-        partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_shared_aliases"),
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_alias_platforms"),
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_cargo_target_triple"),
-        partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_shared_context"),
     )

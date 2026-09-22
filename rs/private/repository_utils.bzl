@@ -8,9 +8,7 @@ _label_list_dict = getattr(attr, "label_list_dict", attr.string_list_dict)
 def _format_branches(branches):
     return """select({
         %s
-    })""" % (
-        ",\n        ".join(['"%s": %s' % branch for branch in branches])
-    )
+    })""" % ",\n        ".join(branches)
 
 def render_select(non_platform_items, platform_items, use_legacy_rules_rust_platforms):
     non_platform_items = [str(item) for item in non_platform_items]
@@ -24,21 +22,22 @@ def render_select(non_platform_items, platform_items, use_legacy_rules_rust_plat
     if not branches:
         return common_items, ""
 
-    branches = {platform_label(k, use_legacy_rules_rust_platforms): repr(v) for k, v in branches.items()}
-    branches["//conditions:default"] = "[]"
+    branches = {platform_label(triple, use_legacy_rules_rust_platforms): branches[triple] for triple in branches}
+    branches = ['"%s": %s' % (platform, repr(branches[platform])) for platform in branches]
+    branches.append('"//conditions:default": []')
 
-    return common_items, _format_branches(branches.items())
+    return common_items, _format_branches(branches)
 
 def render_select_build_script_env(platform_items, use_legacy_rules_rust_platforms):
     branches = [
-        (platform_label(triple, use_legacy_rules_rust_platforms), items)
-        for triple, items in platform_items.items()
+        '"%s": %s' % (platform_label(triple, use_legacy_rules_rust_platforms), platform_items[triple])
+        for triple in platform_items
     ]
 
     if not branches:
         return ""
 
-    branches.append(("//conditions:default", "{},"))
+    branches.append('"//conditions:default": {},')
 
     return _format_branches(branches)
 
@@ -312,6 +311,7 @@ common_attrs = rust_crate_attrs | {
     "additive_build_file": attr.label(),
     "additive_build_file_content": attr.string(),
     "gen_binaries": attr.string_list(),
+} | {
     "strip_prefix": attr.string(
         default = "",
         doc = "A directory prefix to strip from the extracted files.",

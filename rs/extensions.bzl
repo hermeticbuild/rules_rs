@@ -29,7 +29,10 @@ load("//rs/private:select_utils.bzl", "platform_label")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
 def _spoke_repo(hub_name, name, version):
-    return (hub_name + "__" + name + "-" + version).replace("+", "-")
+    s = "%s__%s-%s" % (hub_name, name, version)
+    if "+" in s:
+        s = s.replace("+", "-")
+    return s
 
 def _git_repo_remote_name(remote):
     scheme_separator = remote.find("://")
@@ -45,6 +48,7 @@ def _git_crate_purl(name, version, remote, commit):
     return "pkg:cargo/%s@%s?vcs_url=git+%s@%s" % (name, version, remote, commit)
 
 def _render_ordered_string_list(items):
+    """Like _render_string_list but preserves insertion order."""
     return ",\n        ".join([repr(item) for item in items])
 
 def _render_cargo_lints_target(name, lint_flags):
@@ -67,6 +71,11 @@ cargo_lints(
         rustdoc = _render_ordered_string_list(lint_flags.rustdoc_lint_flags),
     )
 
+def _date(ctx, label):
+    return
+    result = ctx.execute(["gdate", '+"%Y-%m-%d %H:%M:%S.%3N"'])
+    print(label, result.stdout)
+
 def _label_directory(label):
     idx = label.name.rfind("/")
     if idx == -1:
@@ -85,7 +94,9 @@ def _git_crate_package_path(annotation, strip_prefix):
     return _normalize_path(crate_dir)
 
 def _target_label(repo_name, package_path, target):
-    return "@%s//%s:%s" % (repo_name, package_path, target)
+    if package_path:
+        return "@%s//%s:%s" % (repo_name, package_path, target)
+    return "@%s//:%s" % (repo_name, target)
 
 def _additive_build_file_content(mctx, annotation):
     content = ""
@@ -130,6 +141,8 @@ def _generate_hub_and_spokes(
         generate_lint_config (bool): Generate per-package Cargo lint configuration.
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
     """
+    _date(mctx, "start")
+
     mctx.report_progress("Reading workspace metadata")
     result = mctx.execute(
         [cargo_path, "metadata", "--no-deps", "--locked", "--format-version=1", "--quiet"] +
@@ -139,6 +152,8 @@ def _generate_hub_and_spokes(
     if result.return_code != 0:
         fail(result.stdout + "\n" + result.stderr)
     cargo_metadata = json.decode(result.stdout)
+
+    _date(mctx, "parsed cargo metadata")
 
     existing_facts = getattr(mctx, "facts", {}) or {}
     facts = {}
@@ -278,6 +293,8 @@ def _generate_hub_and_spokes(
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
     workspace_dep_labels_by_triple = workspace_resolution.workspace_dep_labels_by_triple
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
+
+    _date(mctx, "set up initial deps!")
 
     package_by_fq = {
         _fq_crate(package["name"], package["version"]): package
@@ -434,6 +451,8 @@ crate.annotation(
         else:
             fail("Unknown source %s for crate %s" % (source, crate_name))
 
+    _date(mctx, "created repos")
+
     mctx.report_progress("Initializing hub")
 
     repo_root = _normalize_path(cargo_metadata["workspace_root"])
@@ -509,7 +528,7 @@ alias(
 
         workspace_versions = workspace_dep_versions_by_name.get(name)
         if workspace_versions:
-            fq = max(workspace_versions)
+            fq = sorted(workspace_versions)[-1]
             default_version = fq[len(name) + 1:]
             annotation = annotation_for(annotations, name, default_version, hub_name)
 
@@ -529,7 +548,7 @@ alias(
         if len(versions) == 1:
             version = versions[0]
             annotation = annotation_for(annotations, name, version, hub_name)
-            for alias_name in sorted(annotation.extra_aliased_targets):
+            for alias_name in sorted(annotation.extra_aliased_targets.keys()):
                 hub_contents.append("""
 alias(
     name = "{alias_name}",
@@ -607,34 +626,34 @@ load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_de
 load("@rules_rs//rs/private:cargo_build_script_variants.bzl", _cargo_build_script_for_configurations = "cargo_build_script_for_configurations")
 
 def aliases(package_name = None, normal = False, normal_dev = False, build = False):
-    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
+    dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return {{}}
 
     return _crate_aliases(dep_data, normal = normal, normal_dev = normal_dev, build = build, hub_name = {hub_name}, use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms})
 
 def crate_features(package_name = None):
-    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
+    dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return []
     return _crate_features(dep_data, hub_name = {hub_name}, use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms})
 
 def crate_name(package_name = None):
-    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
+    dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
 
     return dep_data["crate_name"]
 
 def edition(package_name = None):
-    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
+    dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
 
     return dep_data["edition"]
 
 def lint_config(package_name = None):
-    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
+    dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
 
@@ -647,7 +666,7 @@ def all_crate_deps(
         package_name = None,
         cargo_only = False):
 
-    dep_data = DEP_DATA.get(native.package_name() if package_name == None else package_name)
+    dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return []
 
@@ -662,7 +681,7 @@ def all_crate_deps(
     )
 
 def cargo_build_script(name, package_name = None, **kwargs):
-    package_name = native.package_name() if package_name == None else package_name
+    package_name = package_name or native.package_name()
     dep_data = DEP_DATA.get(package_name)
     if dep_data == None:
         fail("No Cargo package found for %r" % package_name)
@@ -686,6 +705,8 @@ RESOLVED_PLATFORMS = select({{
             this_repo = repr("@" + hub_name + "//:"),
             hub_name = repr(hub_name),
         )
+
+    _date(mctx, "done")
 
     data_bzl_contents = render_dep_data(workspace_dep_data(
         cargo_metadata = cargo_metadata,
@@ -719,7 +740,7 @@ def _crate_impl(mctx):
     cargo_path = mctx.path(RS_HOST_CARGO_LABEL)
 
     # And toml2json
-    mctx.path(Label("@toml2json_%s//file:downloaded" % repo_utils.platform(mctx)))
+    toml2json = mctx.path(Label("@toml2json_%s//file:downloaded" % repo_utils.platform(mctx)))
 
     downloader_state = new_downloader_state()
     suggested_annotation_snippet_paths = well_known_annotation_snippet_paths(mctx)
@@ -787,6 +808,7 @@ def _crate_impl(mctx):
 
     for mod in mctx.modules:
         for cfg in mod.tags.from_cargo:
+            annotations = annotations_by_hub_name[cfg.name]
             effective_cargo_config = cargo_config_by_hub_name[cfg.name]
             use_home_cargo_credentials = cfg.use_home_cargo_credentials or global_use_home_cargo_credentials
 
@@ -806,7 +828,7 @@ def _crate_impl(mctx):
                 if package.get("source") and package["source"].startswith("sparse+")
             ])
 
-            start_crate_registry_downloads(mctx, downloader_state, packages, cargo_credentials)
+            start_crate_registry_downloads(mctx, downloader_state, annotations, packages, cargo_credentials, cfg.debug)
 
             for source in sorted(registry_sources):
                 registry_config_repository(
@@ -902,17 +924,21 @@ def _crate_impl(mctx):
                         git_repo["patches"][str(patch_file)] = patch_file
 
     for repo_name, git_repo in git_repos.items():
+        kwargs = {}
+        if git_repo["gen_binaries"]:
+            kwargs["gen_binaries"] = git_repo["gen_binaries"]
+
         git_cargo_workspace_repository(
             name = repo_name,
             build_files = git_repo["build_files"],
             commit = git_repo["commit"],
-            gen_binaries = git_repo["gen_binaries"],
             hub_name = git_repo["hub_name"],
             patch_args = git_repo["patch_args"],
             patch_tool = git_repo["patch_tool"],
             patches = git_repo["patches"].values(),
             remote = git_repo["remote"],
             workspace_cargo_toml = git_repo["workspace_cargo_toml"],
+            **kwargs
         )
 
     kwargs = dict(
@@ -1017,6 +1043,15 @@ _annotation = tag_class(
         "additive_build_file_content": attr.string(
             doc = "Extra contents to write to the bottom of generated BUILD files.",
         ),
+        # "alias_rule": attr.string(
+        #     doc = "Alias rule to use instead of `native.alias()`.  Overrides [render_config](#render_config)'s 'default_alias_rule'.",
+        # ),
+        # "build_script_data_glob": attr.string_list(
+        #     doc = "A list of glob patterns to add to a crate's `cargo_build_script::data` attribute",
+        # ),
+        # "build_script_deps": attr.label_list(
+        #     doc = "A list of labels to add to a crate's `cargo_build_script::deps` attribute.",
+        # ),
         "build_script_env_files": attr.label_list(
             doc = "Files containing additional environment variables for a crate's `cargo_build_script`.",
             allow_files = True,
@@ -1025,15 +1060,36 @@ _annotation = tag_class(
             default = False,
             doc = "Allow this crate's build script to emit absolute host-system paths in rustc-link-search, rustc-env, or metadata directives.",
         ),
+        # "build_script_link_deps": attr.label_list(
+        #     doc = "A list of labels to add to a crate's `cargo_build_script::link_deps` attribute.",
+        # ),
+        # "build_script_rundir": attr.string(
+        #     doc = "An override for the build script's rundir attribute.",
+        # ),
+        # "build_script_rustc_env": attr.string_dict(
+        #     doc = "Additional environment variables to set on a crate's `cargo_build_script::env` attribute.",
+        # ),
         "build_script_toolchains": attr.label_list(
             doc = "A list of labels to set on a crate's `cargo_build_script::toolchains` attribute.",
         ),
         "build_script_tags": attr.string_list(
             doc = "A list of tags to add to a crate's `cargo_build_script` target.",
         ),
+        # "compile_data": attr.label_list(
+        # doc = "A list of labels to add to a crate's `rust_library::compile_data` attribute.",
+        # ),
+        # "compile_data_glob": attr.string_list(
+        # doc = "A list of glob patterns to add to a crate's `rust_library::compile_data` attribute.",
+        # ),
+        # "compile_data_glob_excludes": attr.string_list(
+        # doc = "A list of glob patterns to be excllued from a crate's `rust_library::compile_data` attribute.",
+        # ),
         "data": attr.label_list(
             doc = "A list of labels to add to a crate's `rust_library::data` attribute.",
         ),
+        # "data_glob": attr.string_list(
+        #     doc = "A list of glob patterns to add to a crate's `rust_library::data` attribute.",
+        # ),
         "deps": attr.label_list(
             doc = "A list of labels to add to a crate's `rust_library::deps` attribute.",
         ),
@@ -1043,9 +1099,15 @@ _annotation = tag_class(
         "tags": attr.string_list(
             doc = "A list of tags to add to a crate's generated targets.",
         ),
+        # "disable_pipelining": attr.bool(
+        #     doc = "If True, disables pipelining for library targets for this crate.",
+        # ),
         "extra_aliased_targets": attr.string_dict(
             doc = "A dictionary mapping alias names in the hub repository to target names in the generated crate package.",
         ),
+        # "gen_all_binaries": attr.bool(
+        #     doc = "If true, generates `rust_binary` targets for all of the crates bins",
+        # ),
         "gen_binaries": attr.string_list(
             doc = "The subset of the crate's bins that should get `rust_binary` targets produced. Otherwise build-only packages are resolved for target platforms with default and annotated features; packages already used as target dependencies retain their resolved features.",
         ),
@@ -1054,6 +1116,18 @@ _annotation = tag_class(
             values = ["auto", "on", "off"],
             default = "auto",
         ),
+        # "override_target_bin": attr.label(
+        #     doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
+        # ),
+        # "override_target_build_script": attr.label(
+        #     doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
+        # ),
+        # "override_target_lib": attr.label(
+        #     doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
+        # ),
+        # "override_target_proc_macro": attr.label(
+        #     doc = "An optional alternate target to use when something depends on this crate to allow the parent repo to provide its own version of this dependency.",
+        # ),
         "patch_args": attr.string_list(
             doc = "The `patch_args` attribute of a Bazel repository rule. See [http_archive.patch_args](https://docs.bazel.build/versions/main/repo/http.html#http_archive-patch_args)",
         ),
@@ -1066,6 +1140,12 @@ _annotation = tag_class(
         "rustc_env": attr.string_dict(
             doc = "Additional variables to set on a crate's `rust_library::rustc_env` attribute.",
         ),
+        # "rustc_env_files": attr.label_list(
+        #     doc = "A list of labels to set on a crate's `rust_library::rustc_env_files` attribute.",
+        # ),
+        # "shallow_since": attr.string(
+        #     doc = "An optional timestamp used for crates originating from a git repository instead of a crate registry. This flag optimizes fetching the source code.",
+        # ),
         "strip_prefix": attr.string(),
         "workspace_cargo_toml": attr.string(
             doc = "For crates from git, the ruleset assumes the (workspace) Cargo.toml is in the repo root. This attribute overrides the assumption.",

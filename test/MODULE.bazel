@@ -128,7 +128,7 @@ TESTS = [
     "git_crates",
     "git_crates_aliased_deps",
     "git_non_workspace_root",
-    "many_workspace_deps",
+    "many_workspace_deps",  # Got count 45796 in 20 rounds
     "multiple_versions_for_dependency",
     "multiple_versions_of_optional_dep",
     "non_optional_dep_feature",
@@ -155,6 +155,8 @@ TESTS = [
         name = test,
         cargo_lock = "//:%s/Cargo.lock" % test,
         cargo_toml = "//:%s/Cargo.toml" % test,
+        # cargo_config = "//:.cargo/config.toml",
+        # use_home_cargo_credentials = True,
         generate_lint_config = test == "workspace_lints",
         platform_triples = PLATFORM_TRIPLES,
     )

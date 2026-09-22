@@ -10,9 +10,11 @@ def cargo_condition(hub_name, cargo_target_triple, platform_triple):
     return "@" + hub_name + "//:__cargo/" + (cargo_target_triple or "default") + "/" + platform_triple
 
 def cargo_config_settings(cargo_target_triples, platform_triples, use_legacy_rules_rust_platforms = False):
+    if use_legacy_rules_rust_platforms:
+        platform_triples = sorted(set([triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc") for triple in platform_triples]))
     for platform_triple in platform_triples:
         if use_legacy_rules_rust_platforms:
-            constraints = _legacy_constraints(platform_triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc"))
+            constraints = _legacy_constraints(platform_triple)
         else:
             constraints = triple_to_rust_constraint_set(platform_triple)
         for cargo_target_triple in cargo_target_triples:
@@ -29,11 +31,9 @@ def cargo_select(values, hub_name, use_legacy_rules_rust_platforms = False, defa
     first = None
     same = True
     for cargo_target_triple, by_triple in values.items():
-        platform_triples = sorted(by_triple)
         if use_legacy_rules_rust_platforms:
-            by_platform = {platform_label(platform_triple, True): platform_triple for platform_triple in platform_triples}
-            platform_triples = by_platform.values()
-        for platform_triple in platform_triples:
+            by_triple = {triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc"): by_triple[triple] for triple in sorted(by_triple)}
+        for platform_triple in sorted(by_triple):
             value = by_triple[platform_triple]
             condition = cargo_condition(hub_name, cargo_target_triple, platform_triple) if hub_name else platform_label(platform_triple, use_legacy_rules_rust_platforms)
             branches[condition] = value

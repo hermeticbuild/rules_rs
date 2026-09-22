@@ -165,7 +165,7 @@ rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
     aliases = aliases(),
-    deps = all_crate_deps(),
+    deps = all_crate_deps(normal = True),
 )
 
 rust_binary(
@@ -212,7 +212,7 @@ rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
     aliases = aliases(),
-    deps = all_crate_deps(),
+    deps = all_crate_deps(normal = True),
     lint_config = lint_config(),
 )
 ```
@@ -486,10 +486,10 @@ use_repo(rules_rust_pyo3, "rules_rust_pyo3")
 
 Normal dependencies and build dependencies resolve features separately for each
 `platform_triples` entry. Each generated crate has one library target, with
-features and dependencies selected by Cargo resolution. Build resolutions can
-share the default Bazel configuration when features, transitive dependencies,
-and build-script requirements agree. Otherwise, they retain the original target
-triple; equivalent build resolutions do not substitute another target triple.
+features and dependencies selected by Cargo resolution. A crate shares the
+default Bazel configuration only when its features and dependencies are
+independent of the original Cargo target and every normal and build dependency
+can also share. Otherwise, it retains the original target triple.
 Crates unreachable from the Cargo roots on every configured platform are
 incompatible. Generating a Bazel label does not make the crate an additional
 Cargo root.
@@ -516,9 +516,8 @@ Use `all_crate_deps()`, `aliases()`, and `crate_features()` for libraries. The s
 a normal dependency and a build dependency, including when a generated crate
 depends back on it. `cargo_target_triple` records the original target triple
 for build dependencies and survives execution transitions. Generated crates
-clear this setting when the default configuration supplies the same resolution;
-otherwise, they preserve it. Rust toolchains clear it. C++ toolchains retain
-their existing configuration.
+clear this setting when they share the default configuration. Rust toolchains
+clear it. C++ toolchains retain their existing configuration.
 `all_crate_deps(build = True)` is available only when build dependencies need
 the current Cargo resolution and their labels are identical across target
 platforms. Otherwise, use the generated `cargo_build_script`; the raw

@@ -50,7 +50,7 @@ def rust_crate(
     )
 
     if deps:
-        deps = {native.package_relative_label(dep): None for dep in deps}
+        deps = set([native.package_relative_label(dep) for dep in deps])
         resolved_deps = {}
         for cargo_target_triple, configuration in configurations.items():
             resolved_deps[cargo_target_triple] = {}
