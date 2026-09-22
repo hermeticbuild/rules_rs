@@ -3,9 +3,7 @@ load(":select_utils.bzl", "platform_label")
 
 def _build_aliases_by_triple(configuration):
     first = None
-    rows = configuration["build_deps_by_triple"]
-    for platform_triple in configuration["crate_features_by_triple"]:
-        deps_by_exec_triple = rows.get(platform_triple, rows.get("", {}))
+    for deps_by_exec_triple in configuration["build_deps_by_triple"].values():
         selected = {
             exec_platform_triple: {dep: alias for dep, alias in deps.items() if alias != None}
             for exec_platform_triple, deps in deps_by_exec_triple.items()
@@ -57,12 +55,11 @@ def all_crate_deps(
         if build:
             if not cargo_target_triple and configuration["build_cargo_target_triple_required_on"]:
                 fail("Build dependencies require a different Cargo resolution. Use cargo_build_script from the generated Cargo repository's defs.bzl.")
-            rows = configuration["build_deps_by_triple"]
-            for platform_triple in configuration["crate_features_by_triple"]:
-                deps_by_exec_triple = {exec_platform_triple: set(deps) for exec_platform_triple, deps in rows.get(platform_triple, rows.get("", {})).items()}
+            for deps_by_exec_triple in configuration["build_deps_by_triple"].values():
+                selected = {exec_platform_triple: set(deps) for exec_platform_triple, deps in deps_by_exec_triple.items()}
                 if build_deps == None:
-                    build_deps = deps_by_exec_triple
-                elif build_deps != deps_by_exec_triple:
+                    build_deps = selected
+                elif build_deps != selected:
                     fail("Build-script dependencies differ by target triple. Use cargo_build_script from the generated Cargo repository's defs.bzl.")
         build_deps = build_deps or {}
         platform_triples = set(configuration["crate_features_by_triple"] if normal or normal_dev or not build_deps else [])
