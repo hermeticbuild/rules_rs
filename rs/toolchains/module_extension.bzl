@@ -176,7 +176,9 @@ def _toolchains_impl(mctx):
             break
 
     repo_configs = resolve_toolchain_configs(mctx.modules)
-    if not repo_configs and not host_cargo:
+    download_rust_toolchains = bool(repo_configs) or not host_cargo
+    if not repo_configs:
+        # Custom toolchains still load rustc/component_labels.bzl from this repo.
         repo_configs[_DEFAULT_TOOLCHAIN_REPO_NAME] = struct(
             name = _DEFAULT_TOOLCHAIN_REPO_NAME,
             version = _DEFAULT_RUSTC_VERSION,
@@ -187,7 +189,7 @@ def _toolchains_impl(mctx):
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
         )
-    version_tags = repo_configs.values()
+    version_tags = repo_configs.values() if download_rust_toolchains else []
 
     versions = set([])
     rustfmt_versions = set([])
@@ -535,7 +537,7 @@ def _toolchains_impl(mctx):
     # user modules are not asked to import it.
     direct_deps = ["rs_rust_host_tools"] if root_module_name == "rules_rs" else []
     direct_dev_deps = []
-    for tag in version_tags:
+    for tag in repo_configs.values():
         toolchains_repository(
             name = tag.name,
             version = tag.version,
@@ -544,18 +546,7 @@ def _toolchains_impl(mctx):
             edition = tag.edition,
             extra_rustc_flags = tag.extra_rustc_flags,
             extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
-            target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES,
-        )
-
-    if not repo_configs:
-        # Custom toolchains still load rustc/component_labels.bzl from this repo.
-        toolchains_repository(
-            name = _DEFAULT_TOOLCHAIN_REPO_NAME,
-            version = _DEFAULT_RUSTC_VERSION,
-            rustfmt_version = _DEFAULT_RUSTC_VERSION,
-            rust_analyzer_version = _DEFAULT_RUSTC_VERSION,
-            edition = _DEFAULT_EDITION,
-            target_triples = [],
+            target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES if download_rust_toolchains else [],
         )
 
     # Dependency tags do not describe the root module's direct dependencies.
@@ -567,7 +558,7 @@ def _toolchains_impl(mctx):
             deps = direct_dev_deps if mctx.is_dev_dependency(tag) else direct_deps
             if tag.name not in deps:
                 deps.append(tag.name)
-    if ((not repo_configs or _DEFAULT_TOOLCHAIN_REPO_NAME in repo_configs) and
+    if (_DEFAULT_TOOLCHAIN_REPO_NAME in repo_configs and
         _DEFAULT_TOOLCHAIN_REPO_NAME not in direct_deps and
         _DEFAULT_TOOLCHAIN_REPO_NAME not in direct_dev_deps):
         # The default repo can be imported without a toolchain tag.
