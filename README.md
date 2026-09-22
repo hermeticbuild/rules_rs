@@ -293,6 +293,9 @@ Override `rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
 <details>
 <summary>Use a custom host Cargo without downloading Rust toolchains</summary>
 
+This can be useful with the Ferrocene toolchain: dependency resolution can use
+its Cargo executable without downloading the default Rust toolchain.
+
 Configure Cargo for dependency resolution in the root `MODULE.bazel`:
 
 ```bzl
