@@ -4,11 +4,6 @@ bzl_library(
     name = "rules_rust",
     srcs = ["rules_rust.bzl"],
     visibility = ["//visibility:public"],
-    deps = [
-        "@bazel_tools//tools/build_defs/repo:cache.bzl",
-        "@bazel_tools//tools/build_defs/repo:http.bzl",
-        "@bazel_tools//tools/build_defs/repo:utils.bzl",
-    ],
 )
 
 bzl_library(
@@ -69,9 +64,9 @@ bzl_library(
         "//rs/private:annotations",
         "//rs/private:cargo_credentials",
         "//rs/private:cargo_workspace_graph",
+        "//rs/private:crate_configurations",
         "//rs/private:crate_repository",
         "//rs/private:downloader",
-        "//rs/private:exec_dependency_labels",
         "//rs/private:git_cargo_workspace_repository",
         "//rs/private:git_crate_metadata_repository",
         "//rs/private:lint_flags",

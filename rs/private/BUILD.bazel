@@ -6,10 +6,11 @@ load(":annotations_test.bzl", "annotations_tests")
 load(":bindgen_test.bzl", "bindgen_tests")
 load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
 load(":cargo_build_script_variants_test.bzl", "cargo_build_script_variants_tests")
+load(":cargo_context_test.bzl", "cargo_context_tests")
 load(":cargo_toml_utils_test.bzl", "cargo_toml_utils_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
-load(":exec_dependency_labels_test.bzl", "exec_dependency_labels_tests")
+load(":crate_configurations_test.bzl", "crate_configurations_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
 load(":repository_utils_test.bzl", "repository_utils_tests")
@@ -45,13 +46,15 @@ bpf_linker_repository_tests()
 
 cargo_build_script_variants_tests()
 
+cargo_context_tests()
+
 cargo_toml_utils_tests()
 
 cargo_workspace_graph_tests()
 
 cfg_parser_tests()
 
-exec_dependency_labels_tests()
+crate_configurations_tests()
 
 lint_flags_tests()
 
@@ -76,7 +79,10 @@ bzl_library(
     name = "all_crate_deps",
     srcs = ["all_crate_deps.bzl"],
     visibility = ["//rs:__subpackages__"],
-    deps = [":select_utils"],
+    deps = [
+        ":cargo_select",
+        ":select_utils",
+    ],
 )
 
 bzl_library(
@@ -114,6 +120,7 @@ bzl_library(
     srcs = ["cargo_build_script_variants.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+        ":cargo_select",
         ":select_utils",
         "//rs:cargo_build_script",
         "@rules_rust//cargo/private:bzl_lib",
@@ -125,6 +132,8 @@ bzl_library(
     srcs = ["cargo_build_script_variants_test.bzl"],
     deps = [
         ":cargo_build_script_variants",
+        ":cargo_select",
+        "//rs:cargo_build_script",
         "@bazel_skylib//lib:unittest",
     ],
 )
@@ -195,7 +204,6 @@ bzl_library(
     srcs = ["cargo_workspace_graph.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
-        ":cargo_build_script_variants",
         ":cfg_parser",
         ":resolver",
         ":select_utils",
@@ -205,16 +213,16 @@ bzl_library(
 )
 
 bzl_library(
-    name = "exec_dependency_labels",
-    srcs = ["exec_dependency_labels.bzl"],
+    name = "crate_configurations",
+    srcs = ["crate_configurations.bzl"],
     visibility = ["//rs:__subpackages__"],
 )
 
 bzl_library(
-    name = "exec_dependency_labels_test",
-    srcs = ["exec_dependency_labels_test.bzl"],
+    name = "crate_configurations_test",
+    srcs = ["crate_configurations_test.bzl"],
     deps = [
-        ":exec_dependency_labels",
+        ":crate_configurations",
         "@bazel_skylib//lib:unittest",
     ],
 )
@@ -479,4 +487,24 @@ bzl_library(
     name = "semver",
     srcs = ["semver.bzl"],
     visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "cargo_select",
+    srcs = ["cargo_select.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":select_utils",
+        "//rs/platforms:triples",
+        "@rules_rust//rust/platform:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "cargo_context_test",
+    srcs = ["cargo_context_test.bzl"],
+    deps = [
+        "@bazel_skylib//lib:unittest",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
 )

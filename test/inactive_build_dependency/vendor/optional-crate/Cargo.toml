@@ -1,7 +1,0 @@
-[package]
-name = "optional-crate"
-version = "0.1.0"
-edition = "2021"
-
-[build-dependencies]
-build-helper = { path = "../build-helper" }

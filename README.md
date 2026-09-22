@@ -485,8 +485,13 @@ use_repo(rules_rust_pyo3, "rules_rust_pyo3")
 `crate.spec` and vendoring mode are not currently supported.
 
 Normal dependencies and build dependencies resolve features separately for each
-`platform_triples` entry. Crates with compatible features and dependencies share
-one target; differing definitions receive explicit `_exec` targets.
+`platform_triples` entry. Each generated crate has one library target, with
+features and dependencies selected by Cargo resolution. Equivalent resolutions
+share a Bazel configuration; the comparison includes transitive dependencies
+and build-script requirements.
+Crates unreachable from the Cargo roots on every configured platform are
+incompatible. Generating a Bazel label does not make the crate an additional
+Cargo root.
 
 Build scripts are grouped by target features, build dependencies, and aliases.
 The group is selected in the target configuration before its dependencies
@@ -506,11 +511,22 @@ cargo_build_script(
 )
 ```
 
-Use `all_crate_deps(normal = True)` and `aliases(normal = True)` for libraries.
-`all_crate_deps(build = True)` and `aliases(build = True)` remain available when
-the requested dependencies or aliases are identical across target platforms.
-Otherwise, use the generated `cargo_build_script`.
-Annotation-added dependencies retain the labels supplied by the user.
+Use `all_crate_deps(normal = True)`, `aliases(normal = True)`, and
+`crate_features()` for libraries. The same first-party library target can be
+a normal dependency and a build dependency, including when a generated crate
+depends back on it. `cargo_execution_target` records the original target triple
+for build dependencies and survives execution transitions. Generated crates
+normalize this setting when their resolutions are equivalent; Rust toolchains
+clear it. C++ toolchains retain their existing configuration.
+`all_crate_deps(build = True)` is available only when build dependencies need
+the current Cargo resolution and their labels are identical across target
+platforms. Otherwise, use the generated `cargo_build_script`; the raw
+`@rules_rs//rs:cargo_build_script.bzl` rule cannot establish that resolution
+from a dependency list. `aliases(build = True)` requires identical alias maps.
+Annotation-added dependencies retain the labels supplied by the user. Registry
+crates using `package.metadata.bazel.deps` must also declare those dependencies
+with `crate.annotation(deps = ...)` when configurations would otherwise be
+shared. Cargo registry metadata does not include these Bazel dependencies.
 
 Proc macros reached through normal dependencies use the existing conservative
 target feature resolution for their normal dependencies. They do not share

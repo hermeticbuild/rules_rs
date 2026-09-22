@@ -195,17 +195,16 @@ crate.annotation_select(
 )
 use_repo(crate, "optional_target_build_dep")
 
-# Keep optional-crate inactive in every resolved target platform.
 crate.from_cargo(
-    name = "inactive_build_dependency",
-    cargo_lock = "//:inactive_build_dependency/Cargo.lock",
-    cargo_toml = "//:inactive_build_dependency/Cargo.toml",
+    name = "first_party_build_dependency",
+    cargo_lock = "//first_party_build_dependency:Cargo.lock",
+    cargo_toml = "//first_party_build_dependency:Cargo.toml",
     platform_triples = [
         "aarch64-apple-darwin",
         "x86_64-unknown-linux-gnu",
     ],
 )
-use_repo(crate, "inactive_build_dependency")
+use_repo(crate, "first_party_build_dependency")
 
 # Workspace member whose Cargo.toml lives at the bazel workspace root.
 crate.from_cargo(

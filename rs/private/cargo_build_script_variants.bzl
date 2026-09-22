@@ -3,6 +3,7 @@
 # buildifier: disable=bzl-visibility
 load("@rules_rust//cargo/private:cargo_build_script.bzl", "name_to_crate_name", "name_to_pkg_name")
 load("//rs:cargo_build_script.bzl", "cargo_build_script")
+load(":cargo_select.bzl", "cargo_select")
 load(":select_utils.bzl", "platform_label", "shared_and_per_platform")
 
 def build_script_variants(
@@ -64,29 +65,68 @@ def cargo_build_script_for_targets(
         **kwargs: Remaining cargo_build_script arguments.
     """
 
-    split = len(build_scripts) > 1
-    script_kwargs = dict(kwargs) if split else kwargs
-    if split:
-        branches = {}
+    _declare_build_scripts(name, build_scripts, crate_features, deps, aliases, use_legacy_rules_rust_platforms, None, kwargs)
 
+def cargo_build_script_for_configurations(
+        name,
+        configurations,
+        hub_name,
+        preserve_context = False,
+        crate_features = [],
+        deps = [],
+        aliases = {},
+        use_legacy_rules_rust_platforms = False,
+        **kwargs):
+    """Select a build script before changing its compilation platform."""
+    scripts = {}
+    for context, definition in configurations.items():
+        for triple in sorted(definition["crate_features_select"]):
+            script_deps, deps_by_platform = shared_and_per_platform(
+                definition["build_deps_by_target"].get(triple, {}),
+                use_legacy_rules_rust_platforms,
+            )
+            recipe = {
+                "crate_features": definition["crate_features_select"][triple],
+                "deps": script_deps,
+                "deps_by_platform": deps_by_platform,
+                "aliases": definition["build_aliases_by_target"].get(triple, {}),
+                "context": (context or triple) if preserve_context else definition["build_contexts"][triple],
+            }
+            key = json.encode(recipe)
+            if key not in scripts:
+                recipe["conditions"] = {}
+                recipe["representative"] = context + "_" + triple if context else triple
+                scripts[key] = recipe
+            scripts[key]["conditions"].setdefault(context, []).append(triple)
+    _declare_build_scripts(name, scripts.values(), crate_features, deps, aliases, use_legacy_rules_rust_platforms, hub_name, kwargs)
+
+def _declare_build_scripts(name, build_scripts, crate_features, deps, aliases, use_legacy_rules_rust_platforms, hub_name, kwargs):
+    split = len(build_scripts) > 1
+    script_kwargs = dict(kwargs)
+    branches = {}
+    if split:
         # Preserve the environment derived by rules_rust from the original name.
         if kwargs.get("pkg_name") == None:
             script_kwargs["pkg_name"] = name_to_pkg_name(name)
         rustc_env = dict(kwargs.get("rustc_env", {}))
         rustc_env.setdefault("CARGO_CRATE_NAME", name_to_crate_name(name_to_pkg_name(name)))
         script_kwargs["rustc_env"] = rustc_env
-
-        # Wildcard builds must select the target platform through the alias.
         if "manual" not in kwargs.get("tags", []):
             script_kwargs["tags"] = kwargs.get("tags", []) + ["manual"]
 
     for variant in build_scripts:
         script_name = name
         if split:
-            representative = variant["target_triples"][0]
-            script_name = "%s_%s" % (name, representative)
-            for triple in variant["target_triples"]:
-                branches[triple] = ":" + script_name
+            representative = variant["representative"] if hub_name else variant["target_triples"][0]
+            script_name = name + "_" + representative
+            if hub_name:
+                for context, triples in variant["conditions"].items():
+                    by_triple = branches.setdefault(context, {})
+                    for triple in triples:
+                        by_triple[triple] = ":" + script_name
+            else:
+                for triple in variant["target_triples"]:
+                    branches[triple] = ":" + script_name
 
             # Distinct build.rs definitions need distinct metadata when their
             # binaries share an exec configuration.
@@ -94,24 +134,31 @@ def cargo_build_script_for_targets(
             script_kwargs["rustc_flags"] = kwargs.get("rustc_flags", []) + [
                 "--codegen=metadata=-" + representative.replace("-", "_"),
             ]
+        if hub_name:
+            script_kwargs["cargo_contexts"] = {context: variant["context"] for context in variant["conditions"]}
         script_deps = variant["deps"]
+        script_aliases = {dep: alias for dep, alias in variant["aliases"].items() if dep in script_deps} | aliases
         if variant["deps_by_platform"]:
+            script_aliases = select({
+                platform: {dep: alias for dep, alias in variant["aliases"].items() if dep in script_deps or dep in items} | aliases
+                for platform, items in variant["deps_by_platform"].items()
+            } | {"//conditions:default": script_aliases})
             script_deps = script_deps + select(variant["deps_by_platform"] | {"//conditions:default": []})
         cargo_build_script(
             name = script_name,
             crate_features = crate_features + variant["crate_features"],
             deps = deps + script_deps,
-            aliases = variant["aliases"] | aliases,
+            aliases = script_aliases,
             **script_kwargs
         )
     if split:
-        # This alias selects before cargo_build_script.script applies cfg=exec.
+        # The alias selects before cargo_build_script.script applies cfg=exec.
+        actual = cargo_select(branches, hub_name, use_legacy_rules_rust_platforms) if hub_name else select({
+            platform_label(triple, use_legacy_rules_rust_platforms): branches[triple]
+            for triple in sorted(branches)
+        })
         native.alias(
             name = name,
-            # Legacy platform labels can coincide; preserve triple ordering.
-            actual = select({
-                platform_label(triple, use_legacy_rules_rust_platforms): branches[triple]
-                for triple in sorted(branches)
-            }),
+            actual = actual,
             **{key: kwargs[key] for key in ["tags", "testonly", "visibility", "target_compatible_with"] if key in kwargs}
         )

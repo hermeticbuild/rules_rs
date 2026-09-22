@@ -7,7 +7,8 @@ load(
 load("//rs:rust_binary.bzl", "rust_binary")
 load("//rs:rust_library.bzl", "rust_library")
 load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
-load(":cargo_build_script_variants.bzl", "cargo_build_script_for_targets")
+load(":cargo_build_script_variants.bzl", "cargo_build_script_for_configurations", "cargo_build_script_for_targets")
+load(":cargo_select.bzl", "cargo_select")
 
 def rust_crate(
         name,
@@ -43,14 +44,62 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False,
-        name_suffix = ""):
-    build_script_name = "_bs" + name_suffix
+        configurations = None,
+        cargo_contexts = {},
+        hub_name = ""):
+    build_script_name = "_bs"
     package_metadata_name = name + "_package_metadata"
-    if not name_suffix:
-        package_metadata(
-            name = package_metadata_name,
-            purl = purl,
-            visibility = ["//visibility:public"],
+    package_metadata(
+        name = package_metadata_name,
+        purl = purl,
+        visibility = ["//visibility:public"],
+    )
+
+    if configurations != None:
+        resolved_deps = {context: definition["deps_select"] for context, definition in configurations.items()}
+        if deps:
+            deps = list({native.package_relative_label(dep): None for dep in deps})
+            resolved_deps = {}
+            for context, definition in configurations.items():
+                resolved_deps[context] = {}
+                for triple, labels in definition["deps_select"].items():
+                    selected = []
+                    for label in labels:
+                        label = native.package_relative_label(label)
+                        if label not in deps:
+                            selected.append(label)
+                    resolved_deps[context][triple] = selected
+        deps = deps + cargo_select(resolved_deps, hub_name, use_legacy_rules_rust_platforms, default = [])
+        crate_features = crate_features + cargo_select(
+            {context: definition["crate_features_select"] for context, definition in configurations.items()},
+            hub_name,
+            use_legacy_rules_rust_platforms,
+            default = [],
+        )
+        aliases = cargo_select(
+            {
+                context: {
+                    triple: {
+                        dep: alias
+                        for dep, alias in definition["aliases"].items()
+                        if dep in definition["deps_select"].get(triple, [])
+                    } | aliases
+                    for triple in definition["crate_features_select"]
+                }
+                for context, definition in configurations.items()
+            },
+            hub_name,
+            use_legacy_rules_rust_platforms,
+            default = {},
+        )
+        target_compatible_with = cargo_select(
+            {
+                context: {triple: [] for triple in definition["crate_features_select"]}
+                for context, definition in configurations.items()
+            },
+            hub_name,
+            use_legacy_rules_rust_platforms,
+            default = ["@platforms//:incompatible"],
         )
 
     compile_data = native.glob(
@@ -81,12 +130,19 @@ def rust_crate(
         "norustfmt",
     ]
     crate_tags = default_tags + tags
-    name += name_suffix
+
+    if configurations != None:
+        active = False
+        for definition in configurations.values():
+            if definition["crate_features_select"]:
+                active = True
+                break
+        if not active:
+            build_script = None
 
     if build_script:
-        cargo_build_script_for_targets(
+        script_kwargs = dict(
             name = build_script_name,
-            build_scripts = build_scripts,
             deps = build_deps,
             aliases = build_aliases,
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
@@ -111,6 +167,15 @@ def rust_crate(
             tags = crate_tags + build_script_tags,
             version = version,
         )
+
+        if configurations == None:
+            cargo_build_script_for_targets(build_scripts = build_scripts, **script_kwargs)
+        else:
+            cargo_build_script_for_configurations(
+                configurations = configurations,
+                hub_name = hub_name,
+                **script_kwargs
+            )
 
         deps = deps + [build_script_name]
 
@@ -140,6 +205,7 @@ def rust_crate(
     else:
         kwargs = dict(
             name = name,
+            cargo_contexts = cargo_contexts,
             crate_name = crate_name,
             version = version,
             srcs = srcs,
@@ -173,6 +239,7 @@ def rust_crate(
     for binary, crate_root in binaries.items():
         rust_binary(
             name = binary + "__bin",
+            cargo_contexts = cargo_contexts,
             compile_data = compile_data,
             aliases = aliases,
             deps = binary_lib_dep + deps,

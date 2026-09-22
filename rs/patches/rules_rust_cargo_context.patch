@@ -1,0 +1,343 @@
+diff --git a/cargo/private/cargo_build_script_wrapper.bzl b/cargo/private/cargo_build_script_wrapper.bzl
+--- a/cargo/private/cargo_build_script_wrapper.bzl
++++ b/cargo/private/cargo_build_script_wrapper.bzl
+@@ -41,6 +41,7 @@
+         root_path = None,
+         srcs = [],
+         crate_features = [],
++        cargo_contexts = {},
+         version = None,
+         deps = [],
+         link_deps = [],
+@@ -135,6 +136,7 @@
+         pkg_name (string, optional): Override the package name used for the build script. This is useful if the build target name gets too long otherwise.
+         link_deps (list, optional): The subset of the (normal) dependencies of the crate that have the
+             links attribute and therefore provide environment variables to this build script.
++        cargo_contexts (dict, optional): Cargo context mapping applied to the compiled build script after the exec transition.
+         proc_macro_deps (list of label, optional): List of rust_proc_macro targets used to build the script.
+         allow_build_script_to_detect_nonhermetic_paths (bool, optional): Allow the build script to emit absolute host-system paths in rustc-link-search, rustc-env, or metadata directives.
+         build_script_env (dict, optional): Environment variables for build scripts.
+@@ -214,6 +216,7 @@
+     # This target exists as the actual build script.
+     rust_binary(
+         name = name + "_",
++        cargo_contexts = cargo_contexts,
+         crate_name = crate_name,
+         srcs = srcs,
+         crate_root = crate_root,
+diff --git a/cargo/settings/BUILD.bazel b/cargo/settings/BUILD.bazel
+--- a/cargo/settings/BUILD.bazel
++++ b/cargo/settings/BUILD.bazel
+@@ -2,6 +2,7 @@
+ load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
+ load(
+     ":settings.bzl",
++    "cargo_execution_target",
+     "cargo_manifest_dir_filename_suffixes_to_retain",
+     "debug_std_streams_output_group",
+     "emit_build_script_warnings",
+@@ -31,6 +32,8 @@
+     deps = [":bzl_lib"],
+ )
+ 
++cargo_execution_target()
++
+ cargo_manifest_dir_filename_suffixes_to_retain()
+ 
+ debug_std_streams_output_group()
+diff --git a/cargo/settings/settings.bzl b/cargo/settings/settings.bzl
+--- a/cargo/settings/settings.bzl
++++ b/cargo/settings/settings.bzl
+@@ -4,6 +4,14 @@
+ """
+ 
+ load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag", "string_list_flag")
++
++def cargo_execution_target():
++    """Select the Cargo dependency resolution, preserving it through proc-macro exec transitions."""
++    string_flag(
++        name = "cargo_execution_target",
++        build_setting_default = "",
++        scope = "universal",
++    )
+ 
+ def experimental_symlink_execroot():
+     """A flag for which causes `cargo_build_script` to symlink the execroot of the action to \
+diff --git a/rust/private/per_crate_flag_trim.bzl b/rust/private/per_crate_flag_trim.bzl
+--- a/rust/private/per_crate_flag_trim.bzl
++++ b/rust/private/per_crate_flag_trim.bzl
+@@ -12,50 +12,22 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ 
+-"""Transition to trim per_crate_rustc_flag for non-matching targets.
+-
+-This module provides a configuration trimming mechanism for the
+-`per_crate_rustc_flag` setting. When a target has
+-`skip_per_crate_rustc_flags = True`, this transition clears the setting,
+-putting the target back into a canonical configuration.
+-
+-This is useful for third-party crates (e.g., from crate_universe) that will
+-never match any per-crate flag filter. Without trimming, these crates would
+-be rebuilt unnecessarily when any per-crate flag is set, even though the
+-filter doesn't match them.
+-
+-Usage:
+-    Third-party crate generators (like crate_universe) should set
+-    `skip_per_crate_rustc_flags = True` on generated rust_library targets.
+-"""
++"""Canonicalize per-crate Rust flags and generated Cargo dependency resolutions."""
+ 
+ _PER_CRATE_FLAG_SETTING = "@rules_rust//rust/settings:per_crate_rustc_flag"
++CARGO_CONTEXT_SETTING = "@rules_rust//cargo/settings:cargo_execution_target"
++CRATE_SETTINGS = [_PER_CRATE_FLAG_SETTING, CARGO_CONTEXT_SETTING]
+ 
+-def _per_crate_flag_trim_transition_impl(settings, attr):
+-    """Clear per_crate_rustc_flag for targets marked to skip it.
+-
+-    Args:
+-        settings: A dict of current build settings.
+-        attr: The attributes of the target being configured.
+-
+-    Returns:
+-        A dict with the per_crate_rustc_flag setting (cleared or preserved).
+-    """
+-
+-    # If this target is marked to skip per-crate flags, clear the setting
+-    # to return it to a canonical configuration
+-    if getattr(attr, "skip_per_crate_rustc_flags", False):
+-        return {
+-            _PER_CRATE_FLAG_SETTING: [],
+-        }
+-
+-    # Otherwise, keep the current value
++def trim_crate_settings(settings, attr):
++    """Apply generated context equivalences and preserve first-party settings."""
++    context = settings[CARGO_CONTEXT_SETTING]
+     return {
+-        _PER_CRATE_FLAG_SETTING: settings[_PER_CRATE_FLAG_SETTING],
++        _PER_CRATE_FLAG_SETTING: [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING],
++        CARGO_CONTEXT_SETTING: getattr(attr, "cargo_contexts", {}).get(context, context),
+     }
+ 
+ per_crate_flag_trim_transition = transition(
+-    implementation = _per_crate_flag_trim_transition_impl,
+-    inputs = [_PER_CRATE_FLAG_SETTING],
+-    outputs = [_PER_CRATE_FLAG_SETTING],
++    implementation = trim_crate_settings,
++    inputs = CRATE_SETTINGS,
++    outputs = CRATE_SETTINGS,
+ )
+diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
+--- a/rust/private/rust.bzl
++++ b/rust/private/rust.bzl
+@@ -19,7 +19,9 @@
+ load(":common.bzl", "COMMON_PROVIDERS", "rust_common")
+ load(
+     ":per_crate_flag_trim.bzl",
++    "CRATE_SETTINGS",
+     "per_crate_flag_trim_transition",
++    "trim_crate_settings",
+ )
+ load(
+     ":providers.bzl",
+@@ -64,9 +66,6 @@
+ 
+ # TODO(marco): Separate each rule into its own file.
+ 
+-# Setting path for per_crate_rustc_flag, used in transition definitions
+-_PER_CRATE_FLAG_SETTING = "@rules_rust//rust/settings:per_crate_rustc_flag"
+-
+ def _toolchain_make_variables(ctx):
+     make_variables = {}
+     for toolchain_target in getattr(ctx.attr, "toolchains", []):
+@@ -944,6 +943,9 @@
+         doc = "A setting used to determine whether or not the `--stamp` flag is enabled",
+         default = Label("//rust/private:stamp"),
+     ),
++    "cargo_contexts": attr.string_dict(
++        doc = "Equivalent Cargo dependency resolutions, mapping incoming context to canonical context. Unlisted contexts are preserved.",
++    ),
+     "skip_per_crate_rustc_flags": attr.bool(
+         doc = dedent("""\
+             If True, the `per_crate_rustc_flag` setting is trimmed from this
+@@ -1246,31 +1248,22 @@
+         platform = "@" + platform
+     return platform
+ 
+-def _rust_static_library_transition_impl(settings, attr):
+-    # Trim per_crate_rustc_flag for third-party crates to improve cache hit rates
+-    per_crate_flags = [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING]
+-    return {
++def _rust_platform_transition_impl(settings, attr):
++    return trim_crate_settings(settings, attr) | {
+         "//command_line_option:platforms": _resolve_platform(settings, attr),
+-        _PER_CRATE_FLAG_SETTING: per_crate_flags,
+     }
+ 
+-_rust_static_library_transition = transition(
+-    implementation = _rust_static_library_transition_impl,
+-    inputs = [
+-        "//command_line_option:platforms",
+-        _PER_CRATE_FLAG_SETTING,
+-    ],
+-    outputs = [
+-        "//command_line_option:platforms",
+-        _PER_CRATE_FLAG_SETTING,
+-    ],
++_rust_platform_transition = transition(
++    implementation = _rust_platform_transition_impl,
++    inputs = ["//command_line_option:platforms"] + CRATE_SETTINGS,
++    outputs = ["//command_line_option:platforms"] + CRATE_SETTINGS,
+ )
+ 
+ rust_static_library = rule(
+     implementation = _rust_static_library_impl,
+     attrs = _COMMON_ATTRS | _PLATFORM_ATTRS,
+     fragments = ["cpp"],
+-    cfg = _rust_static_library_transition,
++    cfg = _rust_platform_transition,
+     toolchains = [
+         str(Label("//rust:toolchain_type")),
+         config_common.toolchain_type("@bazel_tools//tools/cpp:toolchain_type", mandatory = False),
+@@ -1292,26 +1285,6 @@
+         """),
+ )
+ 
+-def _rust_shared_library_transition_impl(settings, attr):
+-    # Trim per_crate_rustc_flag for third-party crates to improve cache hit rates
+-    per_crate_flags = [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING]
+-    return {
+-        "//command_line_option:platforms": _resolve_platform(settings, attr),
+-        _PER_CRATE_FLAG_SETTING: per_crate_flags,
+-    }
+-
+-_rust_shared_library_transition = transition(
+-    implementation = _rust_shared_library_transition_impl,
+-    inputs = [
+-        "//command_line_option:platforms",
+-        _PER_CRATE_FLAG_SETTING,
+-    ],
+-    outputs = [
+-        "//command_line_option:platforms",
+-        _PER_CRATE_FLAG_SETTING,
+-    ],
+-)
+-
+ _CC_RUNTIME_LINKAGE_ATTRS = {
+     "cc_runtime_linkage": attr.string(
+         doc = dedent("""\
+@@ -1332,7 +1305,7 @@
+     implementation = _rust_cdylib_library_impl,
+     attrs = _COMMON_ATTRS | _PLATFORM_ATTRS | _EXPERIMENTAL_USE_CC_COMMON_LINK_ATTRS | _CC_RUNTIME_LINKAGE_ATTRS,
+     fragments = ["cpp"],
+-    cfg = _rust_shared_library_transition,
++    cfg = _rust_platform_transition,
+     toolchains = [
+         str(Label("//rust:toolchain_type")),
+         config_common.toolchain_type("@bazel_tools//tools/cpp:toolchain_type", mandatory = False),
+@@ -1419,33 +1392,13 @@
+     "stamp": _stamp_attribute(default_value = -1),
+ } | _EXPERIMENTAL_USE_CC_COMMON_LINK_ATTRS
+ 
+-def _rust_binary_transition_impl(settings, attr):
+-    # Trim per_crate_rustc_flag for third-party crates to improve cache hit rates
+-    per_crate_flags = [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING]
+-    return {
+-        "//command_line_option:platforms": _resolve_platform(settings, attr),
+-        _PER_CRATE_FLAG_SETTING: per_crate_flags,
+-    }
+-
+-_rust_binary_transition = transition(
+-    implementation = _rust_binary_transition_impl,
+-    inputs = [
+-        "//command_line_option:platforms",
+-        _PER_CRATE_FLAG_SETTING,
+-    ],
+-    outputs = [
+-        "//command_line_option:platforms",
+-        _PER_CRATE_FLAG_SETTING,
+-    ],
+-)
+-
+ rust_binary = rule(
+     implementation = _rust_binary_impl,
+     provides = COMMON_PROVIDERS,
+     attrs = _COMMON_ATTRS | _RUST_BINARY_ATTRS | _PLATFORM_ATTRS,
+     executable = True,
+     fragments = ["cpp"],
+-    cfg = _rust_binary_transition,
++    cfg = _rust_platform_transition,
+     toolchains = [
+         str(Label("//rust:toolchain_type")),
+         config_common.toolchain_type("@bazel_tools//tools/cpp:toolchain_type", mandatory = False),
+@@ -1668,33 +1621,13 @@
+     ],
+ )
+ 
+-def _rust_test_transition_impl(settings, attr):
+-    # Trim per_crate_rustc_flag for third-party crates to improve cache hit rates
+-    per_crate_flags = [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING]
+-    return {
+-        "//command_line_option:platforms": _resolve_platform(settings, attr),
+-        _PER_CRATE_FLAG_SETTING: per_crate_flags,
+-    }
+-
+-_rust_test_transition = transition(
+-    implementation = _rust_test_transition_impl,
+-    inputs = [
+-        "//command_line_option:platforms",
+-        _PER_CRATE_FLAG_SETTING,
+-    ],
+-    outputs = [
+-        "//command_line_option:platforms",
+-        _PER_CRATE_FLAG_SETTING,
+-    ],
+-)
+-
+ rust_test = rule(
+     implementation = _rust_test_impl,
+     provides = COMMON_PROVIDERS,
+     attrs = _COMMON_ATTRS | _RUST_TEST_ATTRS | _PLATFORM_ATTRS,
+     executable = True,
+     fragments = ["cpp"],
+-    cfg = _rust_test_transition,
++    cfg = _rust_platform_transition,
+     test = True,
+     toolchains = [
+         str(Label("//rust:toolchain_type")),
+diff --git a/rust/private/toolchain.bzl b/rust/private/toolchain.bzl
+--- a/rust/private/toolchain.bzl
++++ b/rust/private/toolchain.bzl
+@@ -9,6 +9,7 @@
+ load("//rust/platform:triple.bzl", "triple")
+ load("//rust/private:common.bzl", "rust_common")
+ load("//rust/private:lto.bzl", "RustLtoInfo")
++load("//rust/private:per_crate_flag_trim.bzl", "CARGO_CONTEXT_SETTING")
+ load(
+     "//rust/private:rust_allocator_libraries.bzl",
+     "make_libstd_and_allocator_ccinfo",
+@@ -699,10 +700,23 @@
+         make_variable_info,
+     ]
+ 
++def _clear_cargo_context_impl(_settings, _attr):
++    return {CARGO_CONTEXT_SETTING: ""}
++
++_clear_cargo_context = transition(
++    implementation = _clear_cargo_context_impl,
++    inputs = [],
++    outputs = [CARGO_CONTEXT_SETTING],
++)
++
+ rust_toolchain = rule(
+     implementation = _rust_toolchain_impl,
++    cfg = _clear_cargo_context,
+     fragments = ["cpp"],
+     attrs = {
++        "_allowlist_function_transition": attr.label(
++            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
++        ),
+         "allocator_library": attr.label(
+             doc = "Target that provides allocator functions when `rust_library` targets are embedded in a `cc_binary`.",
+             default = Label("//rust/settings:default_allocator_library"),

@@ -1,0 +1,22 @@
+[package]
+name = "first-party-build-dependency"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+resolver = "2"
+members = ["helper"]
+exclude = ["vendor/bridge", "vendor/build-macro", "vendor/leaf", "vendor/optional-helper", "vendor/shared"]
+
+[dependencies]
+helper = { path = "helper", features = ["target_feature"] }
+shared = { path = "vendor/shared", features = ["target_feature"] }
+bridge = { path = "vendor/bridge" }
+leaf = { path = "vendor/leaf" }
+
+[build-dependencies]
+build-macro = { path = "vendor/build-macro" }
+helper = { path = "helper", features = ["exec_feature"] }
+shared = { path = "vendor/shared", features = ["exec_feature"] }
+bridge = { path = "vendor/bridge" }
+leaf = { path = "vendor/leaf" }

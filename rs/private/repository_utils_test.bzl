@@ -1,4 +1,4 @@
-"""Tests for target and execution dependency labels in generated BUILD files."""
+"""Tests for Cargo configuration data in generated BUILD files."""
 
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
 load(":repository_utils.bzl", "render_rust_crate_call")
@@ -6,7 +6,7 @@ load(":repository_utils.bzl", "render_rust_crate_call")
 _LINUX = "x86_64-unknown-linux-gnu"
 _MACOS = "aarch64-apple-darwin"
 
-def _attrs(variants = None, **kwargs):
+def _attrs(configurations = None, context_map = {}, **kwargs):
     fields = dict(
         aliases = {},
         allow_build_script_to_detect_nonhermetic_paths = False,
@@ -26,20 +26,23 @@ def _attrs(variants = None, **kwargs):
         data = [],
         deps = [],
         deps_select = {_LINUX: []},
+        hub_name = "crates",
         rustc_flags = [],
         rustc_flags_select = {},
         use_legacy_rules_rust_platforms = False,
     )
-    if variants != None:
+    if configurations != None:
         for key in ["aliases", "build_script_deps", "build_script_deps_select", "crate_features", "crate_features_select", "deps_select"]:
             fields.pop(key)
-        fields["resolved_crates"] = json.encode(variants)
+        fields["resolved_crates"] = json.encode({
+            "context_map": context_map,
+            "definitions": configurations,
+        })
     fields.update(kwargs)
     return struct(**fields)
 
-def _variant(**kwargs):
+def _definition(**kwargs):
     return dict(
-        name_suffix = "",
         crate_features_select = {_LINUX: []},
         deps_select = {_LINUX: []},
         aliases = {},
@@ -62,132 +65,87 @@ def _values(binaries = {}):
         "version": repr("1.0.0"),
     }
 
+def _argument(rendered, name):
+    return json.decode(rendered.split("    " + name + " = ")[1].split(",\n")[0])
+
 def _build_scripts(rendered):
-    return json.decode(rendered.split("    build_scripts = ")[1].split(",\n")[0])
+    return _argument(rendered, "build_scripts")
 
-def _split_dependency_labels_test_impl(ctx):
+def _single_crate_test_impl(ctx):
     env = unittest.begin(ctx)
-    build_deps = {_LINUX: {_MACOS: ["@helper//:helper_exec"]}}
+    definitions = {
+        "": _definition(
+            crate_features_select = {_LINUX: ["normal_feature"]},
+            deps_select = {_LINUX: ["@dependency//:normal"]},
+            build_deps_by_target = {_LINUX: {_MACOS: ["@helper//:helper"]}},
+        ),
+        _LINUX: _definition(
+            crate_features_select = {_MACOS: ["build_feature"]},
+            deps_select = {_MACOS: ["@dependency//:build"]},
+        ),
+    }
+    context_map = {"": "", _LINUX: _LINUX, _MACOS: _LINUX}
+    binaries = {"example-cli": "src/main.rs"}
     rendered = render_rust_crate_call(
-        _attrs(variants = [
-            _variant(
-                crate_features_select = {_LINUX: ["shared_feature"]},
-                deps_select = {_LINUX: ["@dependency//:dependency"]},
-                build_deps_by_target = build_deps,
-            ),
-            _variant(
-                name_suffix = "_exec",
-                crate_features_select = {_LINUX: ["shared_feature"]},
-                deps_select = {_LINUX: ["@dependency//:dependency_exec"]},
-                build_deps_by_target = build_deps,
-            ),
-        ]),
-        _values(binaries = {"example-cli": "src/main.rs"}),
+        _attrs(configurations = definitions, context_map = context_map),
+        _values(binaries = binaries),
     )
-    calls = rendered.split("rust_crate(")[1:]
-    asserts.equals(env, 2, len(calls))
-    target_call, exec_call = calls
-    asserts.true(env, 'name = "example",' in target_call)
-    asserts.true(env, 'name = "example",' in exec_call)
-    asserts.true(env, 'name_suffix = "_exec",' in exec_call)
-    asserts.true(env, '"@dependency//:dependency"' in target_call)
-    asserts.false(env, '"@dependency//:dependency_exec"' in target_call)
-    asserts.true(env, '"@dependency//:dependency_exec"' in exec_call)
-    asserts.equals(env, [{
-        "target_triples": [_LINUX],
-        "crate_features": ["shared_feature"],
-        "deps": ["@helper//:helper_exec"],
-        "deps_by_platform": {},
-        "aliases": {},
-    }], _build_scripts(target_call))
-    asserts.equals(env, _build_scripts(target_call), _build_scripts(exec_call))
-    asserts.true(env, 'binaries = {"example-cli": "src/main.rs"}' in target_call)
-    asserts.true(env, "binaries = {}" in exec_call)
-    for call in [target_call, exec_call]:
-        asserts.true(env, "target_compatible_with = select({" in call)
-        asserts.true(env, '"@rules_rs//rs/platforms/config:%s": []' % _LINUX in call)
-        asserts.true(env, '"//conditions:default": ["@platforms//:incompatible"]' in call)
-
-    rendered = render_rust_crate_call(
-        _attrs(variants = [_variant(), _variant(name_suffix = "_exec", crate_features_select = {_MACOS: []})]),
-        _values(),
-    )
-    target_call, exec_call = rendered.split("rust_crate(")[1:]
-    for call, triple, other in [(target_call, _LINUX, _MACOS), (exec_call, _MACOS, _LINUX)]:
-        compatibility = call.split("target_compatible_with = ")[1].split("    links =")[0]
-        asserts.true(env, triple in compatibility)
-        asserts.false(env, other in compatibility)
+    asserts.equals(env, 1, rendered.count("rust_crate("))
+    asserts.equals(env, definitions, _argument(rendered, "configurations"))
+    asserts.equals(env, context_map, _argument(rendered, "cargo_contexts"))
+    asserts.equals(env, binaries, _argument(rendered, "binaries"))
+    asserts.equals(env, "crates", _argument(rendered, "hub_name"))
+    asserts.false(env, "name_suffix" in rendered)
+    asserts.false(env, "_exec" in rendered)
+    asserts.equals(env, 1, rendered.count("normal_feature"))
+    asserts.equals(env, [], _build_scripts(rendered))
     return unittest.end(env)
 
 def _separate_build_aliases_test_impl(ctx):
     env = unittest.begin(ctx)
-    build_deps = {
-        _LINUX: {_MACOS: ["@build//:linux_exec"]},
-        _MACOS: {_MACOS: ["@build//:macos_exec"]},
-    }
-    build_aliases = {
-        _LINUX: {"@build//:linux_exec": "renamed_build"},
-        _MACOS: {"@build//:macos_exec": "renamed_build"},
-    }
-    rendered = render_rust_crate_call(
-        _attrs(variants = [
-            _variant(
-                crate_features_select = {_LINUX: [], _MACOS: []},
-                aliases = {"@normal//:normal": "renamed"},
-                deps_select = {_LINUX: ["@normal//:normal"], _MACOS: ["@normal//:normal"]},
-                build_deps_by_target = build_deps,
-                build_aliases_by_target = build_aliases,
-            ),
-        ]),
-        _values(),
+    definition = _definition(
+        crate_features_select = {_LINUX: [], _MACOS: []},
+        aliases = {"@normal//:normal": "renamed"},
+        deps_select = {_LINUX: ["@normal//:normal"], _MACOS: ["@normal//:normal"]},
+        build_deps_by_target = {
+            _LINUX: {_MACOS: ["@build//:linux"]},
+            _MACOS: {_MACOS: ["@build//:macos"]},
+        },
+        build_aliases_by_target = {
+            _LINUX: {"@build//:linux": "renamed_build"},
+            _MACOS: {"@build//:macos": "renamed_build"},
+        },
     )
+    rendered = render_rust_crate_call(_attrs(configurations = {"": definition}), _values())
+    asserts.equals(env, {"": definition}, _argument(rendered, "configurations"))
     aliases = rendered.split("    aliases = ")[1].split("    build_aliases = ")[0]
-    build_scripts = {script["target_triples"][0]: script for script in _build_scripts(rendered)}
-    asserts.true(env, '"@normal//:normal": "renamed"' in aliases)
     asserts.false(env, "@build//:" in aliases)
-    for triple in [_LINUX, _MACOS]:
-        asserts.equals(env, build_aliases[triple], build_scripts[triple]["aliases"])
-        asserts.equals(env, build_deps[triple][_MACOS], build_scripts[triple]["deps"])
-        asserts.equals(env, {}, build_scripts[triple]["deps_by_platform"])
-    asserts.equals(env, 1, rendered.count("select("))
+    asserts.equals(env, 1, rendered.count('"@normal//:normal": "renamed"'))
     return unittest.end(env)
 
-def _merged_resolutions_test_impl(ctx):
+def _annotation_and_git_values_test_impl(ctx):
     env = unittest.begin(ctx)
+    values = _values() | {
+        "binaries": "binaries",
+        "build_script": "build_script",
+        "crate_name": "crate_name",
+        "has_lib": "has_lib",
+        "is_proc_macro": "is_proc_macro",
+    }
     rendered = render_rust_crate_call(
-        _attrs(variants = [
-            _variant(
-                crate_features_select = {
-                    _LINUX: ["shared"],
-                    _MACOS: ["shared", "macos"],
-                },
-                deps_select = {_LINUX: ["@normal//:normal"], _MACOS: ["@macos//:macos"]},
-                aliases = {"@normal//:normal": "normal_alias", "@macos//:macos": "macos_alias"},
-                build_deps_by_target = {
-                    _LINUX: {_MACOS: ["@build//:build"]},
-                    _MACOS: {_MACOS: ["@macos_build//:macos_build"]},
-                },
-                build_aliases_by_target = {
-                    _LINUX: {"@build//:build": "build_alias"},
-                    _MACOS: {"@macos_build//:macos_build": "macos_build_alias"},
-                },
-            ),
-        ]),
-        _values(),
+        _attrs(configurations = {"": _definition()}, deps = ["//annotated:dep"]),
+        values,
+        bazel_metadata = {"deps": ["//metadata:dep"]},
+        extra_deps = "package_metadata_bazel_deps",
+        indent = "    ",
     )
-    asserts.equals(env, 1, len(rendered.split("rust_crate(")[1:]))
-    asserts.false(env, "    triples =" in rendered)
-    for triple in [_LINUX, _MACOS]:
-        asserts.true(env, '"@rules_rs//rs/platforms/config:%s": []' % triple in rendered)
-    asserts.true(env, 'name = "example",' in rendered)
-    asserts.false(env, 'name_suffix = "_exec"' in rendered)
-    asserts.false(env, "dep:" in rendered)
-    asserts.true(env, 'crate_features = ["shared"] + select({' in rendered)
-    asserts.true(env, '"@rules_rs//rs/platforms/config:%s": ["macos"]' % _MACOS in rendered)
-    asserts.false(env, "conditional_crate_features =" in rendered)
-    asserts.true(env, "target_compatible_with = select({" in rendered)
-    for alias in ["normal_alias", "macos_alias", "build_alias", "macos_build_alias"]:
-        asserts.true(env, alias in rendered)
+    for name in ["binaries", "build_script", "has_lib", "is_proc_macro"]:
+        asserts.true(env, "        " + name + " = " + name + "," in rendered)
+    asserts.true(env, "crate_name = crate_name or" in rendered)
+    asserts.true(env, '"//annotated:dep"' in rendered)
+    asserts.true(env, '"//metadata:dep"' in rendered)
+    asserts.true(env, " + package_metadata_bazel_deps" in rendered)
+    asserts.equals(env, 1, rendered.count("rust_crate("))
     return unittest.end(env)
 
 def _legacy_attributes_test_impl(ctx):
@@ -228,36 +186,31 @@ def _legacy_attributes_test_impl(ctx):
 
 def _empty_build_matrices_test_impl(ctx):
     env = unittest.begin(ctx)
-    rendered = render_rust_crate_call(
-        _attrs(variants = [
-            _variant(
-                build_deps_by_target = {_LINUX: {_LINUX: [], _MACOS: []}},
-                build_aliases_by_target = {_LINUX: {}},
-            ),
-        ]),
-        _values(),
+    definition = _definition(
+        build_deps_by_target = {_LINUX: {_LINUX: [], _MACOS: []}},
+        build_aliases_by_target = {_LINUX: {}},
     )
-    asserts.false(env, "build_deps_by_target" in rendered)
-    asserts.false(env, "build_aliases_by_target" in rendered)
-    asserts.equals(env, [], _build_scripts(rendered)[0]["deps"])
-    asserts.equals(env, {}, _build_scripts(rendered)[0]["deps_by_platform"])
-    asserts.equals(env, {}, _build_scripts(rendered)[0]["aliases"])
-    no_script = render_rust_crate_call(_attrs(variants = [_variant()]), _values() | {"build_script": "None"})
-    asserts.equals(env, [], _build_scripts(no_script))
+    for build_script in [repr("build.rs"), "None"]:
+        rendered = render_rust_crate_call(
+            _attrs(configurations = {"": definition}),
+            _values() | {"build_script": build_script},
+        )
+        asserts.equals(env, {"": definition}, _argument(rendered, "configurations"))
+        asserts.equals(env, [], _build_scripts(rendered))
     return unittest.end(env)
 
-_split_dependency_labels_test = unittest.make(_split_dependency_labels_test_impl)
+_single_crate_test = unittest.make(_single_crate_test_impl)
 _separate_build_aliases_test = unittest.make(_separate_build_aliases_test_impl)
-_merged_resolutions_test = unittest.make(_merged_resolutions_test_impl)
+_annotation_and_git_values_test = unittest.make(_annotation_and_git_values_test_impl)
 _legacy_attributes_test = unittest.make(_legacy_attributes_test_impl)
 _empty_build_matrices_test = unittest.make(_empty_build_matrices_test_impl)
 
 def repository_utils_tests():
     return unittest.suite(
         "repository_utils_tests",
-        _split_dependency_labels_test,
+        _single_crate_test,
         _separate_build_aliases_test,
-        _merged_resolutions_test,
+        _annotation_and_git_values_test,
         _legacy_attributes_test,
         _empty_build_matrices_test,
     )
