@@ -283,8 +283,8 @@ register_toolchains(
 )
 ```
 
-Keep `@default_rust_toolchains` available through `use_repo` for inherited
-compiler components.
+Keep `@default_rust_toolchains` available through `use_repo` for the Rustfmt and
+rust-analyzer registrations above.
 Override `rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
 `rust_objcopy`, `rust_lld`, `bpf_linker`, or `rust_std` when necessary.
 
@@ -312,9 +312,9 @@ implicit default Rust toolchain and its downloads. Explicit `toolchains.toolchai
 and `toolchains.experimental_miri` declarations still provision their requested
 toolchains. Without `experimental_host_tools`, the default behavior is unchanged.
 
-`default_rust_toolchains` remains available for custom compiler declarations,
-but contains no toolchains when the implicit default is disabled. Supply all
-required compiler components when using `declare_rustc_toolchains` in this case.
+When the implicit default is disabled, `default_rust_toolchains` is not created.
+Supply all required compiler components when using `declare_rustc_toolchains`
+with fully custom toolchains.
 
 </details>
 

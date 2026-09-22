@@ -22,6 +22,7 @@ load("//rs/private:rustc_repository.bzl", "rustc_repository")
 load("//rs/private:rustc_src_repository.bzl", "rustc_src_repository")
 load("//rs/private:rustfmt_repository.bzl", "rustfmt_repository")
 load("//rs/private:stdlib_repository.bzl", "stdlib_repository")
+load("//rs/private:toolchain_labels_repository.bzl", "toolchain_labels_repository")
 load("//rs/private:toolchains_repository.bzl", "toolchains_repository")
 load("//rs/toolchains:toolchain_config.bzl", "resolve_toolchain_configs")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
@@ -176,9 +177,7 @@ def _toolchains_impl(mctx):
             break
 
     repo_configs = resolve_toolchain_configs(mctx.modules)
-    download_rust_toolchains = bool(repo_configs) or not host_cargo
-    if not repo_configs:
-        # Custom toolchains still load rustc/component_labels.bzl from this repo.
+    if not repo_configs and not host_cargo:
         repo_configs[_DEFAULT_TOOLCHAIN_REPO_NAME] = struct(
             name = _DEFAULT_TOOLCHAIN_REPO_NAME,
             version = _DEFAULT_RUSTC_VERSION,
@@ -189,7 +188,7 @@ def _toolchains_impl(mctx):
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
         )
-    version_tags = repo_configs.values() if download_rust_toolchains else []
+    version_tags = repo_configs.values()
 
     versions = set([])
     rustfmt_versions = set([])
@@ -532,12 +531,14 @@ def _toolchains_impl(mctx):
         host_cargo = host_cargo,
     )
 
-    # `host_cargo` is an implementation detail of rules_rs itself.
-    # Report it as a direct dependency only for the rules_rs root module so
-    # user modules are not asked to import it.
-    direct_deps = ["host_cargo"] if root_module_name == "rules_rs" else []
+    toolchain_labels_repository(name = "rust_toolchain_labels")
+
+    # These repositories are implementation details of rules_rs itself.
+    # Report them as direct dependencies only for the rules_rs root module so
+    # user modules are not asked to import them.
+    direct_deps = ["host_cargo", "rust_toolchain_labels"] if root_module_name == "rules_rs" else []
     direct_dev_deps = []
-    for tag in repo_configs.values():
+    for tag in version_tags:
         toolchains_repository(
             name = tag.name,
             version = tag.version,
@@ -546,7 +547,7 @@ def _toolchains_impl(mctx):
             edition = tag.edition,
             extra_rustc_flags = tag.extra_rustc_flags,
             extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
-            target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES if download_rust_toolchains else [],
+            target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES,
         )
 
     # Dependency tags do not describe the root module's direct dependencies.

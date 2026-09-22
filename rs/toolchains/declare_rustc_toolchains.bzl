@@ -1,8 +1,8 @@
 """Definitions for declaring Rust compiler toolchains."""
 
-load("@default_rust_toolchains//rustc:component_labels.bzl", "rust_toolchain_component_label")
 load("@rules_rust//rust:rust_toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
+load("@rust_toolchain_labels//:defs.bzl", "rust_toolchain_component_label")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES")
 load("//rs/private:bpf_linker_repository.bzl", "bpf_linker_binary_name", "bpf_linker_repository_name")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
