@@ -30,7 +30,7 @@ toolchains = use_extension("//rs/toolchains:module_extension.bzl", "toolchains")
 use_repo(
     toolchains,
     "default_rust_toolchains",
-    "rs_rust_host_tools",
+    "host_cargo",
 )
 
 [

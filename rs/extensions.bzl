@@ -1,6 +1,6 @@
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
-load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL")
+load("@host_cargo//:defs.bzl", "RS_HOST_CARGO_LABEL")
 load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(

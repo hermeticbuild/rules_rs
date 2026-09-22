@@ -6,7 +6,7 @@ load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_A
 load("//rs/private:bpf_linker_repository.bzl", "BPF_LINKER_SUPPORTED_EXEC_TRIPLES", "declare_bpf_linker_repository")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
-load("//rs/private:host_tools_repository.bzl", "host_tools_repository")
+load("//rs/private:host_cargo_repository.bzl", "host_cargo_repository")
 load("//rs/private:rust_analyzer_repository.bzl", "rust_analyzer_repository")
 load(
     "//rs/private:rust_repository_utils.bzl",
@@ -64,7 +64,7 @@ def _urls_for_version(version, iso_date, rust_redist_archives):
         return rust_redist_url_templates(version)
     return DEFAULT_STATIC_RUST_URL_TEMPLATES
 
-_HOST_TOOLS_TAG = tag_class(
+_EXPERIMENTAL_HOST_TOOLS_TAG = tag_class(
     attrs = {
         "cargo": attr.label(
             mandatory = True,
@@ -169,10 +169,10 @@ def _toolchains_impl(mctx):
     for mod in mctx.modules:
         if mod.is_root:
             root_module_name = mod.name
-            if len(mod.tags.host_tools) > 1:
-                fail("Only one `toolchains.host_tools` tag may be declared by the root module")
-            if mod.tags.host_tools:
-                host_cargo = mod.tags.host_tools[0].cargo
+            if len(mod.tags.experimental_host_tools) > 1:
+                fail("Only one `toolchains.experimental_host_tools` tag may be declared by the root module")
+            if mod.tags.experimental_host_tools:
+                host_cargo = mod.tags.experimental_host_tools[0].cargo
             break
 
     repo_configs = resolve_toolchain_configs(mctx.modules)
@@ -527,15 +527,15 @@ def _toolchains_impl(mctx):
             urls = urls,
         )
 
-    host_tools_repository(
-        name = "rs_rust_host_tools",
+    host_cargo_repository(
+        name = "host_cargo",
         host_cargo = host_cargo,
     )
 
-    # `rs_rust_host_tools` is an implementation detail of rules_rs itself.
+    # `host_cargo` is an implementation detail of rules_rs itself.
     # Report it as a direct dependency only for the rules_rs root module so
     # user modules are not asked to import it.
-    direct_deps = ["rs_rust_host_tools"] if root_module_name == "rules_rs" else []
+    direct_deps = ["host_cargo"] if root_module_name == "rules_rs" else []
     direct_dev_deps = []
     for tag in repo_configs.values():
         toolchains_repository(
@@ -596,8 +596,8 @@ def _toolchains_impl(mctx):
 toolchains = module_extension(
     implementation = _toolchains_impl,
     tag_classes = {
+        "experimental_host_tools": _EXPERIMENTAL_HOST_TOOLS_TAG,
         "experimental_miri": _EXPERIMENTAL_MIRI_TAG,
-        "host_tools": _HOST_TOOLS_TAG,
         "toolchain": _TOOLCHAIN_TAG,
     },
 )

@@ -297,20 +297,20 @@ Configure Cargo for dependency resolution in the root `MODULE.bazel`:
 
 ```bzl
 toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
-toolchains.host_tools(cargo = "//toolchain:bin/cargo")
+toolchains.experimental_host_tools(cargo = "//toolchain:bin/cargo")
 
 register_toolchains("@our_toolchains//...")
 ```
 
 `cargo` must refer to an existing executable file that runs on the Bazel host,
 not a build target. Labels in external repositories are also supported.
-Only the root module's `host_tools` tag is used; dependency modules' tags are
-ignored.
+Only the root module's `experimental_host_tools` tag is used; dependency modules'
+tags are ignored.
 
 When no module declares `toolchains.toolchain`, custom host Cargo disables the
 implicit default Rust toolchain and its downloads. Explicit `toolchains.toolchain`
 and `toolchains.experimental_miri` declarations still provision their requested
-toolchains. Without `host_tools`, the default behavior is unchanged.
+toolchains. Without `experimental_host_tools`, the default behavior is unchanged.
 
 `default_rust_toolchains` remains available for custom compiler declarations,
 but contains no toolchains when the implicit default is disabled. Supply all
