@@ -3,6 +3,10 @@ def _toolchains_repository_impl(rctx):
         "rustc/component_labels.bzl",
         "def rust_toolchain_component_label(label):\n    return Label(label)\n",
     )
+    if not rctx.attr.target_triples:
+        rctx.file("rustc/BUILD.bazel", 'exports_files(["component_labels.bzl"])')
+        return rctx.repo_metadata(reproducible = True)
+
     rctx.file(
         "rustc/BUILD.bazel",
         """\

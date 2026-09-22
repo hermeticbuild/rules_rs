@@ -291,6 +291,34 @@ Override `rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
 </details>
 
 <details>
+<summary>Use a custom host Cargo without downloading Rust toolchains</summary>
+
+Configure Cargo for dependency resolution in the root `MODULE.bazel`:
+
+```bzl
+toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
+toolchains.host_tools(cargo = "//toolchain:bin/cargo")
+
+register_toolchains("@our_toolchains//...")
+```
+
+`cargo` must refer to an existing executable file that runs on the Bazel host,
+not a build target. Labels in external repositories are also supported.
+Only the root module's `host_tools` tag is used; dependency modules' tags are
+ignored.
+
+When no module declares `toolchains.toolchain`, custom host Cargo disables the
+implicit default Rust toolchain and its downloads. Explicit `toolchains.toolchain`
+and `toolchains.experimental_miri` declarations still provision their requested
+toolchains. Without `host_tools`, the default behavior is unchanged.
+
+`default_rust_toolchains` remains available for custom compiler declarations,
+but contains no toolchains when the implicit default is disabled. Supply all
+required compiler components when using `declare_rustc_toolchains` in this case.
+
+</details>
+
+<details>
 <summary>Reference targets added by <code>crate.annotation</code></summary>
 
 Label attributes in `crate.annotation` are resolved in `MODULE.bazel`, so a relative label does not refer to the generated crate package. Use `extra_aliased_targets` to expose a public target from the generated crate package under an explicit name in the hub repository, then use that hub label. The repository name is the `name` passed to `crate.from_cargo`.

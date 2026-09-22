@@ -64,6 +64,16 @@ def _urls_for_version(version, iso_date, rust_redist_archives):
         return rust_redist_url_templates(version)
     return DEFAULT_STATIC_RUST_URL_TEMPLATES
 
+_HOST_TOOLS_TAG = tag_class(
+    attrs = {
+        "cargo": attr.label(
+            mandatory = True,
+            allow_single_file = True,
+            doc = "Host Cargo executable used for dependency resolution. Only the root module's tag is used. Suppresses the implicit default Rust toolchain.",
+        ),
+    },
+)
+
 _TOOLCHAIN_TAG = tag_class(
     attrs = {
         "name": attr.string(
@@ -155,14 +165,18 @@ def _toolchains_impl(mctx):
     refresh_rust_redist = bool(mctx.getenv("RULES_RS_RUST_REDIST_REFRESH"))
 
     root_module_name = None
+    host_cargo = None
     for mod in mctx.modules:
         if mod.is_root:
             root_module_name = mod.name
+            if len(mod.tags.host_tools) > 1:
+                fail("Only one `toolchains.host_tools` tag may be declared by the root module")
+            if mod.tags.host_tools:
+                host_cargo = mod.tags.host_tools[0].cargo
             break
 
     repo_configs = resolve_toolchain_configs(mctx.modules)
-    had_tags = bool(repo_configs)
-    if not had_tags:
+    if not repo_configs and not host_cargo:
         repo_configs[_DEFAULT_TOOLCHAIN_REPO_NAME] = struct(
             name = _DEFAULT_TOOLCHAIN_REPO_NAME,
             version = _DEFAULT_RUSTC_VERSION,
@@ -494,7 +508,8 @@ def _toolchains_impl(mctx):
     if len(host_rustc_repos) != len(rust_versions):
         fail("Could not find host rustc repository for {}-{}".format(host_os, host_arch))
     host_exe_suffix = ".exe" if host_os == "windows" else ""
-    host_cargo = "@{}//:bin/cargo{}".format(host_cargo_repos[version_tags[0].version], host_exe_suffix)
+    if not host_cargo:
+        host_cargo = "@{}//:bin/cargo{}".format(host_cargo_repos[version_tags[0].version], host_exe_suffix)
 
     for version in rust_versions:
         version_key = sanitize_version(version)
@@ -532,6 +547,17 @@ def _toolchains_impl(mctx):
             target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES,
         )
 
+    if not repo_configs:
+        # Custom toolchains still load rustc/component_labels.bzl from this repo.
+        toolchains_repository(
+            name = _DEFAULT_TOOLCHAIN_REPO_NAME,
+            version = _DEFAULT_RUSTC_VERSION,
+            rustfmt_version = _DEFAULT_RUSTC_VERSION,
+            rust_analyzer_version = _DEFAULT_RUSTC_VERSION,
+            edition = _DEFAULT_EDITION,
+            target_triples = [],
+        )
+
     # Dependency tags do not describe the root module's direct dependencies.
     # is_dev_dependency requires the original tag, not a resolved configuration.
     for mod in mctx.modules:
@@ -541,7 +567,7 @@ def _toolchains_impl(mctx):
             deps = direct_dev_deps if mctx.is_dev_dependency(tag) else direct_deps
             if tag.name not in deps:
                 deps.append(tag.name)
-    if (_DEFAULT_TOOLCHAIN_REPO_NAME in repo_configs and
+    if ((not repo_configs or _DEFAULT_TOOLCHAIN_REPO_NAME in repo_configs) and
         _DEFAULT_TOOLCHAIN_REPO_NAME not in direct_deps and
         _DEFAULT_TOOLCHAIN_REPO_NAME not in direct_dev_deps):
         # The default repo can be imported without a toolchain tag.
@@ -580,6 +606,7 @@ toolchains = module_extension(
     implementation = _toolchains_impl,
     tag_classes = {
         "experimental_miri": _EXPERIMENTAL_MIRI_TAG,
+        "host_tools": _HOST_TOOLS_TAG,
         "toolchain": _TOOLCHAIN_TAG,
     },
 )
