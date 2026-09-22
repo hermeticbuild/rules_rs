@@ -316,6 +316,7 @@ def _generate_hub_and_spokes(
         feature_resolutions_by_fq_crate,
         workspace_resolution.exec_resolutions_by_cargo_target_triple,
         dep_label_prefix = "@%s//:" % hub_name,
+        exec_platform_triples = SUPPORTED_EXEC_TRIPLES,
         preserve_cargo_target_triple = preserve_cargo_target_triple,
         workspace_crates = workspace_crates,
     )

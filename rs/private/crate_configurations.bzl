@@ -40,8 +40,8 @@ def _dependencies_invariant(deps_by_triple, invariant):
     return True
 
 def _merge_configurations(configurations):
-    result = {field: {} for field in configurations.values()[0]}
-    for configuration in configurations.values():
+    result = {field: {} for field in configurations[0]}
+    for configuration in configurations:
         for field, values in configuration.items():
             existing = result[field]
             for platform_triple, value in values.items():
@@ -60,6 +60,7 @@ def prepare_crate_configurations(
         target_resolutions,
         exec_resolutions_by_cargo_target_triple,
         dep_label_prefix,
+        exec_platform_triples,
         preserve_cargo_target_triple = [],
         workspace_crates = []):
     """Clear cargo_target_triple for crates with invariant configurations and dependencies.
@@ -69,6 +70,7 @@ def prepare_crate_configurations(
         exec_resolutions_by_cargo_target_triple: Records keyed by the original cargo_target_triple,
             with resolutions by crate name/version and build_deps by crate name/version and exec_platform_triple.
         dep_label_prefix: Cargo dependency label prefix, such as "@crates//:".
+        exec_platform_triples: Execution platforms supplied to the Cargo resolver.
         preserve_cargo_target_triple: Generated crates whose incoming cargo_target_triples must remain distinct.
         workspace_crates: Handwritten crates that preserve every incoming cargo_target_triple.
 
@@ -85,10 +87,6 @@ def prepare_crate_configurations(
     """
     cargo_target_triples = sorted(exec_resolutions_by_cargo_target_triple)
     clear_cargo_target_triples = {cargo_target_triple: "" for cargo_target_triple in cargo_target_triples}
-    exec_platform_triples = set()
-    for execution in exec_resolutions_by_cargo_target_triple.values():
-        for resolution in execution.resolutions.values():
-            exec_platform_triples.update(resolution.features_enabled)
     exec_platform_triples = sorted(exec_platform_triples)
     preserve_cargo_target_triple = set(preserve_cargo_target_triple)
     preserved_crates = preserve_cargo_target_triple | set(workspace_crates)
@@ -104,7 +102,7 @@ def prepare_crate_configurations(
                 configurations[cargo_target_triple] = _configuration(fq, True, execution, exec_resolutions_by_cargo_target_triple, exec_platform_triples)
         if not configurations:
             configurations[""] = _configuration(fq, False, target, exec_resolutions_by_cargo_target_triple, exec_platform_triples)
-        shared_configuration = None if fq in preserved_crates else _merge_configurations(configurations)
+        shared_configuration = None if fq in preserved_crates else _merge_configurations(configurations.values())
         configurations_by_crate[fq] = configurations
         if shared_configuration != None:
             invariant[dep_label_prefix + fq] = struct(
@@ -139,7 +137,7 @@ def prepare_crate_configurations(
             ]
             configuration["build_deps_by_triple"] = _share_build_deps(configuration["build_deps_by_triple"])
         if not candidate:
-            first_configuration = configurations.values()[0]
+            first_configuration = configurations[first_triple]
             for cargo_target_triple in cargo_target_triples:
                 configurations.setdefault(cargo_target_triple, first_configuration)
         result[fq] = struct(cargo_target_triple_map = cargo_target_triple_map, configurations = configurations)

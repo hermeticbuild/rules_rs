@@ -17,10 +17,14 @@ def _resolution(features = None, deps = None, build_deps = None, active = True):
     )
 
 def _prepare(target, execution, build_deps = {}, **kwargs):
+    exec_platform_triples = set()
+    for resolutions in execution.values():
+        for resolution in resolutions.values():
+            exec_platform_triples.update(resolution.features_enabled)
     return prepare_crate_configurations(target, {
         cargo_target_triple: struct(resolutions = resolutions, build_deps = build_deps.get(cargo_target_triple, {}))
         for cargo_target_triple, resolutions in execution.items()
-    }, _PREFIX, **kwargs)
+    }, _PREFIX, exec_platform_triples, **kwargs)
 
 def _configuration(result, fq, cargo_target_triple = ""):
     crate = result[fq]

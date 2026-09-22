@@ -143,10 +143,12 @@ diff --git a/rust/private/rust.bzl b/rust/private/rust.bzl
 -    per_crate_flags = [] if getattr(attr, "skip_per_crate_rustc_flags", False) else settings[_PER_CRATE_FLAG_SETTING]
 -    return {
 +def _rust_platform_transition_impl(settings, attr):
-+    return trim_crate_settings(settings, attr) | {
-         "//command_line_option:platforms": _resolve_platform(settings, attr),
+-        "//command_line_option:platforms": _resolve_platform(settings, attr),
 -        _PER_CRATE_FLAG_SETTING: per_crate_flags,
-     }
+-    }
++    result = trim_crate_settings(settings, attr)
++    result["//command_line_option:platforms"] = _resolve_platform(settings, attr)
++    return result
 
 -_rust_static_library_transition = transition(
 -    implementation = _rust_static_library_transition_impl,
