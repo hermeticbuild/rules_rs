@@ -514,9 +514,7 @@ def _toolchains_impl(mctx):
         )
 
     if host_cargo_config:
-        if not hasattr(host_cargo_config, host_platform):
-            fail("Unsupported host Cargo platform: %s" % host_platform)
-        host_cargo = getattr(host_cargo_config, host_platform)
+        host_cargo = getattr(host_cargo_config, host_platform, None)
         if not host_cargo:
             fail("Set toolchains.host_cargo(%s = ...) to provide Cargo for this Bazel host" % host_platform)
     else:
