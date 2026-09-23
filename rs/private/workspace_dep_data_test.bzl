@@ -56,6 +56,7 @@ def _workspace_aliases_select_dependency_kind_impl(ctx):
         "@crates//:dev-1.0.0": "dev_dep",
     }
 
+    asserts.equals(env, ["@crates//:shared-1.0.0"], all_crate_deps(data, hub_name = "crates"))
     asserts.equals(env, {"@crates//:shared-1.0.0": "normal_shared"}, crate_aliases(data, hub_name = "crates"))
     asserts.equals(env, expected, crate_aliases(data, normal = True, normal_dev = True, build = True, hub_name = "crates"))
 

@@ -15,41 +15,28 @@ def _settings(cargo_target_triple = ""):
         CARGO_TARGET_TRIPLE_SETTING: cargo_target_triple,
     }
 
-def _generated_cargo_target_triple_clearing_impl(ctx):
+def _cargo_target_triple_mapping_impl(ctx):
     env = unittest.begin(ctx)
-    settings = _settings(_MACOS)
-    attr = struct(cargo_target_triple_map = {_MACOS: ""}, skip_per_crate_rustc_flags = False)
-    result = trim_crate_settings(settings, attr)
-    asserts.equals(env, _settings(), result)
-    asserts.equals(env, result, trim_crate_settings(result, attr))
-    reset = trim_crate_settings(result, struct(cargo_target_triple_map = {}, skip_per_crate_rustc_flags = True))
+    for incoming, cargo_target_triple_map, expected in [
+        (_MACOS, {_MACOS: ""}, ""),
+        (_MACOS, {}, _MACOS),
+        (_MACOS, {_LINUX: ""}, _MACOS),
+        ("", {"": _LINUX}, _LINUX),
+    ]:
+        settings = _settings(incoming)
+        attr = struct(cargo_target_triple_map = cargo_target_triple_map, skip_per_crate_rustc_flags = False)
+        result = trim_crate_settings(settings, attr)
+        asserts.equals(env, _settings(expected), result)
+        asserts.equals(env, result, trim_crate_settings(result, attr))
+        asserts.equals(env, _settings(incoming), settings)
+    reset = trim_crate_settings(_settings(), struct(cargo_target_triple_map = {}, skip_per_crate_rustc_flags = True))
     asserts.equals(env, _settings() | {_RUSTC_SETTING: []}, reset)
-    asserts.equals(env, _settings(_MACOS), settings)
     return unittest.end(env)
 
-def _workspace_preserves_cargo_settings_impl(ctx):
-    env = unittest.begin(ctx)
-    settings = _settings(_MACOS)
-    asserts.equals(env, settings, trim_crate_settings(settings, struct(cargo_target_triple_map = {}, skip_per_crate_rustc_flags = False)))
-    asserts.equals(env, settings, trim_crate_settings(settings, struct(cargo_target_triple_map = {_LINUX: ""}, skip_per_crate_rustc_flags = False)))
-    return unittest.end(env)
-
-def _build_script_sets_cargo_target_triple_impl(ctx):
-    env = unittest.begin(ctx)
-    attr = struct(cargo_target_triple_map = {"": _LINUX}, skip_per_crate_rustc_flags = False)
-    result = trim_crate_settings(_settings(), attr)
-    asserts.equals(env, _settings(_LINUX), result)
-    asserts.equals(env, result, trim_crate_settings(result, attr))
-    return unittest.end(env)
-
-generated_cargo_target_triple_clearing_test = unittest.make(_generated_cargo_target_triple_clearing_impl)
-workspace_preserves_cargo_settings_test = unittest.make(_workspace_preserves_cargo_settings_impl)
-build_script_sets_cargo_target_triple_test = unittest.make(_build_script_sets_cargo_target_triple_impl)
+cargo_target_triple_mapping_test = unittest.make(_cargo_target_triple_mapping_impl)
 
 def cargo_context_tests():
     return unittest.suite(
         "cargo_context_tests",
-        generated_cargo_target_triple_clearing_test,
-        workspace_preserves_cargo_settings_test,
-        build_script_sets_cargo_target_triple_test,
+        cargo_target_triple_mapping_test,
     )

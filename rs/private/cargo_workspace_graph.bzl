@@ -195,9 +195,7 @@ def compute_package_dep_versions(package, versions_by_name):
 
     return dep_versions_by_name
 
-def select_package_dep_version(dep, dep_versions_by_name):
-    dep_package = _dep_package_name(dep)
-    versions = dep_versions_by_name.get(dep_package)
+def select_package_dep_version(dep, versions):
     if not versions:
         return None
 
@@ -366,18 +364,12 @@ def _resolve_possible_deps(
             if constrained_versions:
                 versions = constrained_versions
 
-            if len(versions) == 1:
-                resolved_version = versions[0]
-            else:
+            resolved_version = select_package_dep_version(dep, versions)
+            if resolved_version == None:
                 req = dep.get("req")
-                if not req:
-                    continue
-
-                resolved_version = select_matching_version(req, versions)
-                if not resolved_version:
-                    if not dep.get("optional"):
-                        print("WARNING: %s: could not resolve %s %s among %s" % (name, dep_package, req, versions))
-                    continue
+                if req and not dep.get("optional"):
+                    print("WARNING: %s: could not resolve %s %s among %s" % (name, dep_package, req, versions))
+                continue
 
             dep_fq = fq_crate(dep_package, resolved_version)
             if dep_fq not in feature_resolutions_by_fq_crate:
@@ -543,7 +535,7 @@ def resolve_cargo_workspace_members(
             source = dep.get("source")
             dep_name = dep["name"]
             dep_package = _dep_package_name(dep)
-            dep_version = select_package_dep_version(dep, dep_versions_by_name)
+            dep_version = select_package_dep_version(dep, dep_versions_by_name.get(dep_package))
             if dep_version == None:
                 continue
             dep_fq = fq_crate(dep_package, dep_version)

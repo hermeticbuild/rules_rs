@@ -12,10 +12,6 @@ pub use shared::Token;
 
 pub struct HelperToken;
 
-pub fn helper_token() -> HelperToken {
-    HelperToken
-}
-
 pub fn token() -> Token {
     shared::token()
 }
@@ -25,6 +21,4 @@ pub fn leaf_token() -> leaf::Token {
 }
 
 #[cfg(feature = "exec_feature")]
-pub fn exec_only() -> u8 {
-    optional_helper::VALUE
-}
+const _: u8 = optional_helper::VALUE;

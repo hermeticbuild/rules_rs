@@ -76,7 +76,8 @@ def cargo_build_script_for_configurations(
         if hub_name:
             script_kwargs["cargo_target_triple_map"] = {cargo_target_triple: variant["cargo_target_triple"] for cargo_target_triple in variant["conditions"] if cargo_target_triple != variant["cargo_target_triple"]}
         script_deps = list(variant["deps"])
-        script_aliases = {dep: alias for dep, alias in variant["deps"].items() if alias} | aliases
+        script_aliases = {dep: alias for dep, alias in variant["deps"].items() if alias}
+        script_aliases.update(aliases)
         if variant["deps_by_platform"]:
             script_aliases = select({
                 platform: script_aliases | {dep: alias for dep, alias in items.items() if alias} | aliases

@@ -48,17 +48,6 @@ def _configured_dependencies_and_features_impl(ctx):
     })), str(crate_aliases(data, normal = True, hub_name = "crates")))
     return unittest.end(env)
 
-def _all_crate_deps_defaults_to_normal_impl(ctx):
-    env = unittest.begin(ctx)
-    data = _build_data()
-    configuration = data["configurations"][""]
-    configuration["deps_by_triple"] = {triple: {"//:normal": "normal"} for triple in [_LINUX, _MACOS]}
-    data["dev_deps"] = {"//:dev": "dev"}
-
-    asserts.equals(env, ["//:normal"], all_crate_deps(data, hub_name = "crates"))
-    asserts.equals(env, {"//:normal": "normal"}, crate_aliases(data, hub_name = "crates"))
-    return unittest.end(env)
-
 def _all_crate_deps_dedupes_across_selected_kinds_impl(ctx):
     env = unittest.begin(ctx)
     data = _build_data()
@@ -241,7 +230,6 @@ def _ambiguous_build_script_test_impl(ctx):
 
 ambiguous_build_script_test = analysistest.make(_ambiguous_build_script_test_impl, expect_failure = True)
 
-all_crate_deps_defaults_to_normal_test = unittest.make(_all_crate_deps_defaults_to_normal_impl)
 all_crate_deps_dedupes_across_selected_kinds_test = unittest.make(_all_crate_deps_dedupes_across_selected_kinds_impl)
 legacy_platform_dev_dependencies_test = unittest.make(_legacy_platform_dev_dependencies_impl)
 dev_dependencies_preserve_normal_aliases_test = unittest.make(_dev_dependencies_preserve_normal_aliases_impl)
@@ -261,7 +249,6 @@ def all_crate_deps_tests():
         )
     return unittest.suite(
         "all_crate_deps_tests",
-        all_crate_deps_defaults_to_normal_test,
         all_crate_deps_dedupes_across_selected_kinds_test,
         legacy_platform_dev_dependencies_test,
         dev_dependencies_preserve_normal_aliases_test,

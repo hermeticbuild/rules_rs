@@ -2,27 +2,10 @@ load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
 load(":cargo_workspace_graph.bzl", "cargo_toml_dependencies", "compute_package_dep_versions", "new_feature_resolutions", "resolve_cargo_workspace_members", "resolve_packages", "select_package_dep_version", "split_lockfile_packages")
 load(":resolver.bzl", "resolve")
 
-def _select_package_dep_version_uses_package_name_impl(ctx):
+def _select_package_dep_version_impl(ctx):
     env = unittest.begin(ctx)
 
-    got = select_package_dep_version(
-        {
-            "name": "alloc",
-            "package": "rustc-std-workspace-alloc",
-            "req": "1.0.0",
-        },
-        {
-            "rustc-std-workspace-alloc": ["1.99.0"],
-        },
-    )
-
-    asserts.equals(env, "1.99.0", got)
-    return unittest.end(env)
-
-def _select_package_dep_version_uses_req_for_duplicate_versions_impl(ctx):
-    env = unittest.begin(ctx)
-
-    dep_versions_by_name = compute_package_dep_versions(
+    versions = compute_package_dep_versions(
         {
             "dependencies": [
                 "wasi 0.11.1+wasi-snapshot-preview1",
@@ -30,30 +13,14 @@ def _select_package_dep_version_uses_req_for_duplicate_versions_impl(ctx):
             ],
         },
         {},
-    )
+    )["wasi"]
 
-    got_wasi = select_package_dep_version(
-        {
-            "name": "wasi",
-            "req": "0.11.0",
-        },
-        dep_versions_by_name,
-    )
-    got_wasip2 = select_package_dep_version(
-        {
-            "name": "wasip2",
-            "package": "wasi",
-            "req": "0.14.4",
-        },
-        dep_versions_by_name,
-    )
-
-    asserts.equals(env, "0.11.1+wasi-snapshot-preview1", got_wasi)
-    asserts.equals(env, "0.14.4+wasi-0.2.4", got_wasip2)
+    asserts.equals(env, "0.11.1+wasi-snapshot-preview1", select_package_dep_version({"req": "0.11.0"}, versions))
+    asserts.equals(env, "0.14.4+wasi-0.2.4", select_package_dep_version({"req": "0.14.4"}, versions))
+    asserts.equals(env, "1.99.0", select_package_dep_version({"req": "2"}, ["1.99.0"]))
     return unittest.end(env)
 
-select_package_dep_version_uses_package_name_test = unittest.make(_select_package_dep_version_uses_package_name_impl)
-select_package_dep_version_uses_req_for_duplicate_versions_test = unittest.make(_select_package_dep_version_uses_req_for_duplicate_versions_impl)
+select_package_dep_version_test = unittest.make(_select_package_dep_version_impl)
 
 def _cargo_toml_dependencies_normalizes_dependency_specs_impl(ctx):
     env = unittest.begin(ctx)
@@ -1019,7 +986,6 @@ def cargo_workspace_graph_tests():
         resolve_cargo_workspace_members_preserves_requested_binary_target_features_test,
         resolve_cargo_workspace_members_separates_target_and_exec_features_test,
         resolve_packages_attaches_feature_resolutions_test,
-        select_package_dep_version_uses_package_name_test,
-        select_package_dep_version_uses_req_for_duplicate_versions_test,
+        select_package_dep_version_test,
         split_lockfile_packages_finds_local_package_paths_test,
     )

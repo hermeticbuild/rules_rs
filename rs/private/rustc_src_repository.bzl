@@ -118,7 +118,7 @@ def _crate_attr(feature_resolutions, extra_compile_data = []):
         use_legacy_rules_rust_platforms = False,
     )
 
-def _render_crate_build_file(rctx, bazel_package, workspace_cargo_toml, crate_attr):
+def _write_crate_build_file(rctx, bazel_package, workspace_cargo_toml, crate_attr):
     cargo_toml = run_toml2json(rctx, paths.join(bazel_package, "Cargo.toml"))
     cargo_toml = inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml)
     package = cargo_toml["package"]
@@ -129,12 +129,8 @@ def _render_crate_build_file(rctx, bazel_package, workspace_cargo_toml, crate_at
         gen_build_script = "auto",
         package_path = bazel_package,
     )
-    cargo.values.update({
-        "name": repr(package["name"]),
-        "purl": repr("pkg:cargo/%s@%s" % (package["name"], package["version"])),
-        "version": repr(package["version"]),
-    })
-    return """\
+    cargo.values["purl"] = repr("pkg:cargo/%s@%s" % (package["name"], package["version"]))
+    rctx.file(paths.join(bazel_package, "BUILD.bazel"), """\
 load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 
 {srcs_filegroup}{rust_crate_call}{package_metadata_bazel_additive_build_file_content}""".format(
@@ -146,7 +142,7 @@ load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
             skip_deps_verification = True,
         ),
         package_metadata_bazel_additive_build_file_content = cargo.bazel_metadata.get("additive_build_file_content", ""),
-    )
+    ))
 
 def _source_crate_package(source_root, package):
     path_source_prefix = "path+source_stdlib/"
@@ -312,7 +308,7 @@ alias(
             resolution.feature_resolutions_by_fq_crate[fq],
             extra_compile_data = _extra_compile_data(name, source_root),
         )
-        rctx.file(paths.join(bazel_package, "BUILD.bazel"), _render_crate_build_file(rctx, bazel_package, workspace_cargo_toml, crate_attr))
+        _write_crate_build_file(rctx, bazel_package, workspace_cargo_toml, crate_attr)
 
     for package in source_packages:
         name = package["name"]
@@ -330,7 +326,7 @@ alias(
             fq = fq,
         ))
         crate_attr = _crate_attr(package["feature_resolutions"])
-        rctx.file(paths.join(bazel_package, "BUILD.bazel"), _render_crate_build_file(rctx, bazel_package, workspace_cargo_toml, crate_attr))
+        _write_crate_build_file(rctx, bazel_package, workspace_cargo_toml, crate_attr)
 
     for package_dir in sorted(_SOURCE_PACKAGE_DIRS.values()):
         bazel_package = _source_package(source_root, package_dir)

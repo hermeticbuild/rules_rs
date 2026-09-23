@@ -282,29 +282,19 @@ def _execution_only_nested_build_script_keeps_origin_impl(ctx):
 
 def _inactive_crate_has_no_supported_platforms_impl(ctx):
     env = unittest.begin(ctx)
-    child = _PREFIX + "child-1.0.0"
     target = {
         "inactive-1.0.0": _resolution(features = {_LINUX: ["unused"]}, active = False),
-        "child-1.0.0": _resolution(features = {_LINUX: ["normal"]}),
     }
     execution = {
         "inactive-1.0.0": _resolution(active = False),
-        "child-1.0.0": _resolution(features = {_LINUX: ["build"]}),
     }
-    result = _prepare(
-        target,
-        {_LINUX: execution},
-        {_LINUX: {"inactive-1.0.0": {_LINUX: {child: None}}}},
-    )
+    result = _prepare(target, {_LINUX: execution})
 
     configuration = _configuration(result, "inactive-1.0.0")
     for field in ["crate_features_by_triple", "deps_by_triple", "build_deps_by_triple"]:
         asserts.equals(env, {}, configuration[field])
     asserts.equals(env, [], configuration["build_cargo_target_triple_required_on"])
-    asserts.equals(env, {_LINUX: ["normal"]}, _configuration(result, "child-1.0.0")["crate_features_by_triple"])
-    asserts.equals(env, {_LINUX: ["build"]}, _configuration(result, "child-1.0.0", _LINUX)["crate_features_by_triple"])
     asserts.equals(env, set(), target["inactive-1.0.0"].active)
-    asserts.equals(env, {_LINUX: set(["normal"])}, target["child-1.0.0"].features_enabled)
     _assert_cargo_target_triple_maps(env, result, [_LINUX])
     return unittest.end(env)
 

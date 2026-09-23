@@ -2,7 +2,7 @@ pub const MODE: usize = helper::MODE;
 const _: [(); MODE] = [(); shared::MODE];
 
 pub fn helper_token() -> helper::HelperToken {
-    helper::helper_token()
+    helper::HelperToken
 }
 
 pub fn token() -> shared::Token {

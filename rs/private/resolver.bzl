@@ -192,13 +192,12 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
     """Collect execution seeds and owner dependencies for one target triple."""
     features = {}
     build_deps = {}
-    for package, exec_package in zip(packages, exec_template_packages):
+    for package in packages:
         target_resolution = package["feature_resolutions"]
-        exec_resolution = exec_package["feature_resolutions"]
-
         if cargo_target_triple not in target_resolution.active:
             continue
 
+        exec_resolution = exec_template_packages[target_resolution.package_index]["feature_resolutions"]
         target_features = target_resolution.features_enabled[cargo_target_triple]
         owner = package["name"] + "-" + package["version"]
 

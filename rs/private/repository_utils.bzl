@@ -153,6 +153,8 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
             "has_lib": repr(has_lib),
             "is_proc_macro": repr(is_proc_macro),
             "links": repr(links),
+            "name": repr(name),
+            "version": repr(version),
         },
     )
 

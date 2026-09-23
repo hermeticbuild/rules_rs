@@ -49,13 +49,6 @@ def _merge_configurations(configurations):
                     return None
     return result
 
-def _share_build_deps(build_deps_by_triple):
-    result = {}
-    for platform_triple, deps in build_deps_by_triple.items():
-        if deps != result.setdefault("", deps):
-            result[platform_triple] = deps
-    return result
-
 def prepare_crate_configurations(
         target_resolutions,
         exec_resolutions_by_cargo_target_triple,
@@ -130,12 +123,15 @@ def prepare_crate_configurations(
             first_triple = configurations.keys()[0]
             cargo_target_triple_map = {"": first_triple} if first_triple else {}
         for configuration in configurations.values():
-            configuration["build_cargo_target_triple_required_on"] = [] if candidate else [
-                platform_triple
-                for platform_triple, deps_by_exec_triple in configuration["build_deps_by_triple"].items()
-                if fq in preserve_cargo_target_triple or not _dependencies_invariant(deps_by_exec_triple, invariant)
-            ]
-            configuration["build_deps_by_triple"] = _share_build_deps(configuration["build_deps_by_triple"])
+            build_deps = {}
+            required_on = []
+            for platform_triple, deps in configuration["build_deps_by_triple"].items():
+                if deps != build_deps.setdefault("", deps):
+                    build_deps[platform_triple] = deps
+                if not candidate and (fq in preserve_cargo_target_triple or not _dependencies_invariant(deps, invariant)):
+                    required_on.append(platform_triple)
+            configuration["build_cargo_target_triple_required_on"] = required_on
+            configuration["build_deps_by_triple"] = build_deps
         if not candidate:
             first_configuration = configurations[first_triple]
             for cargo_target_triple in cargo_target_triples:

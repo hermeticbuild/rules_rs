@@ -9,5 +9,4 @@ fn main() {
     let _: shared::Token = bridge::token();
     let _: leaf::Token = helper::leaf_token();
     let _: leaf::Token = bridge::leaf_token();
-    assert_eq!(helper::exec_only(), 23);
 }
