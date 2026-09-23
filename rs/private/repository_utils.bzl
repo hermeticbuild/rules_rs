@@ -192,6 +192,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    target_compatible_with = RESOLVED_PLATFORMS,
 {indent}    links = {links},
 {indent}    build_script = {build_script},
+{indent}    build_script_emit_warnings = {build_script_emit_warnings},
 {indent}    build_script_data = {build_script_data}{conditional_build_script_data},
 {indent}    build_deps = [
 {indent}        {build_deps}
@@ -268,6 +269,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         tags = repr(attr.crate_tags),
         links = values["links"],
         build_script = values["build_script"],
+        build_script_emit_warnings = attr.build_script_emit_warnings,
         build_script_data = repr(build_script_data),
         conditional_build_script_data = " + " + conditional_build_script_data if conditional_build_script_data else "",
         build_deps = list_indent.join(['"%s"' % d for d in sorted(build_deps)]),
@@ -307,6 +309,7 @@ load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 rust_crate_attrs = {
     "hub_name": attr.string(),
     "gen_build_script": attr.string(),
+    "build_script_emit_warnings": attr.bool(),
     "build_script_deps": attr.label_list(),
     "build_script_deps_select": _label_list_dict(),
     "build_script_data": attr.label_list(),

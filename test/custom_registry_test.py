@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Queries Rust targets generated from on-disk Cargo sparse registries."""
+"""Queries Rust targets generated from registry, path, and Git dependencies."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import tarfile
 import tempfile
 import textwrap
 import unittest
+import xml.etree.ElementTree as ET
 
 
 CRATE_NAME = "registry_smoke"
@@ -41,6 +42,7 @@ def _write_registry(directory: pathlib.Path) -> tuple[str, str]:
                 edition = "2021"
                 """,
             "src/lib.rs": "pub fn answer() -> u32 { 42 }\n",
+            "build.rs": 'fn main() { println!("cargo:warning=dependency warning"); }\n',
         },
     )
     archive_path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,7 +74,7 @@ def _write_registry(directory: pathlib.Path) -> tuple[str, str]:
 
 
 class CustomRegistryTest(unittest.TestCase):
-    def test_sparse_registry(self) -> None:
+    def test_dependency_sources(self) -> None:
         bazel = shutil.which("bazel")
         self.assertIsNotNone(bazel, "The custom registry test requires bazel on PATH")
 
@@ -94,16 +96,53 @@ class CustomRegistryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="rs-registry-") as temporary_directory:
             temporary_root = pathlib.Path(temporary_directory)
             registry_source, checksum = _write_registry(temporary_root / "registry")
-            for registry_kind in ("named", "replacement"):
-                with self.subTest(registry_kind=registry_kind):
+            crate_directory = temporary_root / "registry" / f"{CRATE_NAME}-{CRATE_VERSION}"
+            for args in (
+                ["init", "--quiet"],
+                ["add", "."],
+                [
+                    "-c", "user.name=Test", "-c", "user.email=test@example.com",
+                    "commit", "--quiet", "-m", "Test crate",
+                ],
+            ):
+                subprocess.run(["git", *args], cwd=crate_directory, check=True)
+            commit = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=crate_directory, text=True,
+            ).strip()
+            for dependency_kind in ("named", "replacement", "path", "git"):
+                with self.subTest(dependency_kind=dependency_kind):
                     workspace = temporary_root / "workspace"
                     hub_name = self._write_workspace(
                         workspace,
                         rules_rs_root,
                         registry_source,
                         checksum,
-                        registry_kind,
+                        dependency_kind,
                     )
+
+                    if dependency_kind in ("path", "git"):
+                        manifest = workspace / "Cargo.toml"
+                        if dependency_kind == "path":
+                            shutil.copytree(crate_directory, workspace / "dependency")
+                        dependency = (
+                            'path = "dependency"'
+                            if dependency_kind == "path"
+                            else f'git = "{crate_directory.as_uri()}"'
+                        )
+                        manifest.write_text(manifest.read_text().replace(
+                            f'{CRATE_NAME} = "={CRATE_VERSION}"',
+                            f'{CRATE_NAME} = {{ {dependency} }}',
+                        ))
+                        lockfile = workspace / "Cargo.lock"
+                        source = (
+                            "" if dependency_kind == "path"
+                            else f'source = "git+{crate_directory.as_uri()}#{commit}"\n'
+                        )
+                        lockfile.write_text(lockfile.read_text().replace(
+                            'source = "registry+https://github.com/rust-lang/crates.io-index"\n'
+                            f'checksum = "{checksum}"\n',
+                            source,
+                        ))
 
                     result = subprocess.run(
                         [
@@ -114,7 +153,8 @@ class CustomRegistryTest(unittest.TestCase):
                             "query",
                             "--lockfile_mode=off",
                             "--noimplicit_deps",
-                            f"deps(@{hub_name}//:{CRATE_NAME}, 2)",
+                            "--output=xml",
+                            f"deps(@{hub_name}//:{CRATE_NAME}, 4)",
                         ],
                         cwd=workspace,
                         check=False,
@@ -126,18 +166,31 @@ class CustomRegistryTest(unittest.TestCase):
                     self.assertEqual(
                         result.returncode,
                         0,
-                        f"{registry_kind} registry Bazel query failed\n"
+                        f"{dependency_kind} dependency Bazel query failed\n"
                         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
                     )
-                    labels = result.stdout.splitlines()
+                    rules = ET.fromstring(result.stdout).findall("rule")
+                    labels = [rule.attrib["name"] for rule in rules]
+                    warnings = [
+                        value.attrib["value"]
+                        for rule in rules
+                        for value in rule.findall("boolean[@name='emit_warnings']")
+                    ]
+                    self.assertEqual(
+                        warnings,
+                        ["true" if dependency_kind == "path" else "false"],
+                        f"Unexpected build-script warnings for {dependency_kind} dependency:\n"
+                        f"{result.stdout}",
+                    )
                     self.assertIn(f"@{hub_name}//:{CRATE_NAME}", labels)
                     self.assertTrue(
                         any(
-                            f"{hub_name}__{CRATE_NAME}-{CRATE_VERSION}" in label
+                            f"{hub_name}__" in label
+                            and f"{CRATE_NAME}-{CRATE_VERSION}" in label
                             and label.endswith(f"//:{CRATE_NAME}")
                             for label in labels
                         ),
-                        f"{registry_kind} registry query did not generate the "
+                        f"{dependency_kind} dependency query did not generate the "
                         f"{CRATE_NAME} {CRATE_VERSION} crate target: {labels}",
                     )
 
@@ -147,11 +200,11 @@ class CustomRegistryTest(unittest.TestCase):
         rules_rs_root: pathlib.Path,
         registry_source: str,
         checksum: str,
-        registry_kind: str,
+        dependency_kind: str,
     ) -> str:
-        hub_name = "custom_registry_crates_" + registry_kind
+        hub_name = "custom_registry_crates_" + dependency_kind
 
-        if registry_kind == "named":
+        if dependency_kind == "named":
             cargo_config = f"""\
                 [registries.artifactory]
                 index = "{registry_source}"
