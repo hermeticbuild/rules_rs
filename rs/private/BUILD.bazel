@@ -5,13 +5,18 @@ load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
 load(":annotations_test.bzl", "annotations_tests")
 load(":bindgen_test.bzl", "bindgen_tests")
 load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
+load(":cargo_build_script_variants_test.bzl", "cargo_build_script_variants_tests")
+load(":cargo_context_test.bzl", "cargo_context_tests")
 load(":cargo_toml_utils_test.bzl", "cargo_toml_utils_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
+load(":crate_configurations_test.bzl", "crate_configurations_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
+load(":repository_utils_test.bzl", "repository_utils_tests")
 load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
 load(":semver_test.bzl", "semver_select_tests")
+load(":workspace_dep_data_test.bzl", "workspace_dep_data_tests")
 
 bool_setting(
     name = "source_stdlib_building",
@@ -39,19 +44,29 @@ bindgen_tests()
 
 bpf_linker_repository_tests()
 
+cargo_build_script_variants_tests()
+
+cargo_context_tests()
+
 cargo_toml_utils_tests()
 
 cargo_workspace_graph_tests()
 
 cfg_parser_tests()
 
+crate_configurations_tests()
+
 lint_flags_tests()
 
 registry_utils_tests()
 
+repository_utils_tests()
+
 rust_repository_utils_tests()
 
 semver_select_tests()
+
+workspace_dep_data_tests()
 
 # package_metadata.bzl does not provide a bzl_library for Stardoc.
 filegroup(
@@ -64,7 +79,10 @@ bzl_library(
     name = "all_crate_deps",
     srcs = ["all_crate_deps.bzl"],
     visibility = ["//rs:__subpackages__"],
-    deps = [":select_utils"],
+    deps = [
+        ":cargo_select",
+        ":select_utils",
+    ],
 )
 
 bzl_library(
@@ -93,6 +111,29 @@ bzl_library(
     srcs = ["bpf_linker_repository_test.bzl"],
     deps = [
         ":bpf_linker_repository",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "cargo_build_script_variants",
+    srcs = ["cargo_build_script_variants.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":cargo_select",
+        ":select_utils",
+        "//rs:cargo_build_script",
+        "@rules_rust//cargo/private:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "cargo_build_script_variants_test",
+    srcs = ["cargo_build_script_variants_test.bzl"],
+    deps = [
+        ":cargo_build_script_variants",
+        ":cargo_select",
+        "//rs:cargo_build_script",
         "@bazel_skylib//lib:unittest",
     ],
 )
@@ -172,6 +213,21 @@ bzl_library(
 )
 
 bzl_library(
+    name = "crate_configurations",
+    srcs = ["crate_configurations.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "crate_configurations_test",
+    srcs = ["crate_configurations_test.bzl"],
+    deps = [
+        ":crate_configurations",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
     name = "registry_config_repository",
     srcs = ["registry_config_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
@@ -204,6 +260,25 @@ bzl_library(
         ":cargo_toml_utils",
         ":select_utils",
         ":semver",
+    ],
+)
+
+bzl_library(
+    name = "repository_utils_test",
+    srcs = ["repository_utils_test.bzl"],
+    deps = [
+        ":repository_utils",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "workspace_dep_data_test",
+    srcs = ["workspace_dep_data_test.bzl"],
+    deps = [
+        ":all_crate_deps",
+        ":cargo_workspace_graph",
+        "@bazel_skylib//lib:unittest",
     ],
 )
 
@@ -410,4 +485,24 @@ bzl_library(
     name = "semver",
     srcs = ["semver.bzl"],
     visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "cargo_select",
+    srcs = ["cargo_select.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":select_utils",
+        "//rs/platforms:triples",
+        "@rules_rust//rust/platform:bzl_lib",
+    ],
+)
+
+bzl_library(
+    name = "cargo_context_test",
+    srcs = ["cargo_context_test.bzl"],
+    deps = [
+        "@bazel_skylib//lib:unittest",
+        "@rules_rust//rust/private:bzl_lib",
+    ],
 )

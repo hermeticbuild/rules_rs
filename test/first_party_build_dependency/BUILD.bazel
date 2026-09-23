@@ -1,0 +1,24 @@
+load("@first_party_build_dependency//:defs.bzl", "aliases", "all_crate_deps", "cargo_build_script", "crate_features")
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+])
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    crate_root = "build.rs",
+)
+
+rust_library(
+    name = "first_party_build_dependency",
+    srcs = ["src/lib.rs"],
+    aliases = aliases(),
+    crate_features = crate_features(),
+    crate_root = "src/lib.rs",
+    edition = "2021",
+    visibility = ["//visibility:public"],
+    deps = all_crate_deps() + [":build_script"],
+)

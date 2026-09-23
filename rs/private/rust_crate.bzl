@@ -4,37 +4,30 @@ load(
     _rust_library = "rust_library",
     _rust_proc_macro = "rust_proc_macro",
 )
-load("//rs:cargo_build_script.bzl", "cargo_build_script")
 load("//rs:rust_binary.bzl", "rust_binary")
 load("//rs:rust_library.bzl", "rust_library")
 load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
-
-def _platform(triple, use_legacy_rules_rust_platforms):
-    if use_legacy_rules_rust_platforms:
-        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
-    return "@rules_rs//rs/platforms/config:" + triple
+load(":cargo_build_script_variants.bzl", "cargo_build_script_for_configurations")
+load(":cargo_select.bzl", "cargo_select")
 
 def rust_crate(
         name,
         crate_name,
         purl,
         version,
-        aliases,
+        configurations,
+        cargo_target_triple_map,
+        hub_name,
         deps,
         link_deps,
         data,
-        crate_features,
-        triples,
-        conditional_crate_features,
         crate_root,
         edition,
         rustc_flags,
         tags,
-        target_compatible_with,
         links,
         build_script,
         build_script_data,
-        build_deps,
         build_script_env,
         build_script_env_files,
         allow_build_script_to_detect_nonhermetic_paths,
@@ -48,11 +41,64 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False):
+    crate_name = crate_name or name.replace("-", "_")
+    package_metadata_name = name + "_package_metadata"
     package_metadata(
-        name = name + "_package_metadata",
+        name = package_metadata_name,
         purl = purl,
         visibility = ["//visibility:public"],
     )
+
+    if deps:
+        deps = set([native.package_relative_label(dep) for dep in deps])
+        resolved_deps = {}
+        for cargo_target_triple, configuration in configurations.items():
+            resolved_deps[cargo_target_triple] = {}
+            for platform_triple, labels in configuration["deps_by_triple"].items():
+                selected = []
+                for label in labels:
+                    label = native.package_relative_label(label)
+                    if label not in deps:
+                        selected.append(label)
+                resolved_deps[cargo_target_triple][platform_triple] = selected
+        deps = list(deps)
+    else:
+        resolved_deps = {
+            cargo_target_triple: {platform_triple: list(deps) for platform_triple, deps in configuration["deps_by_triple"].items()}
+            for cargo_target_triple, configuration in configurations.items()
+        }
+    deps = deps + cargo_select(resolved_deps, hub_name, use_legacy_rules_rust_platforms, default = [])
+    crate_features = cargo_select(
+        {cargo_target_triple: configuration["crate_features_by_triple"] for cargo_target_triple, configuration in configurations.items()},
+        hub_name,
+        use_legacy_rules_rust_platforms,
+        default = [],
+    )
+    aliases = cargo_select(
+        {
+            cargo_target_triple: {
+                platform_triple: {
+                    dep: alias
+                    for dep, alias in deps.items()
+                    if alias
+                }
+                for platform_triple, deps in configuration["deps_by_triple"].items()
+            }
+            for cargo_target_triple, configuration in configurations.items()
+        },
+        hub_name,
+        use_legacy_rules_rust_platforms,
+        default = {},
+    )
+    target_compatible_with = cargo_select(
+        {
+            cargo_target_triple: {platform_triple: [] for platform_triple in configuration["crate_features_by_triple"]}
+            for cargo_target_triple, configuration in configurations.items()
+        },
+        hub_name,
+        use_legacy_rules_rust_platforms,
+        default = ["@platforms//:incompatible"],
+    ) if hub_name else []
 
     compile_data = native.glob(
         include = ["**"],
@@ -82,12 +128,13 @@ def rust_crate(
         "norustfmt",
     ]
     crate_tags = default_tags + tags
-    build_script_target_tags = crate_tags + build_script_tags
 
     if build_script:
-        build_script_kwargs = dict(
-            deps = build_deps,
-            aliases = aliases,
+        deps = deps + cargo_build_script_for_configurations(
+            configurations = configurations,
+            hub_name = hub_name,
+            name = "_bs",
+            use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
             compile_data = compile_data,
             crate_name = "build_script_build",
             crate_root = build_script,
@@ -106,81 +153,23 @@ def rust_crate(
             rustc_flags = ["--cap-lints=allow"],
             srcs = srcs,
             target_compatible_with = target_compatible_with,
-            tags = build_script_target_tags + ["manual"],
+            tags = crate_tags + build_script_tags,
             version = version,
         )
 
-        if conditional_crate_features:
-            branches = {}
-
-            # The build script is cfg-exec, but the features must be selected according to the target.
-            # Only stamp out one target per triple when there are per-platform feature deltas.
-            for triple in triples:
-                build_script_name = "_bs_" + triple
-                branches[_platform(triple, use_legacy_rules_rust_platforms)] = build_script_name
-
-                build_script_kwargs_for_triple = dict(build_script_kwargs)
-                build_script_kwargs_for_triple["rustc_flags"] = build_script_kwargs["rustc_flags"] + [
-                    # Avoid metadata generation to clash under the same directory when cross-compiling to multiple targets
-                    # concurrently, see https://github.com/hermeticbuild/rules_rs/issues/161
-                    #
-                    # Alternatively, we could also tweak the `crate_name`, but that would drift away from Cargo's
-                    # convention to compile `build.rs` as `build_script_build`, which could lead to unpredictable
-                    # failures for any buildscript relying on it.
-                    "--codegen=metadata=-" + triple.replace("-", "_"),
-                ]
-
-                cargo_build_script(
-                    name = build_script_name,
-                    crate_features = crate_features + conditional_crate_features.get(triple, []),
-                    **build_script_kwargs_for_triple
-                )
-
-            native.alias(
-                name = "_bs",
-                actual = select(branches),
-                tags = build_script_target_tags,
-            )
-
-        else:
-            cargo_build_script(
-                name = "_bs",
-                crate_features = crate_features,
-                **build_script_kwargs
-            )
-
-        maybe_build_script = ["_bs"]
-    else:
-        maybe_build_script = []
-
-    deps = deps + maybe_build_script
-
+    rustc_flags = rustc_flags + ["--cap-lints=allow"]
     if not has_lib:
-        # HACK: create a stub target so the hub's `<crate>-<version>` alias
-        # (emitted unconditionally in rs/extensions.bzl) still resolves for
-        # binary-only crates. Marked as incompatible so that library use
-        # fails at analysis time. The descriptive stub name & alias make the
-        # error self-explanatory.
-        #
-        # A cleaner fix would be to make the hub skip the library alias when
-        # the crate has no library, but that is non-trivial.
-        stub_name = name + "_no_library_only_binary"
+        # Keep the hub's library label incompatible for binary-only crates.
         native.filegroup(
-            name = stub_name,
+            name = name,
             tags = crate_tags,
             target_compatible_with = ["@platforms//:incompatible"],
             visibility = ["//visibility:public"],
         )
-        native.alias(
-            name = name,
-            actual = stub_name,
-            tags = crate_tags,
-            visibility = ["//visibility:public"],
-        )
-
-    if has_lib:
+    else:
         kwargs = dict(
             name = name,
+            cargo_target_triple_map = cargo_target_triple_map,
             crate_name = crate_name,
             version = version,
             srcs = srcs,
@@ -188,18 +177,15 @@ def rust_crate(
             aliases = aliases,
             deps = deps,
             data = data,
-            crate_features = crate_features + select(
-                {_platform(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
-                {"//conditions:default": []},
-            ),
+            crate_features = crate_features,
             crate_root = crate_root,
             edition = edition,
             rustc_env = rustc_env,
             rustc_env_files = ["cargo_toml_env_vars.env"],
-            rustc_flags = rustc_flags + ["--cap-lints=allow"],
+            rustc_flags = rustc_flags,
             tags = crate_tags,
             target_compatible_with = target_compatible_with,
-            package_metadata = [name + "_package_metadata"],
+            package_metadata = [package_metadata_name],
             skip_deps_verification = skip_deps_verification,
             visibility = ["//visibility:public"],
             skip_per_crate_rustc_flags = True,
@@ -213,13 +199,15 @@ def rust_crate(
             kwargs["link_deps"] = link_deps
             (_rust_library if skip_deps_verification else rust_library)(**kwargs)
 
-    binary_lib_dep = [name] if has_lib else []
+    if binaries and has_lib:
+        deps = [name] + deps
     for binary, crate_root in binaries.items():
         rust_binary(
             name = binary + "__bin",
+            cargo_target_triple_map = cargo_target_triple_map,
             compile_data = compile_data,
             aliases = aliases,
-            deps = binary_lib_dep + deps,
+            deps = deps,
             link_deps = link_deps,
             data = data,
             crate_features = crate_features,
@@ -227,7 +215,7 @@ def rust_crate(
             edition = edition,
             rustc_env = rustc_env,
             rustc_env_files = ["cargo_toml_env_vars.env"],
-            rustc_flags = rustc_flags + ["--cap-lints=allow"],
+            rustc_flags = rustc_flags,
             srcs = srcs,
             tags = crate_tags,
             target_compatible_with = target_compatible_with,

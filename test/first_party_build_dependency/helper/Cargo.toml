@@ -1,0 +1,13 @@
+[package]
+name = "helper"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+target_feature = ["shared/target_feature"]
+exec_feature = ["shared/exec_feature", "dep:optional-helper"]
+
+[dependencies]
+shared = { path = "../vendor/shared" }
+leaf = { path = "../vendor/leaf" }
+optional-helper = { path = "../vendor/optional-helper", optional = true }

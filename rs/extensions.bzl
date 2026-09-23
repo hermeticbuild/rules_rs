@@ -1,23 +1,22 @@
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL")
+load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
 load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
     "cargo_toml_fact",
-    "platform_label",
     "render_dep_data",
-    "render_string_list",
     "resolve_cargo_workspace_members",
-    "resolve_package_facts",
+    "resolve_packages",
     "split_lockfile_packages",
     "workspace_dep_data",
     _fq_crate = "fq_crate",
     _manifest_package_dir = "manifest_package_dir",
     _normalize_path = "normalize_path",
-    _select = "select_items",
 )
+load("//rs/private:crate_configurations.bzl", "prepare_crate_configurations")
 load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_repository")
@@ -26,6 +25,7 @@ load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_to
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
 load("//rs/private:repository_utils.bzl", "render_select")
+load("//rs/private:select_utils.bzl", "platform_label")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
 def _spoke_repo(hub_name, name, version):
@@ -231,11 +231,8 @@ def _generate_hub_and_spokes(
             # Watch Cargo.toml so Bazel re-runs the extension when Cargo.toml changes.
             cargo_toml_path = paths.join(package["local_path"], "Cargo.toml")
             mctx.watch(mctx.path(cargo_toml_path))
-            annotation = annotation_for(annotations, name, package["version"], hub_name)
             cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
             fact = cargo_toml_fact(cargo_toml_json, {})
-
-            package["strip_prefix"] = fact.get("strip_prefix", "")
         elif source.startswith("git+"):
             key = source + "_" + name
             fact = existing_facts.get(key)
@@ -243,7 +240,6 @@ def _generate_hub_and_spokes(
                 facts[key] = fact
                 fact = json.decode(fact)
             else:
-                annotation = annotation_for(annotations, name, package["version"], hub_name)
                 info = package.get("member_crate_cargo_toml_info")
                 if info:
                     # TODO(zbarsky): These tokens got enqueues last, so this can bottleneck
@@ -270,7 +266,7 @@ def _generate_hub_and_spokes(
 
         facts_by_fq_crate[_fq_crate(name, version)] = fact
 
-    resolved_facts = resolve_package_facts(packages, facts_by_fq_crate, platform_triples)
+    resolved_facts = resolve_packages(packages, facts_by_fq_crate, platform_triples)
     feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate
     versions_by_name = resolved_facts.versions_by_name
 
@@ -287,11 +283,11 @@ def _generate_hub_and_spokes(
         annotations = annotations,
         platform_triples = platform_triples,
         materialize_workspace_members = False,
+        exec_platform_triples = SUPPORTED_EXEC_TRIPLES,
         validate_lockfile = validate_lockfile,
         debug = debug,
         dep_label_prefix = "@%s//:" % hub_name,
         watch_manifests = watch_manifests,
-        use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
     )
     cfg_match_cache = workspace_resolution.cfg_match_cache
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
@@ -299,6 +295,31 @@ def _generate_hub_and_spokes(
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
 
     _date(mctx, "set up initial deps!")
+
+    package_by_fq = {
+        _fq_crate(package["name"], package["version"]): package
+        for package in packages
+    }
+    workspace_crates = [fq for fq in feature_resolutions_by_fq_crate if fq not in package_by_fq]
+    preserve_cargo_target_triple = []
+    for fq, package in package_by_fq.items():
+        annotation = annotation_for(annotations, package["name"], package["version"], hub_name)
+        fact = facts_by_fq_crate[fq]
+        opaque_deps = bool(fact.get("bazel_deps")) or (package["source"].startswith("git+") and ("bazel_deps" not in fact or annotation.patches))
+        for field in ["deps", "link_deps", "data", "build_script_data", "build_script_data_select", "build_script_tools", "build_script_tools_select", "build_script_env_files", "build_script_toolchains"]:
+            if getattr(annotation, field):
+                opaque_deps = True
+                break
+        if opaque_deps:
+            preserve_cargo_target_triple.append(fq)
+    configurations_by_crate = prepare_crate_configurations(
+        feature_resolutions_by_fq_crate,
+        workspace_resolution.exec_resolutions_by_cargo_target_triple,
+        dep_label_prefix = "@%s//:" % hub_name,
+        exec_platform_triples = SUPPORTED_EXEC_TRIPLES,
+        preserve_cargo_target_triple = preserve_cargo_target_triple,
+        workspace_crates = workspace_crates,
+    )
 
     mctx.report_progress("Initializing spokes")
 
@@ -308,8 +329,6 @@ def _generate_hub_and_spokes(
         crate_name = package["name"]
         version = package["version"]
         source = package["source"]
-
-        feature_resolutions = feature_resolutions_by_fq_crate[_fq_crate(crate_name, version)]
 
         annotation = annotation_for(annotations, crate_name, version, hub_name)
         suggested_annotation = None
@@ -338,11 +357,12 @@ crate.annotation(
                 formatted_well_known_annotation = suggested_annotation,
             ))
 
+        crate_configurations = configurations_by_crate[_fq_crate(crate_name, version)]
         kwargs = dict(
             hub_name = hub_name,
             gen_build_script = annotation.gen_build_script,
-            build_script_deps = [],
-            build_script_deps_select = _select(feature_resolutions.build_deps),
+            cargo_target_triple_map = crate_configurations.cargo_target_triple_map,
+            configurations = json.encode(crate_configurations.configurations),
             build_script_data = annotation.build_script_data,
             build_script_data_select = annotation.build_script_data_select,
             build_script_env = annotation.build_script_env,
@@ -359,11 +379,7 @@ crate.annotation(
             data = annotation.data,
             deps = annotation.deps,
             crate_tags = annotation.tags,
-            deps_select = _select(feature_resolutions.deps),
             link_deps = annotation.link_deps,
-            aliases = feature_resolutions.aliases,
-            crate_features = annotation.crate_features,
-            crate_features_select = _select(feature_resolutions.features_enabled),
             use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         )
 
@@ -440,10 +456,6 @@ crate.annotation(
 
     mctx.report_progress("Initializing hub")
 
-    package_by_fq = {
-        _fq_crate(package["name"], package["version"]): package
-        for package in packages
-    }
     repo_root = _normalize_path(cargo_metadata["workspace_root"])
     workspace_package = _label_directory(cargo_lock_path)
 
@@ -476,7 +488,13 @@ crate.annotation(
                     cargo_toml_lint_flags(cargo_toml_json),
                 ))
 
-    hub_contents = []
+    cargo_target_triples = set()
+    for crate_configurations in configurations_by_crate.values():
+        cargo_target_triples.update(crate_configurations.configurations)
+    hub_contents = [
+        'load("@rules_rs//rs/private:cargo_select.bzl", "cargo_config_settings")',
+        "cargo_config_settings(%r, %r, %r)" % (sorted(cargo_target_triples), sorted(set(platform_triples + SUPPORTED_EXEC_TRIPLES)), use_legacy_rules_rust_platforms),
+    ]
     for name, versions in versions_by_name.items():
         for version in versions:
             annotation = annotation_for(annotations, name, version, hub_name)
@@ -598,26 +616,27 @@ filegroup(
     for target_name, lint_flags in package_lint_targets:
         hub_contents.append(_render_cargo_lints_target(target_name, lint_flags))
 
-    resolved_platforms = []
+    resolved_platforms = set()
     for triple in platform_triples:
-        platform = platform_label(triple, use_legacy_rules_rust_platforms)
-        if platform not in resolved_platforms:
-            resolved_platforms.append(platform)
+        resolved_platforms.add(platform_label(triple, use_legacy_rules_rust_platforms))
 
     defs_bzl_contents = \
         """load(":data.bzl", "DEP_DATA")
-load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
+load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps", _crate_aliases = "crate_aliases", _crate_features = "crate_features")
+load("@rules_rs//rs/private:cargo_build_script_variants.bzl", _cargo_build_script_for_configurations = "cargo_build_script_for_configurations")
 
-_PLATFORMS = [
-    {platforms}
-]
-
-def aliases(package_name = None):
+def aliases(package_name = None, normal = False, normal_dev = False, build = False):
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return {{}}
 
-    return dep_data["aliases"]
+    return _crate_aliases(dep_data, normal = normal, normal_dev = normal_dev, build = build, hub_name = {hub_name}, use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms})
+
+def crate_features(package_name = None):
+    dep_data = DEP_DATA.get(package_name or native.package_name())
+    if not dep_data:
+        return []
+    return _crate_features(dep_data, hub_name = {hub_name}, use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms})
 
 def crate_name(package_name = None):
     dep_data = DEP_DATA.get(package_name or native.package_name())
@@ -653,11 +672,27 @@ def all_crate_deps(
 
     return _all_crate_deps(
         dep_data,
-        platforms = _PLATFORMS,
         normal = normal,
         normal_dev = normal_dev,
         build = build,
         filter_prefix = {this_repo} if cargo_only else None,
+        hub_name = {hub_name},
+        use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
+    )
+
+def cargo_build_script(name, package_name = None, **kwargs):
+    package_name = package_name or native.package_name()
+    dep_data = DEP_DATA.get(package_name)
+    if dep_data == None:
+        fail("No Cargo package found for %r" % package_name)
+    kwargs.setdefault("edition", dep_data["edition"])
+    _cargo_build_script_for_configurations(
+        name = name,
+        configurations = dep_data["configurations"],
+        preserve_cargo_target_triple = True,
+        hub_name = {hub_name},
+        use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
+        **kwargs
     )
 
 RESOLVED_PLATFORMS = select({{
@@ -665,16 +700,17 @@ RESOLVED_PLATFORMS = select({{
     "//conditions:default": ["@platforms//:incompatible"],
 }})
 """.format(
-            platforms = render_string_list(resolved_platforms),
+            use_legacy_rules_rust_platforms = repr(use_legacy_rules_rust_platforms),
             target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_platforms]),
             this_repo = repr("@" + hub_name + "//:"),
+            hub_name = repr(hub_name),
         )
 
     _date(mctx, "done")
 
     data_bzl_contents = render_dep_data(workspace_dep_data(
         cargo_metadata = cargo_metadata,
-        feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,
+        dep_label_prefix = "@%s//:" % hub_name,
         platform_triples = platform_triples,
         platform_cfg_attrs = platform_cfg_attrs,
         cfg_match_cache = cfg_match_cache,
@@ -682,6 +718,7 @@ RESOLVED_PLATFORMS = select({{
         workspace_package = workspace_package,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         lint_configs = lint_configs,
+        configurations_by_crate = configurations_by_crate,
     ))
 
     if dry_run:
@@ -1072,7 +1109,7 @@ _annotation = tag_class(
         #     doc = "If true, generates `rust_binary` targets for all of the crates bins",
         # ),
         "gen_binaries": attr.string_list(
-            doc = "As a list, the subset of the crate's bins that should get `rust_binary` targets produced.",
+            doc = "The subset of the crate's bins that should get `rust_binary` targets produced. Otherwise build-only packages are resolved for target platforms with default and annotated features; packages already used as target dependencies retain their resolved features.",
         ),
         "gen_build_script": attr.string(
             doc = "An authoritative flag to determine whether or not to produce `cargo_build_script` targets for the current crate. Supported values are 'on', 'off', and 'auto'.",

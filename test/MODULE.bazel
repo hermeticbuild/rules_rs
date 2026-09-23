@@ -102,6 +102,15 @@ register_toolchains(
     "@//prost/proto_toolchain",
 )
 
+PLATFORM_TRIPLES = [
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "aarch64-pc-windows-gnullvm",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-gnullvm",
+]
+
 TESTS = [
     # TODO(zbarsky): Figure out how to make this work?
     # "annotation_crate_features",
@@ -111,6 +120,7 @@ TESTS = [
     "build_script_runtime_env",
     "build_dep_features",
     "cargo_manifest_path_env",
+    "build_exec_feature_split",
     "cfg_feature_target_dep",
     "empty_workspace",
     "feature_name_overrides_implicit_dep",
@@ -147,37 +157,60 @@ TESTS = [
         cargo_toml = "//:%s/Cargo.toml" % test,
         # cargo_config = "//:.cargo/config.toml",
         # use_home_cargo_credentials = True,
-        debug = True,
         generate_lint_config = test == "workspace_lints",
-        platform_triples = [
-            "aarch64-unknown-linux-gnu",
-            "aarch64-apple-darwin",
-            "aarch64-pc-windows-gnullvm",
-            "x86_64-unknown-linux-gnu",
-            "x86_64-apple-darwin",
-            "x86_64-pc-windows-gnullvm",
-        ],
+        platform_triples = PLATFORM_TRIPLES,
     )
     for test in TESTS
 ]
 
 [use_repo(crate, test) for test in TESTS]
 
+crate.annotation(
+    crate = "build-only-helper",
+    gen_binaries = ["build-only-helper"],
+    repositories = ["build_exec_feature_split"],
+)
+crate.annotation_select(
+    crate = "build-only-helper",
+    crate_features = ["binary_linux"],
+    repositories = ["build_exec_feature_split"],
+    triples = [
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+crate.from_cargo(
+    name = "optional_target_build_dep",
+    cargo_lock = "//:optional_target_build_dep/Cargo.lock",
+    cargo_toml = "//:optional_target_build_dep/Cargo.toml",
+    platform_triples = [
+        "aarch64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+crate.annotation_select(
+    crate = "libdbus-sys",
+    crate_features = ["vendored"],
+    repositories = ["optional_target_build_dep"],
+    triples = ["x86_64-unknown-linux-gnu"],
+)
+use_repo(crate, "optional_target_build_dep")
+
+crate.from_cargo(
+    name = "first_party_build_dependency",
+    cargo_lock = "//first_party_build_dependency:Cargo.lock",
+    cargo_toml = "//first_party_build_dependency:Cargo.toml",
+    platform_triples = PLATFORM_TRIPLES,
+)
+use_repo(crate, "first_party_build_dependency")
+
 # Workspace member whose Cargo.toml lives at the bazel workspace root.
 crate.from_cargo(
     name = "root_package",
     cargo_lock = "//:Cargo.lock",
     cargo_toml = "//:Cargo.toml",
-    debug = True,
     generate_lint_config = True,
-    platform_triples = [
-        "aarch64-unknown-linux-gnu",
-        "aarch64-apple-darwin",
-        "aarch64-pc-windows-gnullvm",
-        "x86_64-unknown-linux-gnu",
-        "x86_64-apple-darwin",
-        "x86_64-pc-windows-gnullvm",
-    ],
+    platform_triples = PLATFORM_TRIPLES,
 )
 use_repo(crate, "root_package")
 

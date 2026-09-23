@@ -484,6 +484,63 @@ use_repo(rules_rust_pyo3, "rules_rust_pyo3")
 `rules_rs` currently supports Cargo lockfile based resolution through `crate.from_cargo(...)`.
 `crate.spec` and vendoring mode are not currently supported.
 
+Normal dependencies and build dependencies resolve features separately for each
+`platform_triples` entry. Each generated crate has one library target, with
+features and dependencies selected by Cargo resolution. A crate shares the
+default Bazel configuration only when its features and dependencies are
+independent of the original Cargo target and every normal and build dependency
+can also share. Otherwise, it retains the original target triple.
+Crates unreachable from the Cargo roots on every configured platform are
+incompatible. Generating a Bazel label does not make the crate an additional
+Cargo root.
+
+Build scripts with identical features, dependencies, and `cargo_target_triple` share
+one target. The build script is selected in the target configuration before
+its dependencies transition to the execution platform.
+
+For first-party build scripts, load `cargo_build_script` from the generated
+Cargo repository's `defs.bzl`. It selects the package's Cargo features, build
+dependencies, and aliases before the execution transition:
+
+```bzl
+load("@crates//:defs.bzl", "cargo_build_script")
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    crate_root = "build.rs",
+)
+```
+
+Use `all_crate_deps()`, `aliases()`, and `crate_features()` for libraries. The same first-party library target can be
+a normal dependency and a build dependency, including when a generated crate
+depends back on it. `cargo_target_triple` records the original target triple
+for build dependencies and survives execution transitions. Generated crates
+clear this setting when they share the default configuration. Rust toolchains
+clear it. C++ toolchains retain their existing configuration.
+`all_crate_deps(build = True)` is available only when build dependencies need
+the current Cargo resolution and their labels are identical across target
+platforms. Otherwise, use the generated `cargo_build_script`; the raw
+`@rules_rs//rs:cargo_build_script.bzl` rule cannot establish that resolution
+from a dependency list. `aliases(build = True)` requires identical alias maps.
+Annotation-added dependencies retain the labels supplied by the user. Registry
+crates using `package.metadata.bazel.deps` must also declare those dependencies
+with `crate.annotation(deps = ...)` when configurations would otherwise be
+shared. Cargo registry metadata does not include these Bazel dependencies.
+
+Proc macros reached through normal dependencies use the existing conservative
+target feature resolution for their normal dependencies. They do not share
+features enabled only through build dependencies, so they may need explicit
+`crate_features` annotations.
+For example, a PyO3 toolchain that sets `PYO3_NO_PYTHON` needs its chosen
+`abi3-py3*` feature on `pyo3-build-config` in both resolutions.
+
+`gen_binaries` resolves requested binaries for the target platform. For a package
+used only by build dependencies, it enables default features and `crate_features`
+annotations. If normal dependencies already reach the package, it preserves
+those resolved features, including `default-features = false`. Build-only feature requests do not enable
+features on generated binaries.
+
 Cargo workspaces sometimes use a self-referencing dev-dependency to enable extra features for tests:
 
 ```toml

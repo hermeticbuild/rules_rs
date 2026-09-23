@@ -1,0 +1,11 @@
+[package]
+name = "optional-build-dep-repro"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+libdbus-sys = "=0.2.7"
+
+[features]
+vendored = ["libdbus-sys/vendored"]

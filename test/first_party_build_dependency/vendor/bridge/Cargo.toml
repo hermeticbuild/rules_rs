@@ -1,0 +1,9 @@
+[package]
+name = "bridge"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+helper = { path = "../../helper" }
+shared = { path = "../shared" }
+leaf = { path = "../leaf" }

@@ -1,21 +1,14 @@
 load(":cargo_toml_utils.bzl", "cargo_toml_is_proc_macro")
-load(":select_utils.bzl", "compute_select")
+load(":select_utils.bzl", "compute_select", "platform_label")
 load(":semver.bzl", "parse_full_version")
 
 # Bazel 8 does not define attr.label_list_dict.
 _label_list_dict = getattr(attr, "label_list_dict", attr.string_list_dict)
 
-def _platform(triple, use_legacy_rules_rust_platforms):
-    if use_legacy_rules_rust_platforms:
-        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
-    return "@rules_rs//rs/platforms/config:" + triple
-
 def _format_branches(branches):
     return """select({
         %s
-    })""" % (
-        ",\n        ".join(['"%s": %s' % branch for branch in branches])
-    )
+    })""" % ",\n        ".join(branches)
 
 def render_select(non_platform_items, platform_items, use_legacy_rules_rust_platforms):
     non_platform_items = [str(item) for item in non_platform_items]
@@ -29,26 +22,24 @@ def render_select(non_platform_items, platform_items, use_legacy_rules_rust_plat
     if not branches:
         return common_items, ""
 
-    branches = [(_platform(k, use_legacy_rules_rust_platforms), repr(v)) for k, v in branches.items()]
-    branches.append(("//conditions:default", "[],"))
+    branches = {platform_label(triple, use_legacy_rules_rust_platforms): branches[triple] for triple in branches}
+    branches = ['"%s": %s' % (platform, repr(branches[platform])) for platform in branches]
+    branches.append('"//conditions:default": []')
 
     return common_items, _format_branches(branches)
 
 def render_select_build_script_env(platform_items, use_legacy_rules_rust_platforms):
     branches = [
-        (_platform(triple, use_legacy_rules_rust_platforms), items)
-        for triple, items in platform_items.items()
+        '"%s": %s' % (platform_label(triple, use_legacy_rules_rust_platforms), platform_items[triple])
+        for triple in platform_items
     ]
 
     if not branches:
         return ""
 
-    branches.append(("//conditions:default", "{},"))
+    branches.append('"//conditions:default": {},')
 
     return _format_branches(branches)
-
-def _exclude_deps_from_features(features):
-    return [f for f in features if not f.startswith("dep:")]
 
 _INHERITABLE_PACKAGE_FIELDS = [
     "version",
@@ -162,6 +153,8 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
             "has_lib": repr(has_lib),
             "is_proc_macro": repr(is_proc_macro),
             "links": repr(links),
+            "name": repr(name),
+            "version": repr(version),
         },
     )
 
@@ -170,32 +163,23 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    crate_name = {crate_name},
 {indent}    purl = {purl},
 {indent}    version = {version},
-{indent}    aliases = {{
-{indent}        {aliases}
-{indent}    }},
 {indent}    deps = [
 {indent}        {deps}
-{indent}    ]{extra_deps}{conditional_deps},
+{indent}    ]{extra_deps},
 {indent}    link_deps = [
 {indent}        {link_deps}
 {indent}    ],
 {indent}    data = [
 {indent}        {data}
 {indent}    ],
-{extra_compile_data_attr}{indent}    crate_features = {crate_features},
-{indent}    triples = {triples},
-{indent}    conditional_crate_features = {conditional_crate_features},
-{indent}    crate_root = {crate_root},
+{extra_compile_data_attr}{indent}    crate_root = {crate_root},
 {indent}    edition = {edition},
-{rustc_env_attr}{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
+{indent}    rustc_env = {rustc_env},
+{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
 {indent}    tags = {tags},
-{indent}    target_compatible_with = RESOLVED_PLATFORMS,
 {indent}    links = {links},
 {indent}    build_script = {build_script},
 {indent}    build_script_data = {build_script_data}{conditional_build_script_data},
-{indent}    build_deps = [
-{indent}        {build_deps}
-{indent}    ]{conditional_build_deps},
 {indent}    build_script_env = {build_script_env}{conditional_build_script_env},
 {indent}    build_script_env_files = {build_script_env_files},
 {indent}    allow_build_script_to_detect_nonhermetic_paths = {allow_build_script_to_detect_nonhermetic_paths},
@@ -206,22 +190,23 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    has_lib = {has_lib},
 {indent}    binaries = {binaries},
 {indent}    use_legacy_rules_rust_platforms = {use_legacy_rules_rust_platforms},
+{indent}    configurations = {configurations},
+{indent}    cargo_target_triple_map = {cargo_target_triple_map},
+{indent}    hub_name = {hub_name},
 {skip_deps_verification_attr}{indent})
 """
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
-    # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
-    # See `rs/private/rust_crate.bzl` for details.
-    crate_features, conditional_crate_features = compute_select(
-        _exclude_deps_from_features(attr.crate_features),
-        {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
-    )
     use_legacy_rules_rust_platforms = attr.use_legacy_rules_rust_platforms
-    build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select, use_legacy_rules_rust_platforms)
+    if bazel_metadata.get("deps"):
+        for cargo_target_triple in attr.cargo_target_triple_map:
+            if cargo_target_triple:
+                fail("Declare package.metadata.bazel.deps in crate.annotation(deps = ...) so Cargo configuration sharing accounts for these dependencies.")
+    deps = [str(dep) for dep in attr.deps] + bazel_metadata.get("deps", [])
+
     build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select, use_legacy_rules_rust_platforms)
     build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_legacy_rules_rust_platforms)
     rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_legacy_rules_rust_platforms)
-    deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_legacy_rules_rust_platforms)
     build_script_env_files = getattr(attr, "build_script_env_files", []) + ["cargo_toml_env_vars.env"]
     link_deps = getattr(attr, "link_deps", [])
 
@@ -232,46 +217,24 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     extra_compile_data = getattr(attr, "extra_compile_data", [])
     extra_compile_data_attr = ""
     if extra_compile_data:
-        extra_compile_data_attr = """{indent}    extra_compile_data = [
-{indent}        {extra_compile_data}
-{indent}    ],
-""".format(
-            indent = indent,
-            extra_compile_data = list_indent.join(['"%s"' % d for d in extra_compile_data]),
-        )
+        extra_compile_data_attr = "%s    extra_compile_data = %r,\n" % (indent, extra_compile_data)
     cargo_manifest_env = {"CARGO_MANIFEST_PATH": "$(execpath :Cargo.toml)"}
-    rustc_env = cargo_manifest_env | getattr(attr, "rustc_env", {})
-    rustc_env_attr = "%s    rustc_env = %s,\n" % (indent, repr(rustc_env)) if rustc_env else ""
+    rustc_env = cargo_manifest_env | attr.rustc_env
     skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""
 
     return _RUST_CRATE_MACRO_CALL.format(
         indent = indent,
-        name = values["name"],
-        crate_name = values["crate_name"],
-        purl = values["purl"],
-        version = values["version"],
-        aliases = list_indent.join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
         deps = list_indent.join(['"%s"' % d for d in sorted(deps)]),
         extra_deps = extra_deps,
-        conditional_deps = " + " + conditional_deps if conditional_deps else "",
         link_deps = list_indent.join(['"%s"' % d for d in sorted(link_deps)]),
         data = list_indent.join(['"%s"' % str(d) for d in attr.data]),
         extra_compile_data_attr = extra_compile_data_attr,
-        crate_features = repr(sorted(crate_features)),
-        triples = repr(attr.crate_features_select.keys()),
-        conditional_crate_features = repr(conditional_crate_features),
-        crate_root = values["crate_root"],
-        edition = values["edition"],
-        rustc_env_attr = rustc_env_attr,
+        rustc_env = repr(rustc_env),
         rustc_flags = repr(rustc_flags),
         conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),
-        links = values["links"],
-        build_script = values["build_script"],
         build_script_data = repr(build_script_data),
         conditional_build_script_data = " + " + conditional_build_script_data if conditional_build_script_data else "",
-        build_deps = list_indent.join(['"%s"' % d for d in sorted(build_deps)]),
-        conditional_build_deps = " + " + conditional_build_deps if conditional_build_deps else "",
         build_script_env = repr(cargo_manifest_env | attr.build_script_env),
         conditional_build_script_env = " | " + conditional_build_script_env if conditional_build_script_env else "",
         build_script_env_files = repr([str(f) for f in build_script_env_files]),
@@ -280,11 +243,12 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         build_script_tools = repr(build_script_tools),
         conditional_build_script_tools = " + " + conditional_build_script_tools if conditional_build_script_tools else "",
         build_script_tags = repr(attr.build_script_tags),
-        is_proc_macro = values["is_proc_macro"],
-        has_lib = values["has_lib"],
-        binaries = values["binaries"],
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        configurations = repr(json.decode(attr.configurations)),
+        cargo_target_triple_map = repr(attr.cargo_target_triple_map),
+        hub_name = repr(attr.hub_name),
         skip_deps_verification_attr = skip_deps_verification_attr,
+        **values
     )
 
 def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
@@ -297,18 +261,14 @@ def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
     return """\
 load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
-load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
 {rust_crate_call}""".format(
-        hub_name = attr.hub_name,
         rust_crate_call = render_rust_crate_call(attr, values, bazel_metadata = bazel_metadata),
     ) + additive_build_file_content
 
 rust_crate_attrs = {
     "hub_name": attr.string(),
     "gen_build_script": attr.string(),
-    "build_script_deps": attr.label_list(),
-    "build_script_deps_select": _label_list_dict(),
     "build_script_data": attr.label_list(),
     "build_script_data_select": _label_list_dict(),
     "build_script_env": attr.string_dict(),
@@ -327,11 +287,9 @@ rust_crate_attrs = {
     "crate_tags": attr.string_list(),
     "data": attr.label_list(),
     "deps": attr.label_list(),
-    "deps_select": _label_list_dict(),
     "link_deps": attr.string_list(),
-    "aliases": attr.string_dict(),
-    "crate_features": attr.string_list(),
-    "crate_features_select": attr.string_list_dict(),
+    "cargo_target_triple_map": attr.string_dict(),
+    "configurations": attr.string(mandatory = True),
     "use_legacy_rules_rust_platforms": attr.bool(),
 }
 

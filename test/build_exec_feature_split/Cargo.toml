@@ -1,0 +1,29 @@
+[package]
+name = "build-exec-feature-split"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+resolver = "2"
+exclude = ["vendor/consumer", "vendor/shared", "vendor/build-only-helper", "vendor/build-macro", "vendor/macro", "vendor/macro-helper", "vendor/wrapper"]
+
+[dependencies]
+selected-shared = { package = "feature-split-shared", path = "vendor/shared", features = ["target_feature"] }
+feature-split-consumer = { path = "vendor/consumer" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+feature-split-consumer = { path = "vendor/consumer", features = ["linux_build"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+feature-split-consumer = { path = "vendor/consumer", features = ["darwin_build"] }
+
+[build-dependencies]
+selected-shared = { package = "feature-split-shared", path = "vendor/shared", features = ["exec_feature"] }
+
+[patch.crates-io]
+build-only-helper = { path = "vendor/build-only-helper" }
+feature-split-build-macro = { path = "vendor/build-macro" }
+feature-split-macro = { path = "vendor/macro" }
+feature-split-macro-helper = { path = "vendor/macro-helper" }
+feature-split-shared = { path = "vendor/shared" }
+feature-split-wrapper = { path = "vendor/wrapper" }
