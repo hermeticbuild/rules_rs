@@ -303,8 +303,8 @@ toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "too
 toolchains.host_cargo(
     linux_amd64 = "//toolchain/linux_amd64:bin/cargo",
     linux_arm64 = "//toolchain/linux_arm64:bin/cargo",
-    darwin_amd64 = "//toolchain/darwin_amd64:bin/cargo",
-    darwin_arm64 = "//toolchain/darwin_arm64:bin/cargo",
+    macos_amd64 = "//toolchain/macos_amd64:bin/cargo",
+    macos_arm64 = "//toolchain/macos_arm64:bin/cargo",
     windows_amd64 = "//toolchain/windows_amd64:bin/cargo.exe",
     windows_arm64 = "//toolchain/windows_arm64:bin/cargo.exe",
 )
@@ -313,7 +313,6 @@ register_toolchains("@our_toolchains//...")
 ```
 
 Provide the attributes for the hosts you use; the other attributes can be omitted.
-The `darwin_*` attributes are for macOS.
 Cargo is selected for the operating system and architecture of the machine
 running Bazel, independently of the build target or remote execution platform.
 `amd64` covers x86-64, and `arm64` covers AArch64. If the current host's attribute

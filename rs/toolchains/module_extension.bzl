@@ -57,7 +57,7 @@ _HOST_CARGO_TAG = tag_class(
             allow_single_file = True,
             doc = "Existing Cargo executable for %s %s." % (os, arch),
         )
-        for os in ["linux", "darwin", "windows"]
+        for os in ["linux", "macos", "windows"]
         for arch in ["amd64", "arm64"]
     },
 )
@@ -372,9 +372,9 @@ def _toolchains_impl(mctx):
         archive_path = _archive_path(tool_name, target_triple, version, iso_date, _urls_for_version(version, iso_date, rust_redist_archives))
         return new_facts[archive_path]
 
-    host_platform = repo_utils.platform(mctx)
-    host_os, host_arch = host_platform.split("_", 1)
+    host_os, host_arch = repo_utils.platform(mctx).split("_", 1)
     host_os = "macos" if host_os == "darwin" else host_os
+    host_platform = "%s_%s" % (host_os, host_arch)
     host_arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(host_arch, host_arch)
     host_cargo_repos = {}
     host_rustc_repos = {}
