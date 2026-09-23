@@ -79,7 +79,7 @@ bzl_library(
         "//rs/private:toml2json",
         "@bazel_lib//lib:repo_utils",
         "@bazel_skylib//lib:paths",
-        "@rs_rust_host_tools//:defs.bzl",
+        "@host_cargo//:defs.bzl",
     ],
 )
 

@@ -1,12 +1,13 @@
 """Module extension for configuring rules_rs Rust toolchains."""
 
+load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/experimental/miri/private:miri_repository.bzl", "miri_repository")
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_AND_2_TRIPLES", "SUPPORTED_TIER_3_TRIPLES")
 load("//rs/private:bpf_linker_repository.bzl", "BPF_LINKER_SUPPORTED_EXEC_TRIPLES", "declare_bpf_linker_repository")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
-load("//rs/private:host_tools_repository.bzl", "host_tools_repository")
+load("//rs/private:host_cargo_repository.bzl", "host_cargo_repository")
 load("//rs/private:rust_analyzer_repository.bzl", "rust_analyzer_repository")
 load(
     "//rs/private:rust_repository_utils.bzl",
@@ -22,6 +23,7 @@ load("//rs/private:rustc_repository.bzl", "rustc_repository")
 load("//rs/private:rustc_src_repository.bzl", "rustc_src_repository")
 load("//rs/private:rustfmt_repository.bzl", "rustfmt_repository")
 load("//rs/private:stdlib_repository.bzl", "stdlib_repository")
+load("//rs/private:toolchain_labels_repository.bzl", "toolchain_labels_repository")
 load("//rs/private:toolchains_repository.bzl", "toolchains_repository")
 load("//rs/toolchains:toolchain_config.bzl", "resolve_toolchain_configs")
 load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
@@ -29,22 +31,6 @@ load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version
 _DEFAULT_RUSTC_VERSION = "1.92.0"
 _DEFAULT_EDITION = "2021"
 _DEFAULT_TOOLCHAIN_REPO_NAME = "default_rust_toolchains"
-
-def _normalize_os_name(os_name):
-    os_name = os_name.lower()
-    if os_name.startswith("mac os"):
-        return "macos"
-    if os_name.startswith("windows"):
-        return "windows"
-    return os_name
-
-def _normalize_arch_name(arch):
-    arch = arch.lower()
-    if arch in ("amd64", "x86_64", "x64"):
-        return "x86_64"
-    if arch in ("aarch64", "arm64"):
-        return "aarch64"
-    return arch
 
 def _sanitize_path_fragment(path):
     return path.replace("/", "_").replace(":", "_")
@@ -63,6 +49,18 @@ def _urls_for_version(version, iso_date, rust_redist_archives):
     if not iso_date and version in rust_redist_archives:
         return rust_redist_url_templates(version)
     return DEFAULT_STATIC_RUST_URL_TEMPLATES
+
+_HOST_CARGO_TAG = tag_class(
+    doc = "Host Cargo executables by OS and architecture. Only the root module's tag is used. Suppresses the implicit default Rust toolchain.",
+    attrs = {
+        "%s_%s" % (os, arch): attr.label(
+            allow_single_file = True,
+            doc = "Existing Cargo executable for %s %s." % (os, arch),
+        )
+        for os in ["linux", "macos", "windows"]
+        for arch in ["amd64", "arm64"]
+    },
+)
 
 _TOOLCHAIN_TAG = tag_class(
     attrs = {
@@ -155,14 +153,18 @@ def _toolchains_impl(mctx):
     refresh_rust_redist = bool(mctx.getenv("RULES_RS_RUST_REDIST_REFRESH"))
 
     root_module_name = None
+    host_cargo_config = None
     for mod in mctx.modules:
         if mod.is_root:
             root_module_name = mod.name
+            if len(mod.tags.host_cargo) > 1:
+                fail("Only one `toolchains.host_cargo` tag may be declared by the root module")
+            if mod.tags.host_cargo:
+                host_cargo_config = mod.tags.host_cargo[0]
             break
 
     repo_configs = resolve_toolchain_configs(mctx.modules)
-    had_tags = bool(repo_configs)
-    if not had_tags:
+    if not repo_configs and not host_cargo_config:
         repo_configs[_DEFAULT_TOOLCHAIN_REPO_NAME] = struct(
             name = _DEFAULT_TOOLCHAIN_REPO_NAME,
             version = _DEFAULT_RUSTC_VERSION,
@@ -370,8 +372,10 @@ def _toolchains_impl(mctx):
         archive_path = _archive_path(tool_name, target_triple, version, iso_date, _urls_for_version(version, iso_date, rust_redist_archives))
         return new_facts[archive_path]
 
-    host_os = _normalize_os_name(mctx.os.name)
-    host_arch = _normalize_arch_name(mctx.os.arch)
+    host_os, host_arch = repo_utils.platform(mctx).split("_", 1)
+    host_os = "macos" if host_os == "darwin" else host_os
+    host_platform = "%s_%s" % (host_os, host_arch)
+    host_arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(host_arch, host_arch)
     host_cargo_repos = {}
     host_rustc_repos = {}
 
@@ -494,7 +498,6 @@ def _toolchains_impl(mctx):
     if len(host_rustc_repos) != len(rust_versions):
         fail("Could not find host rustc repository for {}-{}".format(host_os, host_arch))
     host_exe_suffix = ".exe" if host_os == "windows" else ""
-    host_cargo = "@{}//:bin/cargo{}".format(host_cargo_repos[version_tags[0].version], host_exe_suffix)
 
     for version in rust_versions:
         version_key = sanitize_version(version)
@@ -510,15 +513,23 @@ def _toolchains_impl(mctx):
             urls = urls,
         )
 
-    host_tools_repository(
-        name = "rs_rust_host_tools",
-        host_cargo = host_cargo,
+    if host_cargo_config:
+        host_cargo = getattr(host_cargo_config, host_platform, None)
+        if not host_cargo:
+            fail("Set toolchains.host_cargo(%s = ...) to provide Cargo for this Bazel host" % host_platform)
+    else:
+        host_cargo = "@%s//:bin/cargo%s" % (host_cargo_repos[version_tags[0].version], host_exe_suffix)
+    host_cargo_repository(
+        name = "host_cargo",
+        cargo = host_cargo,
     )
 
-    # `rs_rust_host_tools` is an implementation detail of rules_rs itself.
-    # Report it as a direct dependency only for the rules_rs root module so
-    # user modules are not asked to import it.
-    direct_deps = ["rs_rust_host_tools"] if root_module_name == "rules_rs" else []
+    toolchain_labels_repository(name = "rust_toolchain_labels")
+
+    # These repositories are implementation details of rules_rs itself.
+    # Report them as direct dependencies only for the rules_rs root module so
+    # user modules are not asked to import them.
+    direct_deps = ["host_cargo", "rust_toolchain_labels"] if root_module_name == "rules_rs" else []
     direct_dev_deps = []
     for tag in version_tags:
         toolchains_repository(
@@ -580,6 +591,7 @@ toolchains = module_extension(
     implementation = _toolchains_impl,
     tag_classes = {
         "experimental_miri": _EXPERIMENTAL_MIRI_TAG,
+        "host_cargo": _HOST_CARGO_TAG,
         "toolchain": _TOOLCHAIN_TAG,
     },
 )

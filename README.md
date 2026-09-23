@@ -283,10 +283,53 @@ register_toolchains(
 )
 ```
 
-Keep `@default_rust_toolchains` available through `use_repo` for inherited
-compiler components.
+Keep `@default_rust_toolchains` available through `use_repo` for the Rustfmt and
+rust-analyzer registrations above.
 Override `rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
 `rust_objcopy`, `rust_lld`, `bpf_linker`, or `rust_std` when necessary.
+
+</details>
+
+<details>
+<summary>Use a custom host Cargo without downloading Rust toolchains</summary>
+
+This can be useful with the Ferrocene toolchain: dependency resolution can use
+its Cargo executable without downloading the default Rust toolchain.
+
+Configure Cargo for dependency resolution in the root `MODULE.bazel`:
+
+```bzl
+toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
+toolchains.host_cargo(
+    linux_amd64 = "//toolchain/linux_amd64:bin/cargo",
+    linux_arm64 = "//toolchain/linux_arm64:bin/cargo",
+    macos_amd64 = "//toolchain/macos_amd64:bin/cargo",
+    macos_arm64 = "//toolchain/macos_arm64:bin/cargo",
+    windows_amd64 = "//toolchain/windows_amd64:bin/cargo.exe",
+    windows_arm64 = "//toolchain/windows_arm64:bin/cargo.exe",
+)
+
+register_toolchains("@our_toolchains//...")
+```
+
+Provide the attributes for the hosts you use; the other attributes can be omitted.
+Cargo is selected for the operating system and architecture of the machine
+running Bazel, independently of the build target or remote execution platform.
+`amd64` covers x86-64, and `arm64` covers AArch64. If the current host's attribute
+is missing, repository setup fails with an error identifying it.
+
+Each label must refer to an existing executable file, not a build target.
+Labels in external repositories are also supported. Only the root module's
+`host_cargo` tag is used; dependency modules' tags are ignored.
+
+When no module declares `toolchains.toolchain`, custom host Cargo disables the
+implicit default Rust toolchain and its downloads. Explicit `toolchains.toolchain`
+and `toolchains.experimental_miri` declarations still provision their requested
+toolchains. Without `host_cargo`, the default behavior is unchanged.
+
+When the implicit default is disabled, `default_rust_toolchains` is not created.
+Supply all required compiler components when using `declare_rustc_toolchains`
+with fully custom toolchains.
 
 </details>
 

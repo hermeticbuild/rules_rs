@@ -29,9 +29,13 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 toolchains = use_extension("//rs/toolchains:module_extension.bzl", "toolchains")
 use_repo(
     toolchains,
-    "default_rust_toolchains",
-    "rs_rust_host_tools",
+    "host_cargo",
+    "rust_toolchain_labels",
 )
+
+dev_toolchains = use_extension("//rs/toolchains:module_extension.bzl", "toolchains", dev_dependency = True)
+dev_toolchains.toolchain()
+use_repo(dev_toolchains, "default_rust_toolchains")
 
 [
     http_file(

@@ -45,9 +45,9 @@ bzl_library(
         ":toolchain_utils",
         "//rs/platforms:triples",
         "//rs/private:bpf_linker_repository",
-        "@default_rust_toolchains//rustc:component_labels.bzl",
         "@rules_rust//rust:bzl_lib",
         "@rules_rust//rust/platform:bzl_lib",
+        "@rust_toolchain_labels//:defs.bzl",
     ],
 )
 
@@ -85,7 +85,7 @@ bzl_library(
         "//rs/private:bpf_linker_repository",
         "//rs/private:cargo_repository",
         "//rs/private:clippy_repository",
-        "//rs/private:host_tools_repository",
+        "//rs/private:host_cargo_repository",
         "//rs/private:rust_analyzer_repository",
         "//rs/private:rust_repository_utils",
         "//rs/private:rust_src_repository",
@@ -93,8 +93,10 @@ bzl_library(
         "//rs/private:rustc_src_repository",
         "//rs/private:rustfmt_repository",
         "//rs/private:stdlib_repository",
+        "//rs/private:toolchain_labels_repository",
         "//rs/private:toolchains_repository",
         "@bazel_features//:features",
+        "@bazel_lib//lib:repo_utils",
         "@rules_rust//rust/platform:bzl_lib",
     ],
 )
