@@ -96,6 +96,7 @@ bzl_library(
         "//rs/private:toolchain_labels_repository",
         "//rs/private:toolchains_repository",
         "@bazel_features//:features",
+        "@bazel_lib//lib:repo_utils",
         "@rules_rust//rust/platform:bzl_lib",
     ],
 )

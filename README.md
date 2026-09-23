@@ -313,10 +313,10 @@ register_toolchains("@our_toolchains//...")
 ```
 
 Provide the attributes for the hosts you use; the other attributes can be omitted.
-The repository rule selects Cargo using `rctx.os.name` and `rctx.os.arch` on the
-machine running Bazel, independently of the build target or remote execution
-platform. `amd64` covers x86-64, and `arm64` covers AArch64. If the current host's
-attribute is missing, repository setup fails with an error identifying it.
+Cargo is selected for the operating system and architecture of the machine
+running Bazel, independently of the build target or remote execution platform.
+`amd64` covers x86-64, and `arm64` covers AArch64. If the current host's attribute
+is missing, repository setup fails with an error identifying it.
 
 Each label must refer to an existing executable file, not a build target.
 Labels in external repositories are also supported. Only the root module's

@@ -1,5 +1,6 @@
 """Module extension for configuring rules_rs Rust toolchains."""
 
+load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/experimental/miri/private:miri_repository.bzl", "miri_repository")
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_AND_2_TRIPLES", "SUPPORTED_TIER_3_TRIPLES")
@@ -30,22 +31,6 @@ load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version
 _DEFAULT_RUSTC_VERSION = "1.92.0"
 _DEFAULT_EDITION = "2021"
 _DEFAULT_TOOLCHAIN_REPO_NAME = "default_rust_toolchains"
-
-def _normalize_os_name(os_name):
-    os_name = os_name.lower()
-    if os_name.startswith("mac os"):
-        return "macos"
-    if os_name.startswith("windows"):
-        return "windows"
-    return os_name
-
-def _normalize_arch_name(arch):
-    arch = arch.lower()
-    if arch in ("amd64", "x86_64", "x64"):
-        return "x86_64"
-    if arch in ("aarch64", "arm64"):
-        return "aarch64"
-    return arch
 
 def _sanitize_path_fragment(path):
     return path.replace("/", "_").replace(":", "_")
@@ -380,8 +365,9 @@ def _toolchains_impl(mctx):
         archive_path = _archive_path(tool_name, target_triple, version, iso_date, _urls_for_version(version, iso_date, rust_redist_archives))
         return new_facts[archive_path]
 
-    host_os = _normalize_os_name(mctx.os.name)
-    host_arch = _normalize_arch_name(mctx.os.arch)
+    host_platform = repo_utils.platform(mctx).replace("darwin_", "macos_")
+    host_os, host_arch = host_platform.split("_", 1)
+    host_arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(host_arch, host_arch)
     host_cargo_repos = {}
     host_rustc_repos = {}
 
@@ -523,7 +509,7 @@ def _toolchains_impl(mctx):
         host_cargo_attrs = {name: getattr(host_cargo_config, name) for name in HOST_CARGO_ATTRS}
     else:
         host_cargo_attrs = {
-            "default_cargo": "@{}//:bin/cargo{}".format(host_cargo_repos[version_tags[0].version], host_exe_suffix),
+            host_platform: "@{}//:bin/cargo{}".format(host_cargo_repos[version_tags[0].version], host_exe_suffix),
         }
     host_cargo_repository(
         name = "host_cargo",
