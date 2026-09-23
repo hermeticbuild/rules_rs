@@ -7,7 +7,7 @@ load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_A
 load("//rs/private:bpf_linker_repository.bzl", "BPF_LINKER_SUPPORTED_EXEC_TRIPLES", "declare_bpf_linker_repository")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
-load("//rs/private:host_cargo_repository.bzl", "HOST_CARGO_ATTRS", "host_cargo_repository")
+load("//rs/private:host_cargo_repository.bzl", "host_cargo_repository")
 load("//rs/private:rust_analyzer_repository.bzl", "rust_analyzer_repository")
 load(
     "//rs/private:rust_repository_utils.bzl",
@@ -52,7 +52,14 @@ def _urls_for_version(version, iso_date, rust_redist_archives):
 
 _HOST_CARGO_TAG = tag_class(
     doc = "Host Cargo executables by OS and architecture. Only the root module's tag is used. Suppresses the implicit default Rust toolchain.",
-    attrs = HOST_CARGO_ATTRS,
+    attrs = {
+        "%s_%s" % (os, arch): attr.label(
+            allow_single_file = True,
+            doc = "Existing Cargo executable for %s %s." % (os, arch),
+        )
+        for os in ["linux", "darwin", "windows"]
+        for arch in ["amd64", "arm64"]
+    },
 )
 
 _TOOLCHAIN_TAG = tag_class(
@@ -507,14 +514,16 @@ def _toolchains_impl(mctx):
         )
 
     if host_cargo_config:
-        host_cargo_attrs = {name: getattr(host_cargo_config, name) for name in HOST_CARGO_ATTRS}
+        if not hasattr(host_cargo_config, host_platform):
+            fail("Unsupported host Cargo platform: %s" % host_platform)
+        host_cargo = getattr(host_cargo_config, host_platform)
+        if not host_cargo:
+            fail("Set toolchains.host_cargo(%s = ...) to provide Cargo for this Bazel host" % host_platform)
     else:
-        host_cargo_attrs = {
-            host_platform: "@{}//:bin/cargo{}".format(host_cargo_repos[version_tags[0].version], host_exe_suffix),
-        }
+        host_cargo = "@%s//:bin/cargo%s" % (host_cargo_repos[version_tags[0].version], host_exe_suffix)
     host_cargo_repository(
         name = "host_cargo",
-        **host_cargo_attrs
+        cargo = host_cargo,
     )
 
     toolchain_labels_repository(name = "rust_toolchain_labels")
