@@ -341,7 +341,6 @@ crate.annotation(
         kwargs = dict(
             hub_name = hub_name,
             gen_build_script = annotation.gen_build_script,
-            build_script_emit_warnings = source.startswith("path+"),
             build_script_deps = [],
             build_script_deps_select = _select(feature_resolutions.build_deps),
             build_script_data = annotation.build_script_data,

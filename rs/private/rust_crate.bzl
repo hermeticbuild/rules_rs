@@ -33,7 +33,6 @@ def rust_crate(
         target_compatible_with,
         links,
         build_script,
-        build_script_emit_warnings,
         build_script_data,
         build_deps,
         build_script_env,
@@ -87,7 +86,7 @@ def rust_crate(
 
     if build_script:
         build_script_kwargs = dict(
-            emit_warnings = build_script_emit_warnings,
+            emit_warnings = False,
             deps = build_deps,
             aliases = aliases,
             compile_data = compile_data,
