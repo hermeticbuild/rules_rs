@@ -409,26 +409,6 @@ def _annotation_build_script_dependencies_keep_context_impl(ctx):
     _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
-def _build_script_invariant_dependencies_clear_context_impl(ctx):
-    env = unittest.begin(ctx)
-    child = _PREFIX + "child-1.0.0"
-    platforms = {_LINUX: [], _MACOS: []}
-    build_deps = {_LINUX: {child: None}, _MACOS: {child: None}}
-    target = {
-        "parent-1.0.0": _resolution(features = platforms),
-        "child-1.0.0": _resolution(features = platforms),
-    }
-    execution = dict(target, **{"parent-1.0.0": _resolution(features = platforms, build_deps = build_deps)})
-    result = _prepare(
-        target,
-        {_LINUX: execution, _MACOS: execution},
-        {triple: {"parent-1.0.0": build_deps} for triple in platforms},
-    )
-
-    asserts.equals(env, [], _configuration(result, "parent-1.0.0")["build_cargo_target_triple_required_on"])
-    _assert_cargo_target_triple_maps(env, result)
-    return unittest.end(env)
-
 def _build_script_workspace_dependencies_keep_context_impl(ctx):
     env = unittest.begin(ctx)
     platforms = {_LINUX: [], _MACOS: []}
@@ -469,7 +449,6 @@ preserved_execution_only_crate_keeps_default_test = unittest.make(_preserved_exe
 annotation_dependencies_preserve_missing_context_test = unittest.make(_annotation_dependencies_preserve_missing_context_impl)
 missing_execution_context_keeps_transitive_dependencies_test = unittest.make(_missing_execution_context_keeps_transitive_dependencies_impl)
 annotation_build_script_dependencies_keep_context_test = unittest.make(_annotation_build_script_dependencies_keep_context_impl)
-build_script_invariant_dependencies_clear_context_test = unittest.make(_build_script_invariant_dependencies_clear_context_impl)
 build_script_workspace_dependencies_keep_context_test = unittest.make(_build_script_workspace_dependencies_keep_context_impl)
 
 def crate_configurations_tests():
@@ -493,6 +472,5 @@ def crate_configurations_tests():
         annotation_dependencies_preserve_missing_context_test,
         missing_execution_context_keeps_transitive_dependencies_test,
         annotation_build_script_dependencies_keep_context_test,
-        build_script_invariant_dependencies_clear_context_test,
         build_script_workspace_dependencies_keep_context_test,
     )

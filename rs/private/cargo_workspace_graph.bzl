@@ -154,17 +154,17 @@ def prepare_possible_deps(dependencies, converter = None, skip_internal_rustc_pl
     possible_deps = []
 
     for dep in dependencies:
-        if converter:
-            dep = converter(dep)
-        else:
-            dep = dict(dep)
-
         if dep.get("kind") == "dev":
             continue
 
         dep_package = dep.get("package") or dep["name"]
         if skip_internal_rustc_placeholder_crates and dep_package in _INTERNAL_RUSTC_PLACEHOLDER_CRATES:
             continue
+
+        if converter:
+            dep = converter(dep)
+        else:
+            dep = dict(dep)
 
         if dep.get("default_features", True):
             dep.setdefault("features", []).append("default")
@@ -391,7 +391,7 @@ def _resolve_possible_deps(
             if dep_fq not in feature_resolutions_by_fq_crate:
                 fail("Resolved %s dependency %s but no crate metadata was available" % (name, dep_fq))
             dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
-            dep["feature_resolutions"] = feature_resolutions_by_fq_crate[dep_fq]
+            dep["package_index"] = feature_resolutions_by_fq_crate[dep_fq].package_index
 
             target = dep.get("target")
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
@@ -421,11 +421,6 @@ def _copy_resolutions(template_packages, platform_triples):
             resolution.features_enabled[platform_triple].update(template.features_enabled.get(platform_triple, []))
         resolutions[fq_crate(package["name"], package["version"])] = resolution
         packages.append(dict(package, feature_resolutions = resolution))
-
-    for package in packages:
-        for dep in package["feature_resolutions"].possible_deps:
-            if "feature_resolutions" in dep:
-                dep["feature_resolutions"] = packages[dep["feature_resolutions"].package_index]["feature_resolutions"]
 
     return packages, resolutions
 

@@ -74,6 +74,9 @@ def _configured_script_loading_tests(env):
     )
     loadingtest.equals(env, name + "_selection", str(native.existing_rule(name + "_expected")["actual"]), str(native.existing_rule(name)["actual"]))
 
+    loadingtest.equals(env, name + "_gnu_absent", None, native.existing_rule(name + "_" + _LINUX + "_"))
+    loadingtest.equals(env, name + "_musl_marker", {"": musl}, native.existing_rule(name + "_" + musl + "_")["cargo_target_triple_map"])
+
     name = "invariant_build_script"
     configuration = {
         "crate_features_by_triple": {_LINUX: [], _MACOS: []},
@@ -342,8 +345,8 @@ def _platform_script_loading_tests(env):
         use_legacy_rules_rust_platforms = True,
         tags = ["manual"],
     )
-    native.alias(name = name + "_expected", actual = ":" + name + "_" + _MACOS, tags = ["manual"])
-    loadingtest.equals(env, name + "_selection", str(native.existing_rule(name + "_expected")["actual"]), str(native.existing_rule(name)["actual"]))
+    loadingtest.equals(env, name + "_shared", False, "actual" in native.existing_rule(name))
+    loadingtest.equals(env, name + "_features", ["vendored"], list(native.existing_rule(name + "_")["crate_features"]))
 
 def cargo_build_script_variants_tests():
     env = loadingtest.make("cargo_build_script_variants")

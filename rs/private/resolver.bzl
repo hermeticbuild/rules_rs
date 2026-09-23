@@ -48,6 +48,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
         _propagate_feature_enablement(
             new_dirty_package_indices,
             package,
+            packages,
             cfg_attrs_by_triple,
             debug,
             include_build_dependencies,
@@ -64,7 +65,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
                 continue
             deps = feature_resolutions.deps if kind == "normal" else feature_resolutions.build_deps
 
-            dep_feature_resolutions = dep["feature_resolutions"]
+            dep_feature_resolutions = packages[dep["package_index"]]["feature_resolutions"]
             dep_features = dep.get("features")
 
             dep_name = dep["name"]
@@ -102,6 +103,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
 def _propagate_feature_enablement(
         dirty_package_indices,
         package,
+        packages,
         cfg_attrs_by_triple,
         debug,
         include_build_dependencies):
@@ -138,7 +140,7 @@ def _propagate_feature_enablement(
 
                 found = False
                 for dep in feature_resolutions.possible_deps:
-                    if "feature_resolutions" not in dep:
+                    if "package_index" not in dep:
                         continue
                     if dep_name != dep["name"]:
                         continue
@@ -156,7 +158,7 @@ def _propagate_feature_enablement(
                     if defer_build_dependency:
                         dep.setdefault("deferred_features", {}).setdefault(triple, set()).add(dep_feature)
                     else:
-                        dep_feature_resolutions = dep["feature_resolutions"]
+                        dep_feature_resolutions = packages[dep["package_index"]]["feature_resolutions"]
                         triple_features = dep_feature_resolutions.features_enabled[triple]
                         if dep_feature not in triple_features:
                             triple_features.add(dep_feature)
@@ -214,7 +216,7 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
             if dep.get("optional", False) and dep_name not in target_features and ("dep:" + dep_name) not in target_features:
                 continue
 
-            dep_resolution = dep["feature_resolutions"]
+            dep_resolution = exec_template_packages[dep["package_index"]]["feature_resolutions"]
             feature_sensitive = "target_expr" in dep
             for exec_platform_triple in dep["target"]:
                 if feature_sensitive and not _dep_target_matches_triple(dep, exec_platform_triple, target_features, exec_cfg_attrs_by_triple):

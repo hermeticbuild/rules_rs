@@ -197,14 +197,15 @@ def rust_crate(
             kwargs["link_deps"] = link_deps
             (_rust_library if skip_deps_verification else rust_library)(**kwargs)
 
-    binary_lib_dep = [name] if has_lib else []
+    if binaries and has_lib:
+        deps = [name] + deps
     for binary, crate_root in binaries.items():
         rust_binary(
             name = binary + "__bin",
             cargo_target_triple_map = cargo_target_triple_map,
             compile_data = compile_data,
             aliases = aliases,
-            deps = binary_lib_dep + deps,
+            deps = deps,
             link_deps = link_deps,
             data = data,
             crate_features = crate_features,

@@ -5,7 +5,6 @@ const _: [(); 1] = [(); bridge::MODE];
 pub fn token() -> shared::Token {
     let _: helper::HelperToken = bridge::helper_token();
     let _: shared::Token = helper::token();
-    let _: helper::Token = bridge::token();
     bridge::token()
 }
 

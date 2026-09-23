@@ -4,7 +4,7 @@
 load("@rules_rust//cargo/private:cargo_build_script.bzl", "name_to_crate_name", "name_to_pkg_name")
 load("//rs:cargo_build_script.bzl", "cargo_build_script")
 load(":cargo_select.bzl", "cargo_select")
-load(":select_utils.bzl", "shared_and_per_platform")
+load(":select_utils.bzl", "platform_label", "shared_and_per_platform")
 
 def cargo_build_script_for_configurations(
         name,
@@ -21,7 +21,10 @@ def cargo_build_script_for_configurations(
     for cargo_target_triple, configuration in configurations.items():
         build_deps_by_triple = configuration["build_deps_by_triple"]
         common_deps = shared_and_per_platform(build_deps_by_triple.get("", {}), use_legacy_rules_rust_platforms)
-        for platform_triple in sorted(configuration["crate_features_by_triple"]):
+        platform_triples = sorted(configuration["crate_features_by_triple"])
+        if use_legacy_rules_rust_platforms:
+            platform_triples = sorted({platform_label(triple, True): triple for triple in platform_triples}.values())
+        for platform_triple in platform_triples:
             script_deps, deps_by_platform = shared_and_per_platform(
                 build_deps_by_triple[platform_triple],
                 use_legacy_rules_rust_platforms,

@@ -498,8 +498,7 @@ crate.annotation(
     for name, versions in versions_by_name.items():
         for version in versions:
             annotation = annotation_for(annotations, name, version, hub_name)
-            fq = _fq_crate(name, version)
-            package = package_by_fq[fq]
+            package = package_by_fq[_fq_crate(name, version)]
             target_repo_name = package["target_repo_name"]
             target_package_path = package["target_package_path"]
 

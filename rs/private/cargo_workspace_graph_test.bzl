@@ -279,8 +279,8 @@ def _resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl(ctx
         if index:
             possible_deps.append({
                 "bazel_target": "//:chain-%s" % (index - 1),
-                "feature_resolutions": resolutions[index - 1],
                 "name": "chain-%s" % (index - 1),
+                "package_index": index - 1,
                 "target": set(triples),
             })
 

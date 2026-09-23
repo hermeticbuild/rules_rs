@@ -145,29 +145,17 @@ def _all_crate_deps_invariant_build_deps_ignore_features_impl(ctx):
 def _all_crate_deps_selects_execution_platform_impl(ctx):
     env = unittest.begin(ctx)
     data = _build_data()
-    data["configurations"][""]["build_deps_by_triple"] = {
-        triple: {_LINUX: {"@crates//:linux_helper": "helper"}, _MACOS: {"@crates//:macos_helper": "helper"}}
-        for triple in [_LINUX, _MACOS]
-    }
-    asserts.equals(env, str(select({
-        cargo_condition("crates", "", _MACOS): ["@crates//:macos_helper"],
-        cargo_condition("crates", "", _LINUX): ["@crates//:linux_helper"],
-    })), str(all_crate_deps(data, build = True, hub_name = "crates")))
-    return unittest.end(env)
-
-def _shared_build_rows_impl(ctx):
-    env = unittest.begin(ctx)
-    data = _build_data()
-    configuration = data["configurations"][""]
     deps = {_LINUX: {"@crates//:linux_helper": "helper"}, _MACOS: {"@crates//:macos_helper": "helper"}}
-    configuration["build_deps_by_triple"] = {triple: deps for triple in [_LINUX, _MACOS]}
-    expected_deps = str(all_crate_deps(data, build = True, hub_name = "crates"))
-    expected_aliases = str(crate_aliases(data, build = True, hub_name = "crates"))
-    configuration["build_deps_by_triple"] = {"": deps}
-
-    asserts.equals(env, expected_deps, str(all_crate_deps(data, build = True, hub_name = "crates")))
-    asserts.equals(env, expected_aliases, str(crate_aliases(data, build = True, hub_name = "crates")))
-
+    for build_deps in [{triple: deps for triple in [_LINUX, _MACOS]}, {"": deps}]:
+        data["configurations"][""]["build_deps_by_triple"] = build_deps
+        asserts.equals(env, str(select({
+            cargo_condition("crates", "", _MACOS): ["@crates//:macos_helper"],
+            cargo_condition("crates", "", _LINUX): ["@crates//:linux_helper"],
+        })), str(all_crate_deps(data, build = True, hub_name = "crates")))
+        asserts.equals(env, str(select({
+            cargo_condition("crates", "", _MACOS): {"@crates//:macos_helper": "helper"},
+            cargo_condition("crates", "", _LINUX): {"@crates//:linux_helper": "helper"},
+        })), str(crate_aliases(data, build = True, hub_name = "crates")))
     return unittest.end(env)
 
 def _all_crate_deps_preserves_build_context_impl(ctx):
@@ -267,7 +255,6 @@ legacy_platform_dev_dependencies_test = unittest.make(_legacy_platform_dev_depen
 dev_dependencies_preserve_normal_aliases_test = unittest.make(_dev_dependencies_preserve_normal_aliases_impl)
 all_crate_deps_invariant_build_deps_ignore_features_test = unittest.make(_all_crate_deps_invariant_build_deps_ignore_features_impl)
 all_crate_deps_selects_execution_platform_test = unittest.make(_all_crate_deps_selects_execution_platform_impl)
-shared_build_rows_test = unittest.make(_shared_build_rows_impl)
 all_crate_deps_preserves_build_context_test = unittest.make(_all_crate_deps_preserves_build_context_impl)
 all_crate_deps_preserves_build_platform_domain_test = unittest.make(_all_crate_deps_preserves_build_platform_domain_impl)
 build_aliases_ignore_unrenamed_dependencies_test = unittest.make(_build_aliases_ignore_unrenamed_dependencies_impl)
@@ -289,7 +276,6 @@ def all_crate_deps_tests():
         dev_dependencies_preserve_normal_aliases_test,
         all_crate_deps_invariant_build_deps_ignore_features_test,
         all_crate_deps_selects_execution_platform_test,
-        shared_build_rows_test,
         all_crate_deps_preserves_build_context_test,
         all_crate_deps_preserves_build_platform_domain_test,
         build_aliases_ignore_unrenamed_dependencies_test,
