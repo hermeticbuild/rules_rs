@@ -53,8 +53,9 @@ def cargo_build_script_for_configurations(
         rustc_env = dict(kwargs.get("rustc_env", {}))
         rustc_env.setdefault("CARGO_CRATE_NAME", name_to_crate_name(name_to_pkg_name(name)))
         script_kwargs["rustc_env"] = rustc_env
-        if "manual" not in kwargs.get("tags", []):
-            script_kwargs["tags"] = kwargs.get("tags", []) + ["manual"]
+        tags = kwargs.get("tags") or []
+        if "manual" not in tags:
+            script_kwargs["tags"] = tags + ["manual"]
 
     for variant in scripts.values():
         script_name = name
@@ -70,7 +71,7 @@ def cargo_build_script_for_configurations(
             # binaries share an exec configuration.
             # https://github.com/hermeticbuild/rules_rs/issues/161
             script_kwargs["rustc_flags"] = kwargs.get("rustc_flags", []) + [
-                "--codegen=metadata=-" + script_suffix.replace("-", "_"),
+                "--codegen=metadata=-" + script_suffix,
             ]
         if hub_name:
             script_kwargs["cargo_target_triple_map"] = {cargo_target_triple: variant["cargo_target_triple"] for cargo_target_triple in variant["conditions"] if cargo_target_triple != variant["cargo_target_triple"]}

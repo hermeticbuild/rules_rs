@@ -104,9 +104,8 @@ def _annotation_and_git_values_test_impl(ctx):
         extra_deps = "package_metadata_bazel_deps",
         indent = "    ",
     )
-    for name in ["binaries", "build_script", "has_lib", "is_proc_macro"]:
+    for name in ["binaries", "build_script", "crate_name", "has_lib", "is_proc_macro"]:
         asserts.true(env, "        " + name + " = " + name + "," in rendered)
-    asserts.true(env, "crate_name = crate_name or" in rendered)
     asserts.true(env, '"//annotated:dep"' in rendered)
     asserts.true(env, '"//metadata:dep"' in rendered)
     asserts.true(env, " + package_metadata_bazel_deps" in rendered)
@@ -139,14 +138,12 @@ def _source_attributes_test_impl(ctx):
             rustc_flags = ["-Zforce-unstable-if-unmarked"],
         ),
         _values(),
-        extra_deps = "package_metadata_bazel_deps",
         skip_deps_verification = True,
     )
     asserts.equals(env, ["-Zforce-unstable-if-unmarked"], _argument(rendered, "rustc_flags"))
     asserts.equals(env, "1", _argument(rendered, "rustc_env")["RUSTC_BOOTSTRAP"])
     asserts.true(env, "hub_name = None" in rendered)
     asserts.true(env, '"//src/library/core:srcs"' in rendered)
-    asserts.true(env, " + package_metadata_bazel_deps" in rendered)
     asserts.true(env, "skip_deps_verification = True" in rendered)
     return unittest.end(env)
 

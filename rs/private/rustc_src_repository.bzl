@@ -148,29 +148,20 @@ load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
         package_metadata_bazel_additive_build_file_content = cargo.bazel_metadata.get("additive_build_file_content", ""),
     )
 
-def _source_packages(source_root, lock_packages):
-    packages = []
+def _source_crate_package(source_root, package):
     path_source_prefix = "path+source_stdlib/"
+    source = package.get("source")
+    name = package["name"]
+    version = package["version"]
 
-    for package in lock_packages:
-        source = package.get("source")
-        package = dict(package)
-        name = package["name"]
-        version = package["version"]
-
-        if source == _CRATES_IO_INDEX:
-            bazel_package = _source_package(source_root, paths.join(_VENDOR_ROOT, "%s-%s" % (name, version)))
-        elif source and source.startswith(path_source_prefix):
-            bazel_package = _source_package(source_root, source.removeprefix(path_source_prefix))
-        elif source:
-            fail("Unsupported rustc-src registry source %s for %s %s" % (source, name, version))
-        else:
-            fail("Unknown rustc-src source %s for %s %s" % (source, name, version))
-
-        package["bazel_package"] = bazel_package
-        packages.append(package)
-
-    return packages
+    if source == _CRATES_IO_INDEX:
+        return _source_package(source_root, paths.join(_VENDOR_ROOT, "%s-%s" % (name, version)))
+    elif source and source.startswith(path_source_prefix):
+        return _source_package(source_root, source.removeprefix(path_source_prefix))
+    elif source:
+        fail("Unsupported rustc-src registry source %s for %s %s" % (source, name, version))
+    else:
+        fail("Unknown rustc-src source %s for %s %s" % (source, name, version))
 
 def _prune_rustc_src(rctx, source_root):
     for path in rctx.path(source_root).readdir():
@@ -259,7 +250,7 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
         repo_root = workspace_root,
         workspace_package_dir = "library",
     )
-    source_packages = _source_packages(source_root, lockfile_package_info.packages)
+    source_packages = lockfile_package_info.packages
     package_metadata_info = resolve_packages(
         source_packages,
         {fq_crate(package["name"], package["version"]): package for package in cargo_metadata["packages"]},
@@ -327,7 +318,7 @@ alias(
         name = package["name"]
         version = package["version"]
         fq = fq_crate(name, version)
-        bazel_package = package["bazel_package"]
+        bazel_package = _source_crate_package(source_root, package)
         rustc_srcs.add(_target_label(bazel_package, "srcs"))
         root_build.append("""\
 alias(

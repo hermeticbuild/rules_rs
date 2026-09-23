@@ -158,7 +158,7 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
 
 _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    name = {name},
-{indent}    crate_name = {crate_name} or {name}.replace("-", "_"),
+{indent}    crate_name = {crate_name},
 {indent}    purl = {purl},
 {indent}    version = {version},
 {indent}    deps = [
@@ -228,23 +228,15 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
 
     return _RUST_CRATE_MACRO_CALL.format(
         indent = indent,
-        name = values["name"],
-        crate_name = values["crate_name"],
-        purl = values["purl"],
-        version = values["version"],
         deps = list_indent.join(['"%s"' % d for d in sorted(deps)]),
         extra_deps = extra_deps,
         link_deps = list_indent.join(['"%s"' % d for d in sorted(link_deps)]),
         data = list_indent.join(['"%s"' % str(d) for d in attr.data]),
         extra_compile_data_attr = extra_compile_data_attr,
-        crate_root = values["crate_root"],
-        edition = values["edition"],
         rustc_env = repr(rustc_env),
         rustc_flags = repr(rustc_flags),
         conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),
-        links = values["links"],
-        build_script = values["build_script"],
         build_script_data = repr(build_script_data),
         conditional_build_script_data = " + " + conditional_build_script_data if conditional_build_script_data else "",
         build_script_env = repr(cargo_manifest_env | attr.build_script_env),
@@ -255,14 +247,12 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         build_script_tools = repr(build_script_tools),
         conditional_build_script_tools = " + " + conditional_build_script_tools if conditional_build_script_tools else "",
         build_script_tags = repr(attr.build_script_tags),
-        is_proc_macro = values["is_proc_macro"],
-        has_lib = values["has_lib"],
-        binaries = values["binaries"],
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         configurations = repr(json.decode(attr.configurations)),
         cargo_target_triple_map = repr(attr.cargo_target_triple_map),
         hub_name = repr(attr.hub_name),
         skip_deps_verification_attr = skip_deps_verification_attr,
+        **values
     )
 
 def render_build_file_content(rctx, attr, values, bazel_metadata = {}):

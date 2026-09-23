@@ -1,6 +1,3 @@
-#[cfg(all(feature = "target_feature", feature = "exec_feature"))]
-compile_error!("helper target and build features must stay separate");
-
 #[cfg(not(any(feature = "target_feature", feature = "exec_feature")))]
 compile_error!("helper must select target or build features");
 

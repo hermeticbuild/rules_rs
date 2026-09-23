@@ -236,7 +236,7 @@ def _platform_script_loading_tests(env):
     for platform_triple, features in [(_MACOS, ["common"]), (_LINUX, ["common", "linux"])]:
         binary = native.existing_rule(name + "_" + platform_triple + "_")
         loadingtest.equals(env, name + "_" + platform_triple + "_features", ["additional"] + features, list(binary["crate_features"]))
-        loadingtest.equals(env, name + "_" + platform_triple + "_flags", ["--cfg=original", "--codegen=metadata=-" + platform_triple.replace("-", "_")], list(binary["rustc_flags"]))
+        loadingtest.equals(env, name + "_" + platform_triple + "_flags", ["--cfg=original", "--codegen=metadata=-" + platform_triple], list(binary["rustc_flags"]))
         loadingtest.equals(env, name + "_" + platform_triple + "_alias", ["renamed"], binary["aliases"].values())
         loadingtest.equals(env, name + "_" + platform_triple + "_environment", "kept", binary["rustc_env"]["KEEP"])
         loadingtest.equals(env, name + "_" + platform_triple + "_package", "original-package", binary["rustc_env"]["CARGO_PKG_NAME"])

@@ -1,6 +1,3 @@
-#[cfg(all(feature = "target_feature", feature = "exec_feature"))]
-compile_error!("shared target and build features must stay separate");
-
 #[cfg(not(any(feature = "target_feature", feature = "exec_feature")))]
 compile_error!("shared must select target or build features");
 

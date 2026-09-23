@@ -6,8 +6,9 @@ load(":cargo_select.bzl", "cargo_condition")
 _LINUX = "x86_64-unknown-linux-gnu"
 _MACOS = "aarch64-apple-darwin"
 
-def _configured_data():
-    return {
+def _configured_dependencies_and_features_impl(ctx):
+    env = unittest.begin(ctx)
+    data = {
         "configurations": {
             "": {
                 "crate_features_by_triple": {_LINUX: ["target"], _MACOS: []},
@@ -25,10 +26,6 @@ def _configured_data():
         "dev_deps": {"@crates//:dev": "dev", "//dev": "local_dev"},
         "dev_deps_by_platform": {},
     }
-
-def _configured_dependencies_and_features_impl(ctx):
-    env = unittest.begin(ctx)
-    data = _configured_data()
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): [],
         cargo_condition("crates", "", _LINUX): ["//helper", "@crates//:shared"],
@@ -44,11 +41,6 @@ def _configured_dependencies_and_features_impl(ctx):
         cargo_condition("crates", "", _LINUX): ["target"],
         cargo_condition("crates", _LINUX, _MACOS): ["exec"],
     })), str(crate_features(data, "crates")))
-    return unittest.end(env)
-
-def _configured_aliases_match_selected_dependencies_impl(ctx):
-    env = unittest.begin(ctx)
-    data = _configured_data()
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): {},
         cargo_condition("crates", "", _LINUX): {"//helper": "renamed_helper", "@crates//:shared": "selected_shared"},
@@ -259,7 +251,6 @@ all_crate_deps_preserves_build_context_test = unittest.make(_all_crate_deps_pres
 all_crate_deps_preserves_build_platform_domain_test = unittest.make(_all_crate_deps_preserves_build_platform_domain_impl)
 build_aliases_ignore_unrenamed_dependencies_test = unittest.make(_build_aliases_ignore_unrenamed_dependencies_impl)
 configured_dependencies_and_features_test = unittest.make(_configured_dependencies_and_features_impl)
-configured_aliases_match_selected_dependencies_test = unittest.make(_configured_aliases_match_selected_dependencies_impl)
 
 def all_crate_deps_tests():
     for field in ["aliases", "alias_platforms", "cargo_target_triple", "deps"]:
@@ -280,7 +271,6 @@ def all_crate_deps_tests():
         all_crate_deps_preserves_build_platform_domain_test,
         build_aliases_ignore_unrenamed_dependencies_test,
         configured_dependencies_and_features_test,
-        configured_aliases_match_selected_dependencies_test,
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_deps"),
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_aliases"),
         partial.make(ambiguous_build_script_test, target_under_test = ":ambiguous_build_script_alias_platforms"),

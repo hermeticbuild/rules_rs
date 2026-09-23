@@ -176,8 +176,8 @@ def prepare_possible_deps(dependencies, converter = None, skip_internal_rustc_pl
 def _dep_package_name(dep):
     return dep.get("package") or dep["name"]
 
-def compute_package_fq_deps(package, versions_by_name):
-    possible_dep_fq_crates_by_name = {}
+def compute_package_dep_versions(package, versions_by_name):
+    dep_versions_by_name = {}
 
     for maybe_fq_dep in package.get("dependencies", []):
         idx = maybe_fq_dep.find(" ")
@@ -191,32 +191,24 @@ def compute_package_fq_deps(package, versions_by_name):
             dep = maybe_fq_dep[:idx]
             resolved_version = maybe_fq_dep[idx + 1:]
 
-        possible_dep_fq_crates_by_name.setdefault(dep, []).append(fq_crate(dep, resolved_version))
+        dep_versions_by_name.setdefault(dep, []).append(resolved_version)
 
-    return possible_dep_fq_crates_by_name
+    return dep_versions_by_name
 
-def select_package_fq_dep(dep, fq_deps):
+def select_package_dep_version(dep, dep_versions_by_name):
     dep_package = _dep_package_name(dep)
-    candidates = fq_deps.get(dep_package)
-    if not candidates:
+    versions = dep_versions_by_name.get(dep_package)
+    if not versions:
         return None
 
-    if len(candidates) == 1:
-        return candidates[0]
+    if len(versions) == 1:
+        return versions[0]
 
     req = dep.get("req")
     if not req:
         return None
 
-    versions = [
-        candidate[len(dep_package) + 1:]
-        for candidate in candidates
-    ]
-    version = select_matching_version(req, versions)
-    if not version:
-        return None
-
-    return fq_crate(dep_package, version)
+    return select_matching_version(req, versions)
 
 def _relative_to_workspace(path, workspace_root):
     normalized_root = normalize_path(workspace_root)
@@ -542,7 +534,7 @@ def resolve_cargo_workspace_members(
             for platform_triple in platform_triples:
                 package_feature_resolutions.features_enabled[platform_triple].add("default")
 
-        fq_deps = compute_package_fq_deps(
+        dep_versions_by_name = compute_package_dep_versions(
             workspace_members_by_key.get((package["name"], package["version"]), {}),
             resolver_versions_by_name,
         )
@@ -551,10 +543,10 @@ def resolve_cargo_workspace_members(
             source = dep.get("source")
             dep_name = dep["name"]
             dep_package = _dep_package_name(dep)
-            dep_fq = select_package_fq_dep(dep, fq_deps)
-            if not dep_fq:
+            dep_version = select_package_dep_version(dep, dep_versions_by_name)
+            if dep_version == None:
                 continue
-            dep_version = dep_fq[len(dep_package) + 1:]
+            dep_fq = fq_crate(dep_package, dep_version)
             is_first_party_dep = not source and (dep_package, dep_version) in workspace_members_by_key
 
             if validate_lockfile and source and source.startswith("registry+"):
@@ -708,7 +700,7 @@ def workspace_dep_data(
                     continue
                 bazel_target = "//" + paths.join(workspace_package, dep_path.removeprefix(repo_root + "/"))
                 workspace_crate = workspace_crates_by_path.get(dep_path)
-                if workspace_crate:
+                if workspace_crate and dep["kind"] != "dev":
                     local_deps[dep_label_prefix + workspace_crate] = struct(
                         label = bazel_target,
                         alias = dep["name"].replace("-", "_"),

@@ -117,11 +117,7 @@ def _propagate_feature_enablement(
 
         # Enable any features that are implied by previously-enabled features.
         for enabled_feature in list(feature_set):
-            enables = possible_features.get(enabled_feature)
-            if not enables:
-                continue
-
-            for feature in enables:
+            for feature in possible_features.get(enabled_feature, ()):
                 idx = feature.find("/")
                 if idx == -1:
                     if feature not in feature_set:

@@ -122,35 +122,18 @@ def _build_dependency_identity_impl(ctx):
 def _workspace_dependency_preserves_context_impl(ctx):
     env = unittest.begin(ctx)
     workspace = _PREFIX + "workspace-1.0.0"
-    target = {
-        "parent-1.0.0": _resolution(deps = {_LINUX: {workspace: None}}),
-        "workspace-1.0.0": _resolution(),
-    }
-    execution = dict(target, **{"workspace-1.0.0": _resolution(active = False)})
-    result = _prepare(target, {_LINUX: execution, _MACOS: execution}, workspace_crates = ["workspace-1.0.0"])
+    for dep in [workspace, "//helper"]:
+        target = {
+            "parent-1.0.0": _resolution(deps = {_LINUX: {dep: None}}),
+            "workspace-1.0.0": _resolution(),
+        }
+        execution = dict(target, **{"workspace-1.0.0": _resolution(active = False)})
+        result = _prepare(target, {_LINUX: execution, _MACOS: execution}, workspace_crates = ["workspace-1.0.0"])
 
-    # Workspace BUILD attributes can read cargo_target_triple even without a Cargo execution root.
-    for fq in target:
-        asserts.equals(env, {}, result[fq].cargo_target_triple_map)
-    _assert_cargo_target_triple_maps(env, result)
-    return unittest.end(env)
-
-def _unknown_dependency_preserves_context_impl(ctx):
-    env = unittest.begin(ctx)
-    target = {
-        "normal-1.0.0": _resolution(deps = {_LINUX: {"//helper": None}}),
-        "build-1.0.0": _resolution(),
-    }
-    execution = dict(target, **{"build-1.0.0": _resolution(build_deps = {_LINUX: {"//helper": None}})})
-    result = _prepare(
-        target,
-        {_LINUX: execution, _MACOS: execution},
-        {_LINUX: {"build-1.0.0": {_LINUX: {"//helper": None}}}},
-    )
-
-    asserts.equals(env, {}, result["normal-1.0.0"].cargo_target_triple_map)
-    asserts.equals(env, {}, result["build-1.0.0"].cargo_target_triple_map)
-    _assert_cargo_target_triple_maps(env, result)
+        # Workspace BUILD attributes can read cargo_target_triple even without a Cargo execution root.
+        for fq in target:
+            asserts.equals(env, {}, result[fq].cargo_target_triple_map)
+        _assert_cargo_target_triple_maps(env, result)
     return unittest.end(env)
 
 def _sparse_leaf_definitions_share_context_impl(ctx):
@@ -435,7 +418,6 @@ matching_definitions_test = unittest.make(_matching_definitions_impl)
 normal_dependency_identity_test = unittest.make(_normal_dependency_identity_impl)
 build_dependency_identity_test = unittest.make(_build_dependency_identity_impl)
 workspace_dependency_preserves_context_test = unittest.make(_workspace_dependency_preserves_context_impl)
-unknown_dependency_preserves_context_test = unittest.make(_unknown_dependency_preserves_context_impl)
 sparse_leaf_definitions_share_context_test = unittest.make(_sparse_leaf_definitions_share_context_impl)
 build_script_does_not_use_exec_triple_as_cargo_target_test = unittest.make(_build_script_does_not_use_exec_triple_as_cargo_target_impl)
 disjoint_platform_dependencies_keep_context_test = unittest.make(_disjoint_platform_dependencies_keep_context_impl)
@@ -458,7 +440,6 @@ def crate_configurations_tests():
         normal_dependency_identity_test,
         build_dependency_identity_test,
         workspace_dependency_preserves_context_test,
-        unknown_dependency_preserves_context_test,
         sparse_leaf_definitions_share_context_test,
         build_script_does_not_use_exec_triple_as_cargo_target_test,
         disjoint_platform_dependencies_keep_context_test,

@@ -14,7 +14,7 @@ def _workspace_aliases_select_dependency_kind_impl(ctx):
             "packages": [{
                 "name": "app",
                 "version": "1.0.0",
-                "manifest_path": "/workspace/app/Cargo.toml",
+                "manifest_path": "/workspace/Cargo.toml",
                 "dependencies": [
                     {"name": "shared", "rename": "normal-shared", "kind": None, "bazel_target": "@crates//:shared-1.0.0"},
                     {"name": "shared", "rename": "build-shared", "kind": "build", "bazel_target": "@crates//:shared-1.0.0"},
@@ -49,7 +49,7 @@ def _workspace_aliases_select_dependency_kind_impl(ctx):
                 "build_cargo_target_triple_required_on": [],
             }}),
         },
-    )["app"]
+    )[""]
     expected = {
         "//local-helper": "local_helper",
         "@crates//:shared-1.0.0": "build_shared",
@@ -130,54 +130,19 @@ def _workspace_configurations_preserve_local_labels_impl(ctx):
     asserts.equals(env, {linux: {linux: {}, macos: {local_helper: "build_helper", external_helper: "external_helper"}}}, configured[""]["build_deps_by_triple"])
     asserts.equals(env, configured[linux], configured[macos])
     asserts.equals(env, {"@crates//:dev-1.0.0": "dev_dep"}, data["dev_deps"])
+    asserts.equals(env, {}, data["dev_deps_by_platform"])
+    asserts.equals(env, ["@crates//:dev-1.0.0"], all_crate_deps(data, normal_dev = True, hub_name = "crates"))
+    asserts.equals(env, {"@crates//:dev-1.0.0": "dev_dep"}, crate_aliases(data, normal_dev = True, hub_name = "crates"))
     asserts.equals(env, "2021", data["edition"])
     asserts.equals(env, "@crates//:app_lints", data["lint_config"])
     return unittest.end(env)
 
-def _workspace_common_dev_dependencies_apply_to_execution_platform_impl(ctx):
-    env = unittest.begin(ctx)
-    linux = "x86_64-unknown-linux-gnu"
-    macos = "aarch64-apple-darwin"
-    dev = "@crates//:dev-1.0.0"
-    data = workspace_dep_data(
-        cargo_metadata = {"packages": [{
-            "name": "app",
-            "version": "1.0.0",
-            "manifest_path": "/workspace/Cargo.toml",
-            "dependencies": [{"name": "dev", "rename": "selected-dev", "kind": "dev", "bazel_target": dev}],
-        }]},
-        dep_label_prefix = "@crates//:",
-        platform_triples = [linux],
-        platform_cfg_attrs = [],
-        cfg_match_cache = {None: struct(matches = [linux], uses_feature_cfg = False)},
-        repo_root = "/workspace",
-        workspace_package = "",
-        use_legacy_rules_rust_platforms = False,
-        configurations_by_crate = {"app-1.0.0": struct(configurations = {
-            cargo_target_triple: {
-                "crate_features_by_triple": {platform_triple: []},
-                "deps_by_triple": {platform_triple: {}},
-                "build_deps_by_triple": {},
-                "build_cargo_target_triple_required_on": [],
-            }
-            for cargo_target_triple, platform_triple in [("", linux), (linux, macos)]
-        })},
-    )[""]
-
-    asserts.equals(env, {dev: "selected_dev"}, data["dev_deps"])
-    asserts.equals(env, {}, data["dev_deps_by_platform"])
-    asserts.equals(env, [dev], all_crate_deps(data, normal_dev = True, hub_name = "crates"))
-    asserts.equals(env, {dev: "selected_dev"}, crate_aliases(data, normal_dev = True, hub_name = "crates"))
-    return unittest.end(env)
-
 workspace_aliases_select_dependency_kind_test = unittest.make(_workspace_aliases_select_dependency_kind_impl)
 workspace_configurations_preserve_local_labels_test = unittest.make(_workspace_configurations_preserve_local_labels_impl)
-workspace_common_dev_dependencies_apply_to_execution_platform_test = unittest.make(_workspace_common_dev_dependencies_apply_to_execution_platform_impl)
 
 def workspace_dep_data_tests():
     return unittest.suite(
         "workspace_dep_data_tests",
         workspace_aliases_select_dependency_kind_test,
         workspace_configurations_preserve_local_labels_test,
-        workspace_common_dev_dependencies_apply_to_execution_platform_test,
     )

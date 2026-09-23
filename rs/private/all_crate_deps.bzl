@@ -36,7 +36,8 @@ def crate_aliases(dep_data, normal = False, normal_dev = False, build = False, h
                 platform = platform_label(platform_triple, use_legacy_rules_rust_platforms)
                 dev_deps = dep_data["dev_deps"] | dep_data["dev_deps_by_platform"].get(platform, {})
                 aliases = aliases | {dep: alias for dep, alias in dev_deps.items() if alias != None}
-            by_triple[platform_triple] = {dep: aliases[dep] for dep in sorted(aliases) if aliases[dep] != None} | build_aliases.get(platform_triple, {})
+            by_triple[platform_triple] = {dep: aliases[dep] for dep in sorted(aliases) if aliases[dep] != None}
+            by_triple[platform_triple].update(build_aliases.get(platform_triple, {}))
         values[cargo_target_triple] = by_triple
     return cargo_select(values, hub_name, use_legacy_rules_rust_platforms)
 

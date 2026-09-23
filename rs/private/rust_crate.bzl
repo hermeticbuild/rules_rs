@@ -41,6 +41,7 @@ def rust_crate(
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False):
+    crate_name = crate_name or name.replace("-", "_")
     package_metadata_name = name + "_package_metadata"
     package_metadata(
         name = package_metadata_name,
@@ -156,6 +157,7 @@ def rust_crate(
             version = version,
         )
 
+    rustc_flags = rustc_flags + ["--cap-lints=allow"]
     if not has_lib:
         # Keep the hub's library label incompatible for binary-only crates.
         native.filegroup(
@@ -180,7 +182,7 @@ def rust_crate(
             edition = edition,
             rustc_env = rustc_env,
             rustc_env_files = ["cargo_toml_env_vars.env"],
-            rustc_flags = rustc_flags + ["--cap-lints=allow"],
+            rustc_flags = rustc_flags,
             tags = crate_tags,
             target_compatible_with = target_compatible_with,
             package_metadata = [package_metadata_name],
@@ -213,7 +215,7 @@ def rust_crate(
             edition = edition,
             rustc_env = rustc_env,
             rustc_env_files = ["cargo_toml_env_vars.env"],
-            rustc_flags = rustc_flags + ["--cap-lints=allow"],
+            rustc_flags = rustc_flags,
             srcs = srcs,
             tags = crate_tags,
             target_compatible_with = target_compatible_with,
