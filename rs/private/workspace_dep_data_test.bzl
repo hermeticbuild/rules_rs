@@ -56,6 +56,8 @@ def _workspace_aliases_select_dependency_kind_impl(ctx):
         "@crates//:dev-1.0.0": "dev_dep",
     }
 
+    asserts.equals(env, {}, data.get("binaries"))
+    asserts.equals(env, {}, data.get("shared_libraries"))
     asserts.equals(env, ["@crates//:shared-1.0.0"], all_crate_deps(data, hub_name = "crates"))
     asserts.equals(env, {"@crates//:shared-1.0.0": "normal_shared"}, crate_aliases(data, hub_name = "crates"))
     asserts.equals(env, expected, crate_aliases(data, normal = True, normal_dev = True, build = True, hub_name = "crates"))
@@ -93,6 +95,10 @@ def _workspace_configurations_preserve_local_labels_impl(ctx):
             "version": "1.0.0",
             "edition": "2021",
             "manifest_path": "/workspace/app/Cargo.toml",
+            "targets": [
+                {"name": "app-cli", "kind": ["bin"], "src_path": "/workspace/app/src/main.rs"},
+                {"name": "app_native", "kind": ["cdylib"], "src_path": "/workspace/app/src/native.rs"},
+            ],
             "dependencies": [
                 {"name": "local-helper", "rename": "renamed-helper", "kind": None, "path": "/workspace/local-helper"},
                 {"name": "local-helper", "rename": "build-helper", "kind": "build", "path": "/workspace/local-helper"},
@@ -134,6 +140,8 @@ def _workspace_configurations_preserve_local_labels_impl(ctx):
     asserts.equals(env, {}, data["dev_deps_by_platform"])
     asserts.equals(env, ["@crates//:dev-1.0.0"], all_crate_deps(data, normal_dev = True, hub_name = "crates"))
     asserts.equals(env, {"@crates//:dev-1.0.0": "dev_dep"}, crate_aliases(data, normal_dev = True, hub_name = "crates"))
+    asserts.equals(env, {"app-cli": "src/main.rs"}, data.get("binaries"))
+    asserts.equals(env, {"app_native": "src/native.rs"}, data.get("shared_libraries"))
     asserts.equals(env, "2021", data["edition"])
     asserts.equals(env, "@crates//:app_lints", data["lint_config"])
     return unittest.end(env)

@@ -681,6 +681,26 @@ def workspace_dep_data(
         package_dir = manifest_package_dir(package["manifest_path"], repo_root)
         package_manifest_dir = normalize_path(package["manifest_path"]).removesuffix("/Cargo.toml")
         package_key = fq_crate(package["name"], package["version"])
+        binaries = {}
+        shared_libraries = {}
+
+        for target in package.get("targets", []):
+            kinds = target.get("kind", [])
+            if "cdylib" not in kinds and "bin" not in kinds:
+                continue
+
+            src_path = target.get("src_path")
+            if not src_path:
+                continue
+
+            entrypoint = normalize_path(src_path).removeprefix(repo_root + "/")
+            if package_dir and entrypoint.startswith(package_dir + "/"):
+                entrypoint = entrypoint.removeprefix(package_dir + "/")
+
+            if "cdylib" in kinds:
+                shared_libraries[target["name"]] = entrypoint
+            elif "bin" in kinds:
+                binaries[target["name"]] = entrypoint
 
         for dep in package["dependencies"]:
             bazel_target = dep.get("bazel_target")
@@ -712,10 +732,12 @@ def workspace_dep_data(
         dev_deps, dev_deps_by_platform = shared_and_per_platform(dev_deps, use_legacy_rules_rust_platforms)
 
         package_dep_data = {
+            "binaries": binaries,
             "crate_name": package["name"].replace("-", "_"),
             "dev_deps": dev_deps,
             "dev_deps_by_platform": dev_deps_by_platform,
             "edition": package.get("edition", "2015"),
+            "shared_libraries": shared_libraries,
         }
         lint_config = lint_configs.get(bazel_package)
         if lint_config:
