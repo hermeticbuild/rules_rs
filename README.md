@@ -300,20 +300,32 @@ Configure Cargo for dependency resolution in the root `MODULE.bazel`:
 
 ```bzl
 toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
-toolchains.experimental_host_tools(cargo = "//toolchain:bin/cargo")
+toolchains.host_cargo(
+    linux_amd64 = "//toolchain/linux_amd64:bin/cargo",
+    linux_arm64 = "//toolchain/linux_arm64:bin/cargo",
+    macos_amd64 = "//toolchain/macos_amd64:bin/cargo",
+    macos_arm64 = "//toolchain/macos_arm64:bin/cargo",
+    windows_amd64 = "//toolchain/windows_amd64:bin/cargo.exe",
+    windows_arm64 = "//toolchain/windows_arm64:bin/cargo.exe",
+)
 
 register_toolchains("@our_toolchains//...")
 ```
 
-`cargo` must refer to an existing executable file that runs on the Bazel host,
-not a build target. Labels in external repositories are also supported.
-Only the root module's `experimental_host_tools` tag is used; dependency modules'
-tags are ignored.
+Provide the attributes for the hosts you use; the other attributes can be omitted.
+The repository rule selects Cargo using `rctx.os.name` and `rctx.os.arch` on the
+machine running Bazel, independently of the build target or remote execution
+platform. `amd64` covers x86-64, and `arm64` covers AArch64. If the current host's
+attribute is missing, repository setup fails with an error identifying it.
+
+Each label must refer to an existing executable file, not a build target.
+Labels in external repositories are also supported. Only the root module's
+`host_cargo` tag is used; dependency modules' tags are ignored.
 
 When no module declares `toolchains.toolchain`, custom host Cargo disables the
 implicit default Rust toolchain and its downloads. Explicit `toolchains.toolchain`
 and `toolchains.experimental_miri` declarations still provision their requested
-toolchains. Without `experimental_host_tools`, the default behavior is unchanged.
+toolchains. Without `host_cargo`, the default behavior is unchanged.
 
 When the implicit default is disabled, `default_rust_toolchains` is not created.
 Supply all required compiler components when using `declare_rustc_toolchains`

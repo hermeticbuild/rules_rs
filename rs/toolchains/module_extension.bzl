@@ -6,7 +6,7 @@ load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_1_A
 load("//rs/private:bpf_linker_repository.bzl", "BPF_LINKER_SUPPORTED_EXEC_TRIPLES", "declare_bpf_linker_repository")
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
-load("//rs/private:host_cargo_repository.bzl", "host_cargo_repository")
+load("//rs/private:host_cargo_repository.bzl", "HOST_CARGO_ATTRS", "host_cargo_repository")
 load("//rs/private:rust_analyzer_repository.bzl", "rust_analyzer_repository")
 load(
     "//rs/private:rust_repository_utils.bzl",
@@ -65,14 +65,9 @@ def _urls_for_version(version, iso_date, rust_redist_archives):
         return rust_redist_url_templates(version)
     return DEFAULT_STATIC_RUST_URL_TEMPLATES
 
-_EXPERIMENTAL_HOST_TOOLS_TAG = tag_class(
-    attrs = {
-        "cargo": attr.label(
-            mandatory = True,
-            allow_single_file = True,
-            doc = "Host Cargo executable used for dependency resolution. Only the root module's tag is used. Suppresses the implicit default Rust toolchain.",
-        ),
-    },
+_HOST_CARGO_TAG = tag_class(
+    doc = "Host Cargo executables by OS and architecture. Only the root module's tag is used. Suppresses the implicit default Rust toolchain.",
+    attrs = HOST_CARGO_ATTRS,
 )
 
 _TOOLCHAIN_TAG = tag_class(
@@ -166,18 +161,18 @@ def _toolchains_impl(mctx):
     refresh_rust_redist = bool(mctx.getenv("RULES_RS_RUST_REDIST_REFRESH"))
 
     root_module_name = None
-    host_cargo = None
+    host_cargo_config = None
     for mod in mctx.modules:
         if mod.is_root:
             root_module_name = mod.name
-            if len(mod.tags.experimental_host_tools) > 1:
-                fail("Only one `toolchains.experimental_host_tools` tag may be declared by the root module")
-            if mod.tags.experimental_host_tools:
-                host_cargo = mod.tags.experimental_host_tools[0].cargo
+            if len(mod.tags.host_cargo) > 1:
+                fail("Only one `toolchains.host_cargo` tag may be declared by the root module")
+            if mod.tags.host_cargo:
+                host_cargo_config = mod.tags.host_cargo[0]
             break
 
     repo_configs = resolve_toolchain_configs(mctx.modules)
-    if not repo_configs and not host_cargo:
+    if not repo_configs and not host_cargo_config:
         repo_configs[_DEFAULT_TOOLCHAIN_REPO_NAME] = struct(
             name = _DEFAULT_TOOLCHAIN_REPO_NAME,
             version = _DEFAULT_RUSTC_VERSION,
@@ -509,8 +504,6 @@ def _toolchains_impl(mctx):
     if len(host_rustc_repos) != len(rust_versions):
         fail("Could not find host rustc repository for {}-{}".format(host_os, host_arch))
     host_exe_suffix = ".exe" if host_os == "windows" else ""
-    if not host_cargo:
-        host_cargo = "@{}//:bin/cargo{}".format(host_cargo_repos[version_tags[0].version], host_exe_suffix)
 
     for version in rust_versions:
         version_key = sanitize_version(version)
@@ -526,9 +519,15 @@ def _toolchains_impl(mctx):
             urls = urls,
         )
 
+    if host_cargo_config:
+        host_cargo_attrs = {name: getattr(host_cargo_config, name) for name in HOST_CARGO_ATTRS}
+    else:
+        host_cargo_attrs = {
+            "default_cargo": "@{}//:bin/cargo{}".format(host_cargo_repos[version_tags[0].version], host_exe_suffix),
+        }
     host_cargo_repository(
         name = "host_cargo",
-        host_cargo = host_cargo,
+        **host_cargo_attrs
     )
 
     toolchain_labels_repository(name = "rust_toolchain_labels")
@@ -597,8 +596,8 @@ def _toolchains_impl(mctx):
 toolchains = module_extension(
     implementation = _toolchains_impl,
     tag_classes = {
-        "experimental_host_tools": _EXPERIMENTAL_HOST_TOOLS_TAG,
         "experimental_miri": _EXPERIMENTAL_MIRI_TAG,
+        "host_cargo": _HOST_CARGO_TAG,
         "toolchain": _TOOLCHAIN_TAG,
     },
 )
