@@ -217,13 +217,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     extra_compile_data = getattr(attr, "extra_compile_data", [])
     extra_compile_data_attr = ""
     if extra_compile_data:
-        extra_compile_data_attr = """{indent}    extra_compile_data = [
-{indent}        {extra_compile_data}
-{indent}    ],
-""".format(
-            indent = indent,
-            extra_compile_data = list_indent.join(['"%s"' % d for d in extra_compile_data]),
-        )
+        extra_compile_data_attr = "%s    extra_compile_data = %r,\n" % (indent, extra_compile_data)
     cargo_manifest_env = {"CARGO_MANIFEST_PATH": "$(execpath :Cargo.toml)"}
     rustc_env = cargo_manifest_env | attr.rustc_env
     skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""

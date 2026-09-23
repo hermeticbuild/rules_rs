@@ -129,9 +129,8 @@ def _propagate_feature_enablement(
                 dep_feature = feature[idx + 1:]
 
                 has_optional_dependency = False
-                optional_marker = False
-                if dep_name[-1] == "?":
-                    optional_marker = True
+                optional_marker = dep_name[-1] == "?"
+                if optional_marker:
                     dep_name = dep_name[:-1]
 
                 found = False

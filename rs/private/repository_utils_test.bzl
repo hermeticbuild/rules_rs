@@ -143,7 +143,7 @@ def _source_attributes_test_impl(ctx):
     asserts.equals(env, ["-Zforce-unstable-if-unmarked"], _argument(rendered, "rustc_flags"))
     asserts.equals(env, "1", _argument(rendered, "rustc_env")["RUSTC_BOOTSTRAP"])
     asserts.true(env, "hub_name = None" in rendered)
-    asserts.true(env, '"//src/library/core:srcs"' in rendered)
+    asserts.equals(env, ["//src/library/core:srcs"], _argument(rendered, "extra_compile_data"))
     asserts.true(env, "skip_deps_verification = True" in rendered)
     return unittest.end(env)
 

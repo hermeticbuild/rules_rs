@@ -78,11 +78,7 @@ def _configured_script_loading_tests(env):
     loadingtest.equals(env, name + "_musl_marker", {"": musl}, native.existing_rule(name + "_" + musl + "_")["cargo_target_triple_map"])
 
     name = "invariant_build_script"
-    configuration = {
-        "crate_features_by_triple": {_LINUX: [], _MACOS: []},
-        "build_deps_by_triple": {},
-        "build_cargo_target_triple_required_on": [],
-    }
+    configuration = _script_configuration({_LINUX: [], _MACOS: []}, False)
     cargo_build_script_for_configurations(
         name = name,
         configurations = {"": configuration, _LINUX: configuration},
@@ -118,15 +114,15 @@ def _configured_script_loading_tests(env):
         }},
         hub_name = "rules_rs",
         deps = ["//:annotation"],
-        aliases = {"//:annotation": "annotated"},
+        aliases = {"//:annotation": "annotated", "//:shared": "shared_override", "//:macos": "macos_override"},
         tags = ["manual"],
     )
     cargo_build_script(
         name = name + "_expected",
         aliases = select({
-            "@rules_rs//rs/platforms/config:" + _MACOS: {"//:shared": "shared", "//:annotation": "annotated", "//:macos": "macos"},
-            "@rules_rs//rs/platforms/config:" + _LINUX: {"//:shared": "shared", "//:annotation": "annotated", "//:linux": "linux"},
-            "//conditions:default": {"//:shared": "shared", "//:annotation": "annotated"},
+            "@rules_rs//rs/platforms/config:" + _MACOS: {"//:shared": "shared_override", "//:annotation": "annotated", "//:macos": "macos_override"},
+            "@rules_rs//rs/platforms/config:" + _LINUX: {"//:shared": "shared_override", "//:annotation": "annotated", "//:macos": "macos_override", "//:linux": "linux"},
+            "//conditions:default": {"//:shared": "shared_override", "//:annotation": "annotated", "//:macos": "macos_override"},
         }),
         tags = ["manual"],
     )

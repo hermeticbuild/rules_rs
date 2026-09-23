@@ -360,9 +360,7 @@ def _resolve_possible_deps(
             versions = resolver_versions_by_name.get(dep_package)
             if not versions:
                 continue
-            constrained_versions = deps_by_name.get(dep_package)
-            if constrained_versions:
-                versions = constrained_versions
+            versions = deps_by_name.get(dep_package, versions)
 
             resolved_version = select_package_dep_version(dep, versions)
             if resolved_version == None:

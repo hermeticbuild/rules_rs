@@ -9,5 +9,5 @@ pub const MODE: usize = 2;
 pub struct Token(pub leaf::Token);
 
 pub fn token() -> Token {
-    Token(leaf::Token(17))
+    Token(leaf::Token)
 }

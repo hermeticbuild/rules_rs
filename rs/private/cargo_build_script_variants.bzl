@@ -80,7 +80,7 @@ def cargo_build_script_for_configurations(
         script_aliases.update(aliases)
         if variant["deps_by_platform"]:
             script_aliases = select({
-                platform: script_aliases | {dep: alias for dep, alias in items.items() if alias} | aliases
+                platform: script_aliases | {dep: alias for dep, alias in items.items() if alias and dep not in aliases}
                 for platform, items in variant["deps_by_platform"].items()
             } | {"//conditions:default": script_aliases})
             script_deps = script_deps + select({

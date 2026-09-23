@@ -1,1 +1,1 @@
-pub struct Token(pub u8);
+pub struct Token;
