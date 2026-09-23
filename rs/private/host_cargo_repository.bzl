@@ -7,12 +7,12 @@ HOST_CARGO_ATTRS = {
         allow_single_file = True,
         doc = "Existing Cargo executable for %s %s." % (os, arch),
     )
-    for os in ["linux", "macos", "windows"]
+    for os in ["linux", "darwin", "windows"]
     for arch in ["amd64", "arm64"]
 }
 
 def _host_cargo_repository_impl(rctx):
-    platform = repo_utils.platform(rctx).replace("darwin_", "macos_")
+    platform = repo_utils.platform(rctx)
     if platform not in HOST_CARGO_ATTRS:
         fail("Unsupported host Cargo platform: %s" % platform)
     cargo = getattr(rctx.attr, platform)
