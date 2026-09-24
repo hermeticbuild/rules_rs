@@ -267,6 +267,7 @@ crate.annotation(
 include("//:3rd_party/aws-lc-sys/include.MODULE.bazel")
 include("//:3rd_party/bzip2-sys/include.MODULE.bazel")
 include("//:3rd_party/glib-sys/include.MODULE.bazel")
+include("//:3rd_party/libbpf-sys/include.MODULE.bazel")
 include("//:3rd_party/libssh2-sys/include.MODULE.bazel")
 include("//:3rd_party/lzma-sys/include.MODULE.bazel")
 include("//:3rd_party/libudev-sys/include.MODULE.bazel")
