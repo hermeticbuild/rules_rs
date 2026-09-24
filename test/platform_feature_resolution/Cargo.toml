@@ -1,0 +1,15 @@
+[package]
+name = "platform_feature_resolution"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+shared = { path = "../platform_feature_resolution.deps/shared", default-features = false, features = ["outer"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+native_parent = { path = "../platform_feature_resolution.deps/native_parent" }
+
+[patch.crates-io]
+leaf = { path = "../platform_feature_resolution.deps/leaf" }

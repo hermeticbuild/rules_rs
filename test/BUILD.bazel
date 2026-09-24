@@ -20,6 +20,12 @@ load("//:workspace_lints_test.bzl", "inherited_workspace_lints_test", "opted_out
 
 target_triple_constraints_test()
 
+platform_transition_filegroup(
+    name = "platform_feature_resolution_wasm",
+    srcs = ["@platform_feature_resolution//:shared-0.1.0"],
+    target_platform = "@rules_rs//rs/platforms:wasm32-unknown-unknown",
+)
+
 sh_test(
     name = "custom_registry_test",
     size = "medium",
@@ -91,6 +97,7 @@ package_lints_test(
 DISABLED = [
     "annotation_crate_features",
     "3rd_party",
+    "platform_feature_resolution",
     "pyo3",
     "prost",
     "wasm_bindgen",
@@ -378,6 +385,7 @@ filegroup(
     name = "all_builds",
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         ":aws_lc_openssl",
+        ":platform_feature_resolution_wasm",
         ":rust_binary",
         ":verify_self_dev_dependency_feature_present",
         ":verify_self_dev_dependency_no_self_alias",

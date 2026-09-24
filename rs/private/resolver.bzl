@@ -40,6 +40,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
         feature_resolutions = package["feature_resolutions"]
         features_enabled = feature_resolutions.features_enabled
 
+        platforms_enabled = feature_resolutions.platforms_enabled
         deps = feature_resolutions.deps
 
         if _propagate_feature_enablement(
@@ -48,6 +49,7 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
             package,
             features_enabled,
             feature_resolutions,
+            platforms_enabled,
             cfg_attrs_by_triple,
             debug,
         ):
@@ -71,18 +73,21 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
             if dep.get("feature_sensitive"):
                 match = set([
                     triple
-                    for triple in dep["target"]
+                    for triple in dep["target"].intersection(platforms_enabled)
                     if _dep_target_matches_triple(dep, triple, features_enabled[triple], cfg_attrs_by_triple)
                 ])
             else:
-                match = dep["target"]
+                match = dep["target"].intersection(platforms_enabled)
 
-            to_remove = None
             for triple in match:
                 if optional:
                     features_for_triple = features_enabled[triple]
                     if dep_name not in features_for_triple and prefixed_dep_alias not in features_for_triple:
                         continue
+
+                if triple not in dep_feature_resolutions.platforms_enabled:
+                    dep_feature_resolutions.platforms_enabled.add(triple)
+                    new_dirty_package_indices.add(dep_feature_resolutions.package_index)
 
                 triple_deps = deps[triple] if kind == "normal" else feature_resolutions.build_deps[triple]
                 if package_changed or bazel_target not in triple_deps:
@@ -100,15 +105,6 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
                     triple_features.update(dep_features)
                     if prev_length != len(triple_features):
                         new_dirty_package_indices.add(dep_feature_resolutions.package_index)
-                if not to_remove:
-                    to_remove = set()
-                to_remove.add(triple)
-
-            if to_remove:
-                if len(to_remove) == len(match):
-                    dep["bazel_target"] = None
-                else:
-                    match.difference_update(to_remove)
 
         if package_changed:
             new_dirty_package_indices.add(index)
@@ -121,11 +117,15 @@ def _propagate_feature_enablement(
         package,
         features_enabled,
         feature_resolutions,
+        platforms_enabled,
         cfg_attrs_by_triple,
         debug):
     possible_features = feature_resolutions.possible_features
 
     for triple, feature_set in features_enabled.items():
+        if triple not in platforms_enabled:
+            continue
+
         if not feature_set:
             continue
 

@@ -163,6 +163,20 @@ TESTS = [
 
 [use_repo(crate, test) for test in TESTS]
 
+# This fixture combines target-specific reachability with a multi-round
+# dependency feature chain. Its wasm target is declared in BUILD.bazel.
+crate.from_cargo(
+    name = "platform_feature_resolution",
+    cargo_lock = "//:platform_feature_resolution/Cargo.lock",
+    cargo_toml = "//:platform_feature_resolution/Cargo.toml",
+    platform_triples = [
+        "aarch64-apple-darwin",
+        "wasm32-unknown-unknown",
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+use_repo(crate, "platform_feature_resolution")
+
 # Workspace member whose Cargo.toml lives at the bazel workspace root.
 crate.from_cargo(
     name = "root_package",
@@ -180,7 +194,6 @@ crate.from_cargo(
     ],
 )
 use_repo(crate, "root_package")
-
 crate.annotation(
     crate = "rustls",
     # Test for https://github.com/bazelbuild/rules_rust/issues/3626
@@ -294,16 +307,24 @@ crate.annotation(
 
 ### Fix -sys crates
 include("//:3rd_party/aws-lc-sys/include.MODULE.bazel")
+
 include("//:3rd_party/bzip2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/glib-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libssh2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/lzma-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libudev-sys/include.MODULE.bazel")
+
 include("//:3rd_party/apriltag-sys/include.MODULE.bazel")
+
 include("//:3rd_party/zstd-sys/include.MODULE.bazel")
 
-# TODO(zbarsky): alsa-sys is not curently tested, fix it
+# TODO(zbarsky): alsa-sys is not currently tested, fix it
 include("//:3rd_party/alsa-sys/include.MODULE.bazel")
+
 include("//:3rd_party/openssl-sys/include.MODULE.bazel")
 
 single_version_override(
@@ -347,7 +368,9 @@ crate.annotation(
 )
 
 include("//:3rd_party/gdk-pixbuf-sys/include.MODULE.bazel")
+
 include("//:3rd_party/cairo-sys-rs/include.MODULE.bazel")
+
 include("//:3rd_party/atk-sys/include.MODULE.bazel")
 
 crate.annotation(
@@ -372,7 +395,9 @@ clang++: error: no such file or directory: 'bcrypt.lib'
 #)
 
 include("//:3rd_party/libz-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libgit2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/coreaudio-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): fix this for realz
