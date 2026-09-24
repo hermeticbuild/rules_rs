@@ -266,6 +266,7 @@ crate.annotation(
 ### Fix -sys crates
 include("//:3rd_party/aws-lc-sys/include.MODULE.bazel")
 include("//:3rd_party/bzip2-sys/include.MODULE.bazel")
+include("//:3rd_party/curl-sys/include.MODULE.bazel")
 include("//:3rd_party/glib-sys/include.MODULE.bazel")
 include("//:3rd_party/libssh2-sys/include.MODULE.bazel")
 include("//:3rd_party/lzma-sys/include.MODULE.bazel")
@@ -284,6 +285,7 @@ single_version_override(
         "//:openssl-perl-genrule.patch",
         "//:openssl-windows-udp-netreset.patch",
     ],
+    version = "3.5.5.bcr.0",
 )
 
 crate.annotation(

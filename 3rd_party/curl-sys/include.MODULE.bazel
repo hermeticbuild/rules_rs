@@ -1,0 +1,8 @@
+bazel_dep(name = "curl", version = "8.21.0.bcr.2")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "curl-sys",
+    gen_build_script = "off",
+    deps = ["@curl"],
+)
