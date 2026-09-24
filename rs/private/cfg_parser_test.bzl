@@ -1,5 +1,9 @@
+"""Tests for Cargo cfg parsing and target cfg derivation."""
+
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cfg_parser.bzl", "cfg_matches", "cfg_matches_expr_for_cfg_attrs", "cfg_matches_expr_for_triples", "triple_to_cfg_attrs")
+load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES")
+load(":cfg_parser.bzl", "cfg_atoms_for_triple", "cfg_matches", "cfg_matches_expr_for_cfg_attrs", "cfg_matches_expr_for_triples", "triple_to_cfg_attrs")
+load(":cfg_target_data.bzl", "CFG_ATOMS", "CFG_ATOM_IDS_BY_TRIPLE")
 
 def _cfg(expr):
     return "cfg(%s)" % expr
@@ -38,10 +42,11 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg('target_family = "windows"'), win))
     asserts.true(env, cfg_matches(_cfg('target_pointer_width = "64"'), win))
     asserts.true(env, cfg_matches(_cfg('target_env = "gnu"'), win_gnu))
-    asserts.true(env, cfg_matches(_cfg('target_env = "gnullvm"'), win_gnullvm))
+    asserts.true(env, cfg_matches(_cfg('target_env = "gnu"'), win_gnullvm))
+    asserts.true(env, cfg_matches(_cfg('target_abi = "llvm"'), win_gnullvm))
 
     # Wasm facts
-    asserts.true(env, cfg_matches(_cfg("wasm"), wasm))
+    asserts.false(env, cfg_matches(_cfg("wasm"), wasm))
     asserts.false(env, cfg_matches(_cfg("unix"), wasm))
     asserts.false(env, cfg_matches(_cfg("windows"), wasm))
     asserts.true(env, cfg_matches(_cfg('target_arch = "wasm32"'), wasm))
@@ -120,8 +125,35 @@ def _cfg_parser_smoke_test_impl(ctx):
 
 cfg_parser_smoke_test = unittest.make(_cfg_parser_smoke_test_impl)
 
+def _cfg_parser_oracle_test_impl(ctx):
+    env = unittest.begin(ctx)
+
+    asserts.equals(env, sorted(ALL_TARGET_TRIPLES), sorted(CFG_ATOM_IDS_BY_TRIPLE.keys()))
+
+    for triple in ALL_TARGET_TRIPLES:
+        expected_atoms = [CFG_ATOMS[atom_id] for atom_id in CFG_ATOM_IDS_BY_TRIPLE[triple]]
+        expected_set = set(expected_atoms)
+        asserts.equals(
+            env,
+            expected_atoms,
+            cfg_atoms_for_triple(triple),
+            "computed cfg atoms differ for {}".format(triple),
+        )
+        for atom in CFG_ATOMS:
+            asserts.equals(
+                env,
+                atom in expected_set,
+                cfg_matches(_cfg(atom), triple),
+                "cfg({}) differs for {}".format(atom, triple),
+            )
+
+    return unittest.end(env)
+
+cfg_parser_oracle_test = unittest.make(_cfg_parser_oracle_test_impl)
+
 def cfg_parser_tests():
     return unittest.suite(
         "cfg_parser_tests",
+        cfg_parser_oracle_test,
         cfg_parser_smoke_test,
     )
