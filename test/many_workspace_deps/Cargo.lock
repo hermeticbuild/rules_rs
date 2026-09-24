@@ -4340,6 +4340,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "curl-sys"
+version = "0.4.90+curl-8.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97799a0d220bfb3361e0fe4936966ff8c4b24d65c3f06dfc70d7b680b44e7897"
+dependencies = [
+ "cc",
+ "libc",
+ "libz-sys",
+ "pkg-config",
+ "vcpkg",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "cursor-icon"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19448,6 +19462,7 @@ dependencies = [
  "bindgen",
  "candle-core",
  "cssparser",
+ "curl-sys",
  "datafusion 50.3.0",
  "deltalake",
  "diesel",
