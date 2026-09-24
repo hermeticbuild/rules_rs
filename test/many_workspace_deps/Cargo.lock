@@ -10393,6 +10393,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libnghttp2-sys"
+version = "0.1.11+1.64.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b6c24e48a7167cffa7119da39d577fa482e66c688a4aac016bee862e1a713c4"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "libp2p"
 version = "0.56.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19494,6 +19504,7 @@ dependencies = [
  "image",
  "leptos",
  "libbpf-sys",
+ "libnghttp2-sys",
  "libp2p",
  "libssh2-sys",
  "libudev-sys",
