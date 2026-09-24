@@ -1,0 +1,9 @@
+[package]
+name = "test"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+
+[dependencies]
+garage = {version = "2.1.0", features = ["bundled-libs","kubernetes-discovery","k2v","metrics","sqlite"], default-features = false}
