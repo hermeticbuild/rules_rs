@@ -220,7 +220,14 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     build_deps, conditional_build_deps = render_select(attr.build_script_deps, attr.build_script_deps_select, use_legacy_rules_rust_platforms)
     build_script_data, conditional_build_script_data = render_select(attr.build_script_data, attr.build_script_data_select, use_legacy_rules_rust_platforms)
     build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_legacy_rules_rust_platforms)
-    rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_legacy_rules_rust_platforms)
+
+    # render_select deduplicates and reorders items, which changes rustc arguments.
+    rustc_flags = attr.rustc_flags
+    conditional_rustc_flags = ""
+    if attr.rustc_flags_select:
+        branches = [(_platform(k, use_legacy_rules_rust_platforms), repr(v)) for k, v in attr.rustc_flags_select.items()]
+        branches.append(("//conditions:default", "[]"))
+        conditional_rustc_flags = _format_branches(branches)
     deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_legacy_rules_rust_platforms)
     build_script_env_files = getattr(attr, "build_script_env_files", []) + ["cargo_toml_env_vars.env"]
     link_deps = getattr(attr, "link_deps", [])
