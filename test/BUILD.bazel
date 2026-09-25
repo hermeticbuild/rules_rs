@@ -5,6 +5,7 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 load("@rules_rs//rs:rust_test.bzl", "rust_test")
+load("@rules_rs//rs:rust_test_suite.bzl", "rust_test_suite")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@self_dev_dependency//:data.bzl", self_dev_dependency_dep_data = "DEP_DATA")
@@ -19,6 +20,14 @@ load("//:verify_aliases.bzl", "verify_alias", "verify_alias_absent", "verify_cra
 load("//:workspace_lints_test.bzl", "inherited_workspace_lints_test", "opted_out_workspace_lints_test", "package_lints_test")
 
 target_triple_constraints_test()
+
+rust_test_suite(
+    name = "rust_test_suite",
+    srcs = [
+        "rust_test_suite_a.rs",
+        "rust_test_suite_b.rs",
+    ],
+)
 
 sh_test(
     name = "custom_registry_test",
