@@ -56,6 +56,8 @@ def declare_workspace_resources(rctx, build_files):
     written = {}
     root_build = None
     for dest in build_files:
+        if not rctx.path(dest).exists:
+            rctx.file(dest, "")
         real = str(rctx.path(dest).realpath)
         if real not in written:
             content = rctx.read(dest) if rctx.path(dest).exists else ""

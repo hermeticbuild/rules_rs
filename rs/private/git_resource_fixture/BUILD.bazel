@@ -35,3 +35,10 @@ bzl_library(
         "@bazel_skylib//lib:unittest",
     ],
 )
+
+rust_test(
+    name = "no_authored_root_test",
+    srcs = ["test.rs"],
+    edition = "2021",
+    deps = ["@resource_no_build_checkout//member"],
+)
