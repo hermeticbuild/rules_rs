@@ -1,0 +1,8 @@
+bazel_dep(name = "nghttp2", version = "1.65.0.bcr.1")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "libnghttp2-sys",
+    gen_build_script = "off",
+    deps = ["@nghttp2"],
+)
