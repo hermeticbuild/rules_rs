@@ -18,7 +18,7 @@ load(
 )
 load("//rs/private:crate_configurations.bzl", "prepare_crate_configurations")
 load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
-load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
+load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "git_crate_strip_prefix", "git_manifest_fact_key", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_repository")
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
@@ -239,7 +239,7 @@ def _generate_hub_and_spokes(
             cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
             fact = cargo_toml_fact(cargo_toml_json, {})
         elif source.startswith("git+"):
-            key = source + "_" + name + "_manifest_v2"
+            key = git_manifest_fact_key(source, name)
             fact = existing_facts.get(key)
             if fact:
                 facts[key] = fact

@@ -4,6 +4,14 @@ load(":cargo_credentials.bzl", "registry_auth_headers")
 load(":registry_utils.bzl", "CRATES_IO_REGISTRY", "sharded_path")
 load(":toml2json.bzl", "run_toml2json")
 
+def git_manifest_fact_key(source, name):
+    return source + "_" + name + "_manifest_v2"
+
+def git_crate_strip_prefix(package, facts):
+    if "strip_prefix" in package:
+        return package["strip_prefix"]
+    return json.decode(facts[git_manifest_fact_key(package["source"], package["name"])])["strip_prefix"]
+
 def parse_git_url(url):
     # Drop query params (?rev=...) and keep only before '#'
     parts = url.split("#")
@@ -53,7 +61,7 @@ def start_github_downloads(
 
         name = package["name"]
 
-        key = source + "_" + name + "_manifest_v2"
+        key = git_manifest_fact_key(source, name)
         if key in existing_facts:
             continue
 
@@ -119,7 +127,7 @@ def start_crate_registry_downloads(
                 # Github already handled above
                 continue
 
-            key = source + "_" + name + "_manifest_v2"
+            key = git_manifest_fact_key(source, name)
             if key in existing_facts:
                 continue
 

@@ -209,11 +209,11 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
                 features.setdefault((target_resolution.package_index, exec_platform_triple), set()).update(target_features)
             continue
 
+        exec_deps = {dep["index"]: dep for dep in exec_resolution.possible_deps}
         for target_dep in target_resolution.possible_deps:
-            candidates = [dep for dep in exec_resolution.possible_deps if dep["index"] == target_dep["index"]]
-            if not candidates:
-                continue
-            dep = candidates[0]
+            # A root's dev-only macro still runs on the host, even though its
+            # edge is deliberately absent from an ordinary host library copy.
+            dep = exec_deps.get(target_dep["index"], target_dep)
             bazel_target = dep.get("bazel_target")
             is_build = dep.get("kind", "normal") == "build"
             if not (is_build or dep.get("proc_macro")) or not bazel_target:

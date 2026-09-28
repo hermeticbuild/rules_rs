@@ -8,6 +8,7 @@ renamed = { package = "derive-package", path = "../derive-package", features = [
 [build-dependencies]
 builder = { path = "../builder" }
 [dev-dependencies]
+macro-test = { package = "dev-macro", path = "../dev-macro" }
 helper = { path = "../helper", features = ["dev"] }
 [target.'cfg(windows)'.dependencies]
 helper = { path = "../helper", default-features = false, features = ["windows"] }

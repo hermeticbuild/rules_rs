@@ -58,6 +58,19 @@ METADATA = json.decode(r"""
           "path": "/workspace/helper"
         },
         {
+          "name": "dev-macro",
+          "source": null,
+          "req": "*",
+          "kind": "dev",
+          "rename": "macro-test",
+          "optional": false,
+          "uses_default_features": true,
+          "features": [],
+          "target": null,
+          "registry": null,
+          "path": "/workspace/dev-macro"
+        },
+        {
           "name": "builder",
           "source": null,
           "req": "*",
@@ -124,6 +137,7 @@ METADATA = json.decode(r"""
         "dev": [],
         "extra": [],
         "macro": [],
+        "macro-test": [],
         "std": [],
         "target": [],
         "windows": []
@@ -194,6 +208,38 @@ METADATA = json.decode(r"""
       ],
       "features": {},
       "manifest_path": "/workspace/dev-only/Cargo.toml"
+    },
+    {
+      "name": "dev-macro",
+      "version": "1.0.0",
+      "id": "path+file:///workspace/dev-macro#1.0.0",
+      "dependencies": [
+        {
+          "name": "helper",
+          "source": null,
+          "req": "*",
+          "kind": null,
+          "rename": null,
+          "optional": false,
+          "uses_default_features": false,
+          "features": [
+            "macro-test"
+          ],
+          "target": null,
+          "registry": null,
+          "path": "/workspace/helper"
+        }
+      ],
+      "targets": [
+        {
+          "name": "dev_macro",
+          "kind": [
+            "proc-macro"
+          ]
+        }
+      ],
+      "features": {},
+      "manifest_path": "/workspace/dev-macro/Cargo.toml"
     },
     {
       "name": "builder",
@@ -403,6 +449,16 @@ CASES = json.decode(r"""
         ]
       },
       {
+        "id": "path+file:///workspace/dev-macro#1.0.0",
+        "name": "dev_macro",
+        "kind": [
+          "proc-macro"
+        ],
+        "mode": "build",
+        "platform": null,
+        "features": []
+      },
+      {
         "id": "path+file:///workspace/helper#1.0.0",
         "name": "helper",
         "kind": [
@@ -413,7 +469,8 @@ CASES = json.decode(r"""
         "features": [
           "builder",
           "extra",
-          "macro"
+          "macro",
+          "macro-test"
         ]
       },
       {
@@ -557,6 +614,16 @@ CASES = json.decode(r"""
         ]
       },
       {
+        "id": "path+file:///workspace/dev-macro#1.0.0",
+        "name": "dev_macro",
+        "kind": [
+          "proc-macro"
+        ],
+        "mode": "build",
+        "platform": null,
+        "features": []
+      },
+      {
         "id": "path+file:///workspace/helper#1.0.0",
         "name": "helper",
         "kind": [
@@ -583,7 +650,8 @@ CASES = json.decode(r"""
         "features": [
           "builder",
           "extra",
-          "macro"
+          "macro",
+          "macro-test"
         ]
       }
     ]

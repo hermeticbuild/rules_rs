@@ -733,6 +733,8 @@ def workspace_dep_data(
     for package in cargo_metadata["packages"]:
         local_deps = {}
         dev_deps = {platform_triple: {} for platform_triple in platform_triples}
+        normal_labels = {platform_triple: set() for platform_triple in platform_triples}
+        dev_labels = {platform_triple: set() for platform_triple in platform_triples}
         package_dir = manifest_package_dir(package["manifest_path"], repo_root)
         package_manifest_dir = normalize_path(package["manifest_path"]).removesuffix("/Cargo.toml")
         package_key = fq_crate(package["name"], package["version"])
@@ -773,6 +775,13 @@ def workspace_dep_data(
                         alias = dep["name"].replace("-", "_"),
                     )
 
+            resolved_label = dep_label_prefix + workspace_crates_by_path[dep_path] if dep_path in workspace_crates_by_path else bazel_target
+            match_info = cfg_match_info_for_target(dep.get("target"), platform_cfg_attrs, cfg_match_cache)
+            for platform_triple in match_info.matches:
+                if dep["kind"] == "dev":
+                    dev_labels[platform_triple].add(resolved_label)
+                elif dep["kind"] in [None, "normal"]:
+                    normal_labels[platform_triple].add(resolved_label)
             if dep["kind"] != "dev":
                 continue
 
@@ -798,12 +807,16 @@ def workspace_dep_data(
         if lint_config:
             package_dep_data["lint_config"] = lint_config
         configurations = configurations_by_crate[package_key].configurations
-        if local_deps:
+        if local_deps or any(dev_labels.values()):
             workspace_configurations = {}
             for cargo_target_triple, configuration in configurations.items():
                 configuration = dict(configuration)
                 configuration["deps_by_triple"] = {
-                    platform_triple: _workspace_deps(deps, local_deps)
+                    platform_triple: _workspace_deps({
+                        label: alias
+                        for label, alias in deps.items()
+                        if label not in dev_labels.get(platform_triple, []) or label in normal_labels.get(platform_triple, [])
+                    }, local_deps)
                     for platform_triple, deps in configuration["deps_by_triple"].items()
                 }
                 configuration["build_deps_by_triple"] = {

@@ -15,6 +15,7 @@ version = "1.0.0"
 dependencies = [
  "builder",
  "derive-package",
+ "dev-macro",
  "helper",
 ]
 
@@ -23,6 +24,13 @@ name = "derive-package"
 version = "1.0.0"
 dependencies = [
  "dev-only",
+ "helper",
+]
+
+[[package]]
+name = "dev-macro"
+version = "1.0.0"
+dependencies = [
  "helper",
 ]
 
