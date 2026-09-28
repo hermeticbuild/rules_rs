@@ -24,7 +24,6 @@ load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repos
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "registry_download_url", "resolve_registry_source")
-load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:select_utils.bzl", "platform_label")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
@@ -325,6 +324,7 @@ def _generate_hub_and_spokes(
     cfg_match_cache = workspace_resolution.cfg_match_cache
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
     workspace_dep_labels_by_triple = workspace_resolution.workspace_dep_labels_by_triple
+    workspace_exec_dep_labels = workspace_resolution.workspace_exec_dep_labels_by_cargo_target_triple
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
 
     _date(mctx, "set up initial deps!")
@@ -610,26 +610,23 @@ alias(
             bazel_package = bazel_package,
         ))
 
-    workspace_deps, conditional_workspace_deps = render_select(
-        [],
-        workspace_dep_labels_by_triple,
-        use_legacy_rules_rust_platforms,
-    )
-
     hub_contents.append(
         """
+load("@rules_rs//rs/private:cargo_workspace_deps.bzl", "cargo_workspace_deps")
+
 package(
     default_visibility = ["//visibility:public"],
 )
 
-filegroup(
+cargo_workspace_deps(
     name = "_workspace_deps",
-    srcs = [
-        %s
-    ]%s,
+    target_deps = %r,
+    exec_deps = %r,
+    use_legacy_rules_rust_platforms = %r,
 )""" % (
-            ",\n        ".join(['"%s"' % dep for dep in sorted(workspace_deps)]),
-            " + " + conditional_workspace_deps if conditional_workspace_deps else "",
+            workspace_dep_labels_by_triple,
+            workspace_exec_dep_labels,
+            use_legacy_rules_rust_platforms,
         ),
     )
 

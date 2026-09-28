@@ -535,7 +535,6 @@ def resolve_cargo_workspace_members(
         )
 
     workspace_dep_versions_by_name = {}
-    workspace_dep_labels_by_triple = {platform_triple: set() for platform_triple in platform_triples}
 
     for package in cargo_metadata["packages"]:
         if watch_manifests:
@@ -583,12 +582,6 @@ def resolve_cargo_workspace_members(
             if not is_first_party_dep or materialize_workspace_members:
                 dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
                 workspace_dep_versions_by_name.setdefault(dep_name, set()).add(dep_fq)
-
-            target = dep.get("target")
-            match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
-            for platform_triple in match_info.matches:
-                if not is_first_party_dep or materialize_workspace_members:
-                    workspace_dep_labels_by_triple[platform_triple].add(":" + dep_name)
 
     binary_feature_resolutions = []
     for crate, annotation_versions in annotations.items():
@@ -640,6 +633,17 @@ def resolve_cargo_workspace_members(
     if exec_platform_triples:
         _prune_compilation_contexts(resolver_packages, set([fq_crate(p["name"], p["version"]) for p in cargo_metadata["packages"] if p["name"] in selected]), binary_feature_resolutions, feature_resolutions_by_fq_crate, exec_resolutions_by_cargo_target_triple, platform_triples, exec_platform_triples, dep_label_prefix)
 
+    workspace_dep_labels_by_triple, workspace_exec_dep_labels_by_cargo_target_triple = _resolved_workspace_deps(
+        cargo_metadata["packages"],
+        resolver_packages,
+        workspace_dep_versions_by_name,
+        feature_resolutions_by_fq_crate,
+        exec_resolutions_by_cargo_target_triple,
+        platform_triples,
+        exec_platform_triples,
+        dep_label_prefix,
+    )
+
     for package in packages:
         feature_resolutions = package["feature_resolutions"]
         features_enabled = feature_resolutions.features_enabled
@@ -660,8 +664,53 @@ def resolve_cargo_workspace_members(
         feature_resolutions_by_fq_crate = feature_resolutions_by_fq_crate,
         platform_cfg_attrs = platform_cfg_attrs,
         workspace_dep_labels_by_triple = workspace_dep_labels_by_triple,
+        workspace_exec_dep_labels_by_cargo_target_triple = workspace_exec_dep_labels_by_cargo_target_triple,
         workspace_dep_versions_by_name = workspace_dep_versions_by_name,
     )
+
+def _resolved_workspace_deps(workspace, packages, materialized_versions, targets, executions, triples, hosts, prefix):
+    # Raw manifest edges include disabled optional dependencies and unselected
+    # workspace members. Only aggregate edges that survived Cargo resolution.
+    materialized = set([prefix + fq for versions in materialized_versions.values() for fq in versions])
+    macro_labels = set([prefix + fq_crate(p["name"], p["version"]) for p in packages if p.get("proc_macro")])
+    target_deps = {}
+    exec_deps = {}
+    for triple in triples:
+        target_labels = set()
+        host_labels = {host: set() for host in hosts}
+        execution = executions.get(triple)
+        for package in workspace:
+            fq = fq_crate(package["name"], package["version"])
+            target = targets[fq]
+            if triple in target.active:
+                labels = set(target.deps[triple])
+                target_labels.update(labels.difference(macro_labels) if execution else labels)
+                if execution:
+                    for host in hosts:
+                        host_labels[host].update(labels.intersection(macro_labels))
+                        host_labels[host].update(execution.build_deps.get(fq, {}).get(host, {}))
+                else:
+                    target_labels.update(target.build_deps[triple])
+            if execution:
+                owner = execution.resolutions[fq]
+                for host in owner.active:
+                    host_labels[host].update(owner.deps[host])
+                    host_labels[host].update(owner.build_deps[host])
+        target_deps[triple] = sorted([
+            ":" + label[len(prefix):]
+            for label in target_labels.intersection(materialized)
+            if triple in targets[label[len(prefix):]].active
+        ])
+        if execution:
+            exec_deps[triple] = {
+                host: sorted([
+                    ":" + label[len(prefix):]
+                    for label in labels.intersection(materialized)
+                    if host in execution.resolutions[label[len(prefix):]].active
+                ])
+                for host, labels in host_labels.items()
+            }
+    return target_deps, exec_deps
 
 def _prune_compilation_contexts(packages, roots, binary_roots, targets, execution, triples, hosts, prefix):
     # Cargo selected proc-macro roots participate in target feature propagation

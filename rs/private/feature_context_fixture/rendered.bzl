@@ -4,6 +4,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_proc_macro")
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
 load("//rs/private:all_crate_deps.bzl", "all_crate_deps", "crate_aliases", "crate_features")
 load("//rs/private:cargo_select.bzl", "cargo_config_settings")
+load("//rs/private:cargo_workspace_deps.bzl", "cargo_workspace_deps")
 load("//rs/private:rust_crate.bzl", "rust_crate")
 
 _WINDOWS = "x86_64-pc-windows-gnullvm"
@@ -17,6 +18,7 @@ def _repository_impl(ctx):
     ctx.file("build.rs", "fn main() {}\n")
     ctx.file("main.rs", "fn main() {}\n")
     ctx.file("cargo_toml_env_vars.env", "")
+    ctx.file("shared.rs", '#[cfg(all(feature = "target", feature = "host"))]\ncompile_error!("target and host features must remain separate");\n#[cfg(not(any(feature = "target", feature = "host")))]\ncompile_error!("a resolved compilation context is required");\n')
 
 rendered_repository = repository_rule(implementation = _repository_impl)
 
@@ -104,4 +106,34 @@ def rendered_fixture():
         srcs = ["consumer.rs"],
         aliases = {":generated_macro": "renamed_macro"},
         deps = [":target_only", ":workspace_macro", ":generated_macro"],
+    )
+    shared_args = dict(
+        crate_args,
+        name = "shared",
+        crate_name = "shared",
+        configurations = {
+            "": _configuration({_WINDOWS: ["target"]}),
+            _WINDOWS: _configuration({host: ["host"] for host in SUPPORTED_EXEC_TRIPLES}),
+        },
+        cargo_target_triple_map = {},
+        crate_root = "shared.rs",
+        deps = [],
+        link_deps = [],
+        data = [],
+        extra_compile_data = [],
+        build_script = None,
+        binaries = {},
+    )
+    rust_crate(**shared_args)
+    rust_crate(**dict(
+        shared_args,
+        name = "host_only",
+        crate_name = "host_only",
+        configurations = {_WINDOWS: _configuration({host: ["host"] for host in SUPPORTED_EXEC_TRIPLES})},
+        cargo_target_triple_map = {"": _WINDOWS},
+    ))
+    cargo_workspace_deps(
+        name = "workspace_dependencies",
+        target_deps = {_WINDOWS: [":shared"]},
+        exec_deps = {_WINDOWS: {host: [":shared", ":host_only", ":generated_macro"] for host in SUPPORTED_EXEC_TRIPLES}},
     )

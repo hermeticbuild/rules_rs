@@ -44,6 +44,9 @@ def _oracle_impl(ctx):
             if triple in record.active:
                 actual[(name, domain)] = sorted([f for f in record.features_enabled[triple] if not f.startswith("dep:")])
     asserts.equals(env, expected, actual, "%s on %s (dev=%s)" % (case["package"], case["target"], case["include_dev"]))
+    root = case["package"] + "-1.0.0"
+    asserts.equals(env, sorted([":" + fq for fq, domain in expected if fq != root and domain == "target"]), result.workspace_dep_labels_by_triple[case["target"]])
+    asserts.equals(env, sorted([":" + fq for fq, domain in expected if fq != root and domain == "host"]), result.workspace_exec_dep_labels_by_cargo_target_triple[case["target"]][_HOST])
     if case["package"] == "consumer":
         asserts.equals(env, "renamed", result.feature_resolutions_by_fq_crate["consumer-1.0.0"].deps[case["target"]]["//:derive-package-1.0.0"])
         configurations = prepare_crate_configurations(
