@@ -209,3 +209,6 @@ register_toolchains(
     "@llvm//toolchain:all",
     dev_dependency = True,
 )
+
+license_fixtures = use_extension("//rs/private/license_fixture:repos.bzl", "fixtures", dev_dependency = True)
+use_repo(license_fixtures, "license_checkout", "license_registry")

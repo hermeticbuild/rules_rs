@@ -104,6 +104,23 @@ def package_version(package):
     # https://doc.rust-lang.org/cargo/reference/manifest.html#the-version-field
     return package.get("version", "0.0.0")
 
+def _license_file(rctx, package_dir, package):
+    path = package.get("license-file", package.get("license_file"))
+    if path == None:
+        return None
+    if type(path) != "string" or not path or paths.is_absolute(path):
+        fail("package.license-file must be a nonempty relative path")
+    source = package_dir.get_child(path).realpath
+    root = str(rctx.path(".").realpath)
+    if not str(source).startswith(root + "/") or not source.exists or source.is_dir:
+        fail("package.license-file must name a file inside the source repository: " + path)
+
+    # A workspace license can live across a BUILD package boundary. Materialize
+    # its contents beside the crate so metadata can refer to one local label.
+    dest = "__rules_rs_cargo_license.txt"
+    rctx.file(package_dir.get_child(dest), rctx.read(source), executable = False)
+    return dest
+
 def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", gen_build_script = None):
     package_dir = rctx.path(package_path or ".")
     package = cargo_toml["package"]
@@ -190,6 +207,8 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
             "has_lib": repr(has_lib),
             "is_proc_macro": repr(is_proc_macro),
             "links": repr(links),
+            "license_expression": repr(package.get("license", "")),
+            "license_file": repr(_license_file(rctx, package_dir, package)),
         },
     )
 
@@ -197,6 +216,8 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    name = {name},
 {indent}    crate_name = {crate_name},
 {indent}    purl = {purl},
+{indent}    license_expression = {license_expression},
+{indent}    license_file = {license_file},
 {indent}    version = {version},
 {indent}    crate_visibility = {crate_visibility},
 {indent}    aliases = {{
@@ -280,6 +301,8 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         name = values["name"],
         crate_name = values["crate_name"],
         purl = values["purl"],
+        license_expression = values.get("license_expression", repr("")),
+        license_file = values.get("license_file", "None"),
         version = values["version"],
         aliases = list_indent.join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
         deps = list_indent.join(['"%s"' % d for d in sorted(deps)]),

@@ -615,3 +615,16 @@ See https://registry.bazel.build/modules/rules_rs/latest/docs
 - [Aya](https://github.com/aya-rs/aya) and [bpf-linker](https://github.com/aya-rs/bpf-linker)
 - [Xybrid](https://github.com/xybrid-ai/xybrid)
 - [Drake](https://github.com/RobotLocomotion/drake)
+
+### Cargo license metadata
+
+Generated `*_package_metadata` targets include the manifest's complete `license`
+expression and declared `license-file` contents. Expressions such as
+`MIT OR Apache-2.0` are retained verbatim; generation does not choose an alternative.
+A file-only license uses the identifier `NOASSERTION`. A package declaring neither
+field has no license attribute.
+
+Registry crates and Git workspace members use the same metadata. Workspace
+inheritance resolves license paths relative to the workspace manifest. Declared
+license files must exist inside the source repository; their contents are copied
+beside each crate so Bazel package boundaries cannot hide them from collectors.
