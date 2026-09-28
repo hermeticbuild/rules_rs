@@ -19509,6 +19509,7 @@ dependencies = [
  "libssh2-sys",
  "libudev-sys",
  "libusb1-sys",
+ "lz4-sys",
  "meilisearch-sdk",
  "oxc",
  "polars",
