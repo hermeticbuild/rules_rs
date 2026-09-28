@@ -11,6 +11,9 @@ def cargo_condition(hub_name, cargo_target_triple, platform_triple):
     return "@" + hub_name + "//:__cargo/" + (cargo_target_triple or "default") + "/" + platform_triple
 
 def cargo_config_settings(cargo_target_triples, platform_triples, use_legacy_rules_rust_platforms = False):
+    # An empty Cargo workspace has no crate configurations to select.
+    if not cargo_target_triples:
+        return
     if use_legacy_rules_rust_platforms:
         platform_triples = sorted(set([triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc") for triple in platform_triples]))
     for platform_triple in platform_triples:
