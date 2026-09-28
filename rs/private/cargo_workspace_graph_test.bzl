@@ -1,5 +1,5 @@
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":cargo_workspace_graph.bzl", "cargo_platforms", "cargo_toml_dependencies", "locked_dependency_versions", "new_feature_resolutions", "resolve_cargo_workspace_members", "resolve_package_facts", "select_dependency_version", "split_lockfile_packages")
+load(":cargo_workspace_graph.bzl", "cargo_platforms", "cargo_toml_dependencies", "cargo_toml_fact", "locked_dependency_versions", "new_feature_resolutions", "resolve_cargo_workspace_members", "resolve_package_facts", "select_dependency_version", "split_lockfile_packages")
 load(":resolver.bzl", "resolve")
 
 def _select_dependency_version_uses_package_name_impl(ctx):
@@ -467,6 +467,34 @@ def _target_build_dependencies_impl(ctx):
 
 target_build_dependencies_test = unittest.make(_target_build_dependencies_impl)
 
+# Regression for https://github.com/hermeticbuild/rules_rs/issues/275.
+def _optional_dependency_features_impl(ctx):
+    env = unittest.begin(ctx)
+    manifest = {
+        "package": {"name": "consumer"},
+        "dependencies": {
+            "plain": {"optional": True, "version": "1"},
+            "renamed": {"optional": True, "package": "actual", "version": "1"},
+            "hidden": {"optional": True, "version": "1"},
+            "explicit": {"optional": True, "version": "1"},
+            "required": "1",
+        },
+        "target": {"cfg(windows)": {"dependencies": {"conditional": {"optional": True, "version": "1"}}}},
+        "features": {"activate": ["dep:hidden"], "explicit": ["plain"]},
+    }
+    features = cargo_toml_fact(manifest)["features"]
+    asserts.equals(env, {
+        "activate": ["dep:hidden"],
+        "explicit": ["plain"],
+        "plain": ["dep:plain"],
+        "renamed": ["dep:renamed"],
+        "conditional": ["dep:conditional"],
+    }, features)
+    asserts.equals(env, {"activate": ["dep:hidden"], "explicit": ["plain"]}, manifest["features"])
+    return unittest.end(env)
+
+optional_dependency_features_test = unittest.make(_optional_dependency_features_impl)
+
 def cargo_workspace_graph_tests():
     return unittest.suite(
         "cargo_workspace_graph_tests",
@@ -482,4 +510,5 @@ def cargo_workspace_graph_tests():
         select_dependency_version_uses_package_name_test,
         select_dependency_version_uses_req_for_duplicate_versions_test,
         split_lockfile_packages_finds_local_package_paths_test,
+        optional_dependency_features_test,
     )
