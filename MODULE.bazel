@@ -209,3 +209,6 @@ register_toolchains(
     "@llvm//toolchain:all",
     dev_dependency = True,
 )
+
+resource_fixtures = use_extension("//rs/private/git_resource_fixture:repos.bzl", "fixtures", dev_dependency = True)
+use_repo(resource_fixtures, "resource_checkout")

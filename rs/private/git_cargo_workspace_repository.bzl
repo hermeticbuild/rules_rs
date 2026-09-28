@@ -1,5 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
+load(":git_workspace_resources.bzl", "declare_workspace_resources", "workspace_resource_build_files")
 load(":repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields", "package_version")
 load(":toml2json.bzl", "run_toml2json")
 
@@ -12,7 +13,7 @@ def _spoke_repo(hub_name, name, version):
         s = s.replace("+", "-")
     return s
 
-def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, workspace_cargo_toml):
+def render_crate_build_file(rctx, dest, additive_build_file_content, gen_binaries, workspace_cargo_toml):
     package_path = rctx.path(dest).dirname
     cargo_toml_path = package_path.get_child("Cargo.toml")
     cargo_toml = run_toml2json(rctx, cargo_toml_path)
@@ -27,7 +28,12 @@ def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, wo
         package_path = package_path,
     )
 
-    rctx.file(dest, """\
+    authored_build = package_path.get_child("BUILD.bazel")
+    if not authored_build.exists:
+        authored_build = package_path.get_child("BUILD")
+    authored_content = rctx.read(authored_build) if authored_build.exists else ""
+
+    rctx.file(dest, authored_content + "\n" + """\
 load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("{crate_bzl}", "crate")
@@ -66,9 +72,12 @@ def _git_cargo_workspace_repository_impl(rctx):
     patch(rctx)
     rctx.delete(rctx.path(".git"))
 
+    resource_build_files = workspace_resource_build_files(rctx.path("."), rctx.attr.build_files.keys())
     workspace_cargo_toml = run_toml2json(rctx, rctx.attr.workspace_cargo_toml)
     for dest, additive_build_file_content in rctx.attr.build_files.items():
-        _render_build_file(rctx, dest, additive_build_file_content, rctx.attr.gen_binaries.get(dest, []), workspace_cargo_toml)
+        render_crate_build_file(rctx, dest, additive_build_file_content, rctx.attr.gen_binaries.get(dest, []), workspace_cargo_toml)
+
+    declare_workspace_resources(rctx, resource_build_files)
 
     return rctx.repo_metadata(reproducible = True)
 

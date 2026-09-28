@@ -232,6 +232,7 @@ bzl_library(
     srcs = ["git_cargo_workspace_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
+        ":git_workspace_resources",
         ":repository_utils",
         ":toml2json",
         "@bazel_tools//tools/build_defs/repo:git_worker.bzl",
@@ -434,4 +435,10 @@ bzl_library(
         ":visibility",
         "@bazel_skylib//lib:unittest",
     ],
+)
+
+bzl_library(
+    name = "git_workspace_resources",
+    srcs = ["git_workspace_resources.bzl"],
+    visibility = ["//rs:__subpackages__"],
 )
