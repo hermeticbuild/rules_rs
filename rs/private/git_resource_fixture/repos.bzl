@@ -6,7 +6,8 @@ load("//rs/private:git_workspace_resources.bzl", "declare_workspace_resources", 
 
 def _checkout_impl(rctx):
     rctx.file("Cargo.toml", '[workspace]\nmembers = ["member"]\n')
-    rctx.file("BUILD", 'filegroup(name = "authored_root", srcs = ["root.txt"], visibility = ["//visibility:public"])\n')
+    if rctx.attr.authored_root:
+        rctx.file("BUILD", 'filegroup(name = "authored_root", srcs = ["root.txt"], visibility = ["//visibility:public"])\n')
     rctx.file("root.txt", "root")
     rctx.file("shared/BUILD.bazel", 'filegroup(name = "authored_shared", visibility = ["//visibility:public"])\n')
     rctx.file("shared/schema.txt", "schema")
@@ -24,7 +25,7 @@ pub const LINK: &str = include_str!("../../alias/schema.txt");
     render_crate_build_file(rctx, "member/BUILD.bazel", "", [], {"workspace": {}})
     declare_workspace_resources(rctx, files)
 
-_checkout = repository_rule(implementation = _checkout_impl, attrs = {"hub_name": attr.string()})
+_checkout = repository_rule(implementation = _checkout_impl, attrs = {"authored_root": attr.bool(default = True), "hub_name": attr.string()})
 
 def _hub_impl(rctx):
     rctx.file("defs.bzl", "RESOLVED_PLATFORMS = []\n")
@@ -36,5 +37,6 @@ def _fixtures_impl(_mctx):
     _hub(name = "resource_hub")
     git_crate_metadata_repository(name = "resource_hub__member-0.1.0", hub_name = "resource_hub", package_name = "member", package_version = "0.1.0", purl = "pkg:cargo/member@0.1.0")
     _checkout(name = "resource_checkout", hub_name = "resource_hub")
+    _checkout(name = "resource_no_build_checkout", hub_name = "resource_hub", authored_root = False)
 
 fixtures = module_extension(implementation = _fixtures_impl)

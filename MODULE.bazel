@@ -211,4 +211,4 @@ register_toolchains(
 )
 
 resource_fixtures = use_extension("//rs/private/git_resource_fixture:repos.bzl", "fixtures", dev_dependency = True)
-use_repo(resource_fixtures, "resource_checkout")
+use_repo(resource_fixtures, "resource_checkout", "resource_no_build_checkout")
