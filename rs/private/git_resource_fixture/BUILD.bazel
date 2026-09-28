@@ -1,0 +1,37 @@
+load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load("//rs:rust_test.bzl", "rust_test")
+load(":tests.bzl", "resource_failure_tests")
+
+resource_failure_tests()
+
+rust_test(
+    name = "resources_test",
+    srcs = ["test.rs"],
+    data = [
+        "@resource_checkout//:authored_root",
+        "@resource_checkout//member:authored_member",
+        "@resource_checkout//shared:authored_shared",
+        "@resource_checkout//shared/nested:authored_nested",
+    ],
+    edition = "2021",
+    deps = ["@resource_checkout//member"],
+)
+
+bzl_library(
+    name = "repos",
+    srcs = ["repos.bzl"],
+    deps = [
+        "//rs/private:git_cargo_workspace_repository",
+        "//rs/private:git_crate_metadata_repository",
+        "//rs/private:git_workspace_resources",
+    ],
+)
+
+bzl_library(
+    name = "tests",
+    srcs = ["tests.bzl"],
+    deps = [
+        "//rs/private:git_workspace_resources",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
