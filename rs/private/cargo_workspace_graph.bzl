@@ -732,6 +732,7 @@ def workspace_dep_data(
     dep_data = {}
     for package in cargo_metadata["packages"]:
         local_deps = {}
+        has_self_dep = False
         dev_deps = {platform_triple: {} for platform_triple in platform_triples}
         normal_labels = {platform_triple: set() for platform_triple in platform_triples}
         dev_labels = {platform_triple: set() for platform_triple in platform_triples}
@@ -763,6 +764,7 @@ def workspace_dep_data(
             bazel_target = dep.get("bazel_target")
             dep_path = normalize_path(dep["path"]) if dep.get("path") else None
             if dep_path == package_manifest_dir:
+                has_self_dep = True
                 continue
             if not bazel_target:
                 if not dep_path:
@@ -807,7 +809,7 @@ def workspace_dep_data(
         if lint_config:
             package_dep_data["lint_config"] = lint_config
         configurations = configurations_by_crate[package_key].configurations
-        if local_deps or any(dev_labels.values()):
+        if has_self_dep or local_deps or any(dev_labels.values()):
             workspace_configurations = {}
             for cargo_target_triple, configuration in configurations.items():
                 configuration = dict(configuration)
@@ -815,7 +817,7 @@ def workspace_dep_data(
                     platform_triple: _workspace_deps({
                         label: alias
                         for label, alias in deps.items()
-                        if label not in dev_labels.get(platform_triple, []) or label in normal_labels.get(platform_triple, [])
+                        if label != dep_label_prefix + package_key and (label not in dev_labels.get(platform_triple, []) or label in normal_labels.get(platform_triple, []))
                     }, local_deps)
                     for platform_triple, deps in configuration["deps_by_triple"].items()
                 }

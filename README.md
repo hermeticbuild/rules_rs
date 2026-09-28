@@ -528,12 +528,11 @@ crates using `package.metadata.bazel.deps` must also declare those dependencies
 with `crate.annotation(deps = ...)` when configurations would otherwise be
 shared. Cargo registry metadata does not include these Bazel dependencies.
 
-Proc macros reached through normal dependencies use the existing conservative
-target feature resolution for their normal dependencies. They do not share
-features enabled only through build dependencies, so they may need explicit
-`crate_features` annotations.
-For example, a PyO3 toolchain that sets `PYO3_NO_PYTHON` needs its chosen
-`abi3-py3*` feature on `pyo3-build-config` in both resolutions.
+Procedural macros and their normal dependencies resolve in the execution feature
+context. Features from build dependencies unify with them when Cargo places the
+same package in that context; target-library features remain separate.
+`crate_features` annotations can add toolchain requirements, such as PyO3's chosen
+`abi3-py3*` feature when `PYO3_NO_PYTHON` is set.
 
 `gen_binaries` resolves requested binaries for the target platform. For a package
 used only by build dependencies, it enables default features and `crate_features`
