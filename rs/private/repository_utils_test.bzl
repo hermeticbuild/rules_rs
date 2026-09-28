@@ -1,7 +1,7 @@
 """Cargo workspace package inheritance regressions (issue #273)."""
 
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":repository_utils.bzl", "inherit_workspace_package_fields")
+load(":repository_utils.bzl", "inherit_workspace_package_fields", "workspace_package_prefix")
 
 def _inheritance_impl(ctx):
     env = unittest.begin(ctx)
@@ -36,8 +36,21 @@ def _explicit_values_impl(ctx):
     asserts.equals(env, manifest, inherit_workspace_package_fields(manifest, {}))
     return unittest.end(env)
 
+def _workspace_paths_impl(ctx):
+    env = unittest.begin(ctx)
+    for workspace, member, expected in [
+        ("", "crates/member", "../.."),
+        ("workspace", "workspace/crates/member", "../.."),
+        ("workspace", "sibling", "../workspace"),
+        ("workspace", "workspace", ""),
+        ("./library/", "library/std", ".."),
+    ]:
+        asserts.equals(env, expected, workspace_package_prefix(workspace, member))
+    return unittest.end(env)
+
+_workspace_paths_test = unittest.make(_workspace_paths_impl)
 _inheritance_test = unittest.make(_inheritance_impl)
 _explicit_values_test = unittest.make(_explicit_values_impl)
 
 def repository_utils_tests():
-    unittest.suite("repository_utils_tests", _inheritance_test, _explicit_values_test)
+    unittest.suite("repository_utils_tests", _inheritance_test, _explicit_values_test, _workspace_paths_test)

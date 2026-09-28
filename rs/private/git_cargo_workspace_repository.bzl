@@ -1,7 +1,7 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
-load(":repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields", "package_version")
+load(":repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields", "package_version", "workspace_package_prefix")
 load(":toml2json.bzl", "run_toml2json")
 
 def _render_label_list(labels):
@@ -17,7 +17,7 @@ def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, wo
     package_path = rctx.path(dest).dirname
     cargo_toml_path = package_path.get_child("Cargo.toml")
     cargo_toml = run_toml2json(rctx, cargo_toml_path)
-    cargo_toml = inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml, paths.relativize(paths.dirname(rctx.attr.workspace_cargo_toml), paths.dirname(dest)))
+    cargo_toml = inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml, workspace_package_prefix(paths.dirname(rctx.attr.workspace_cargo_toml), paths.dirname(dest)))
     package = cargo_toml["package"]
 
     cargo = cargo_build_file_values(
