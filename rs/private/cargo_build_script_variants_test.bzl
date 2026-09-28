@@ -50,6 +50,7 @@ def _configured_script_loading_tests(env):
             "@rules_rs//:__cargo/default/" + _LINUX: ":" + name + "_" + _LINUX,
             "@rules_rs//:__cargo/" + _LINUX + "/" + _MACOS: ":" + name + "_" + _LINUX + "_" + _MACOS,
             "@rules_rs//:__cargo/" + _LINUX + "/" + _LINUX: ":" + name + "_" + _LINUX + "_" + _MACOS,
+            "//conditions:default": ":" + name + "__cargo_inactive",
         }),
         tags = ["manual"],
     )
@@ -69,6 +70,7 @@ def _configured_script_loading_tests(env):
         actual = select({
             "@rules_rs//:__cargo/default/" + _MACOS: ":" + name + "_" + _MACOS,
             "@rules_rs//:__cargo/default/" + _LINUX: ":" + name + "_" + musl,
+            "//conditions:default": ":" + name + "__cargo_inactive",
         }),
         tags = ["manual"],
     )
@@ -247,6 +249,7 @@ def _platform_script_loading_tests(env):
             "@rules_rs//rs/platforms/config:" + _MACOS: ":" + name + "_" + _MACOS,
             "@rules_rs//rs/platforms/config:" + _WINDOWS: ":" + name + "_" + _MACOS,
             "@rules_rs//rs/platforms/config:" + _LINUX: ":" + name + "_" + _LINUX,
+            "//conditions:default": ":" + name + "__cargo_inactive",
         }),
         tags = ["manual"],
     )

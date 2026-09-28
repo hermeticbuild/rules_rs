@@ -96,9 +96,25 @@ def cargo_build_script_for_configurations(
         )
     if split:
         # The alias selects before cargo_build_script.script applies cfg=exec.
+        native.filegroup(
+            name = name + "__cargo_inactive",
+            tags = ["manual"],
+            visibility = ["//visibility:private"],
+        )
         native.alias(
             name = name,
-            actual = cargo_select(branches, hub_name, use_legacy_rules_rust_platforms),
+            actual = cargo_select(branches, hub_name, use_legacy_rules_rust_platforms, default = ":" + name + "__cargo_inactive"),
             **{key: kwargs[key] for key in ["tags", "testonly", "visibility", "target_compatible_with"] if key in kwargs}
         )
-    return [name] if scripts else []
+
+    # rules_rust also analyzes unused copies of dependencies in the other
+    # compilation domain. Do not select a build script outside its Cargo graph.
+    return cargo_select(
+        {
+            cargo_target_triple: {platform_triple: [name] for platform_triple in configuration["crate_features_by_triple"]}
+            for cargo_target_triple, configuration in configurations.items()
+        },
+        hub_name,
+        use_legacy_rules_rust_platforms,
+        default = [],
+    ) if scripts else []

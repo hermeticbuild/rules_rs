@@ -1,3 +1,4 @@
+load(":rendered_test.bzl", "rendered_tests")
 load(":tests.bzl", "feature_context_tests", "warm_git_facts_test")
 
 package(default_testonly = True)
@@ -5,3 +6,5 @@ package(default_testonly = True)
 feature_context_tests()
 
 warm_git_facts_test(name = "warm_git_facts_test")
+
+rendered_tests()

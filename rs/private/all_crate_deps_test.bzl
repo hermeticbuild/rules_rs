@@ -30,21 +30,25 @@ def _configured_dependencies_and_features_impl(ctx):
         cargo_condition("crates", "", _MACOS): [],
         cargo_condition("crates", "", _LINUX): ["//helper", "@crates//:shared"],
         cargo_condition("crates", _LINUX, _MACOS): ["//helper", "@crates//:optional", "@crates//:shared"],
+        "//conditions:default": [],
     })), str(all_crate_deps(data, hub_name = "crates")))
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): ["@crates//:dev"],
         cargo_condition("crates", "", _LINUX): ["@crates//:dev", "@crates//:shared"],
         cargo_condition("crates", _LINUX, _MACOS): ["@crates//:dev", "@crates//:optional", "@crates//:shared"],
+        "//conditions:default": [],
     })), str(all_crate_deps(data, normal = True, normal_dev = True, filter_prefix = "@crates//:", hub_name = "crates")))
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): [],
         cargo_condition("crates", "", _LINUX): ["target"],
         cargo_condition("crates", _LINUX, _MACOS): ["exec"],
+        "//conditions:default": [],
     })), str(crate_features(data, "crates")))
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): {},
         cargo_condition("crates", "", _LINUX): {"//helper": "renamed_helper", "@crates//:shared": "selected_shared"},
         cargo_condition("crates", _LINUX, _MACOS): {"//helper": "renamed_helper", "@crates//:optional": "optional", "@crates//:shared": "selected_shared"},
+        "//conditions:default": {},
     })), str(crate_aliases(data, normal = True, hub_name = "crates")))
     return unittest.end(env)
 
@@ -97,6 +101,7 @@ def _dev_dependencies_preserve_normal_aliases_impl(ctx):
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): {"//:dev": "dev_name", "//:shared": "normal_name"},
         cargo_condition("crates", "", _LINUX): {"//:dev": "dev_name", "//:platform": "platform_name", "//:shared": "normal_name"},
+        "//conditions:default": {},
     })), str(crate_aliases(data, normal = True, normal_dev = True, hub_name = "crates")))
     return unittest.end(env)
 
@@ -132,10 +137,12 @@ def _all_crate_deps_selects_execution_platform_impl(ctx):
         asserts.equals(env, str(select({
             cargo_condition("crates", "", _MACOS): ["@crates//:macos_helper"],
             cargo_condition("crates", "", _LINUX): ["@crates//:linux_helper"],
+            "//conditions:default": [],
         })), str(all_crate_deps(data, build = True, hub_name = "crates")))
         asserts.equals(env, str(select({
             cargo_condition("crates", "", _MACOS): {"@crates//:macos_helper": "helper"},
             cargo_condition("crates", "", _LINUX): {"@crates//:linux_helper": "helper"},
+            "//conditions:default": {},
         })), str(crate_aliases(data, build = True, hub_name = "crates")))
     return unittest.end(env)
 
@@ -161,10 +168,12 @@ def _build_aliases_ignore_unrenamed_dependencies_impl(ctx):
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): {},
         cargo_condition("crates", "", _LINUX): {"@crates//:helper": "helper"},
+        "//conditions:default": {},
     })), str(crate_aliases(data, build = True, hub_name = "crates")))
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): {"//:dev": "dev", "//:macos_normal": "normal"},
         cargo_condition("crates", "", _LINUX): {"//:dev": "dev", "//:linux_normal": "normal", "@crates//:helper": "helper"},
+        "//conditions:default": {},
     })), str(crate_aliases(data, normal = True, normal_dev = True, build = True, hub_name = "crates")))
     return unittest.end(env)
 
@@ -180,23 +189,27 @@ def _all_crate_deps_preserves_build_platform_domain_impl(ctx):
         cargo_condition("crates", "", _MACOS): ["@crates//:helper"],
         cargo_condition("crates", "", wasm): ["//:normal"],
         cargo_condition("crates", "", _LINUX): ["@crates//:helper"],
+        "//conditions:default": [],
     })), str(all_crate_deps(data, normal = True, build = True, hub_name = "crates")))
     data["dev_deps"] = {"//:dev": "renamed_dev"}
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): ["//:dev", "@crates//:helper"],
         cargo_condition("crates", "", wasm): ["//:dev", "//:normal"],
         cargo_condition("crates", "", _LINUX): ["//:dev", "@crates//:helper"],
+        "//conditions:default": [],
     })), str(all_crate_deps(data, normal = True, normal_dev = True, build = True, hub_name = "crates")))
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): {"//:dev": "renamed_dev", "@crates//:helper": "helper"},
         cargo_condition("crates", "", wasm): {"//:dev": "renamed_dev"},
         cargo_condition("crates", "", _LINUX): {"//:dev": "renamed_dev", "@crates//:helper": "helper"},
+        "//conditions:default": {},
     })), str(crate_aliases(data, normal = True, normal_dev = True, build = True, hub_name = "crates")))
     configuration["build_deps_by_triple"] = {wasm: {_LINUX: {}, _MACOS: {}}}
     asserts.equals(env, str(select({
         cargo_condition("crates", "", _MACOS): [],
         cargo_condition("crates", "", wasm): ["//:normal"],
         cargo_condition("crates", "", _LINUX): [],
+        "//conditions:default": [],
     })), str(all_crate_deps(data, normal = True, build = True, hub_name = "crates")))
     return unittest.end(env)
 
