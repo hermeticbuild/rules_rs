@@ -984,7 +984,7 @@ def _workspace_aggregation_uses_resolved_versions_and_contexts_impl(ctx):
         resolved = resolve_packages(packages, facts, [linux, macos])
         root_deps = [
             {"name": "shared", "req": "1", "features": ["target"]},
-            {"name": "shared", "req": "1", "kind": "build", "features": ["host"], "target": 'cfg(target_os = "linux")'},
+            {"name": "shared", "req": "1", "kind": "build", "features": ["host"], "target": 'cfg(target_os = "macos")'},
             {"name": "macro"},
             {"name": "optional", "rename": "maybe", "optional": True, "target": 'cfg(target_os = "linux")'},
             {"name": "local", "req": "*", "source": None, "path": "/workspace/local"},
@@ -1015,7 +1015,7 @@ def _workspace_aggregation_uses_resolved_versions_and_contexts_impl(ctx):
             feature_resolutions_by_fq_crate = resolved.feature_resolutions_by_fq_crate,
             annotations = {},
             platform_triples = [linux, macos],
-            exec_platform_triples = [macos],
+            exec_platform_triples = [macos, linux],
             materialize_workspace_members = False,
             root_packages = ["consumer"],
             features = {"consumer": ["enable"]} if enabled else {},
@@ -1023,7 +1023,9 @@ def _workspace_aggregation_uses_resolved_versions_and_contexts_impl(ctx):
         asserts.equals(env, [":optional-1.0.0", ":shared-1.0.0"] if enabled else [":shared-1.0.0"], got.workspace_dep_labels_by_triple[linux])
         asserts.equals(env, [":shared-1.0.0"], got.workspace_dep_labels_by_triple[macos])
         asserts.equals(env, [":macro-1.0.0", ":shared-1.0.0"], got.workspace_exec_dep_labels_by_cargo_target_triple[linux][macos])
-        asserts.equals(env, [":macro-1.0.0"], got.workspace_exec_dep_labels_by_cargo_target_triple[macos][macos])
+        asserts.equals(env, [":macro-1.0.0", ":shared-1.0.0"], got.workspace_exec_dep_labels_by_cargo_target_triple[macos][macos])
+        for target in [linux, macos]:
+            asserts.equals(env, [":macro-1.0.0"], got.workspace_exec_dep_labels_by_cargo_target_triple[target][linux])
         asserts.equals(env, ["target"], sorted(got.feature_resolutions_by_fq_crate["shared-1.0.0"].features_enabled[linux]))
         asserts.equals(env, ["host"], sorted(got.exec_resolutions_by_cargo_target_triple[linux].resolutions["shared-1.0.0"].features_enabled[macos]))
     return unittest.end(env)
