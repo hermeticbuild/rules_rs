@@ -372,9 +372,36 @@ def _resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_option
 
 resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_test = unittest.make(_resolve_cargo_workspace_members_ignores_weak_features_for_unresolved_optional_deps_impl)
 
+# Regression for https://github.com/hermeticbuild/rules_rs/issues/274.
+def _target_build_dependencies_impl(ctx):
+    env = unittest.begin(ctx)
+    got = cargo_toml_dependencies(
+        {"package": {"name": "consumer"}, "target": {"cfg(windows)": {
+            "dependencies": {"runtime": "1"},
+            "build-dependencies": {"generator": {"workspace": True, "optional": True, "features": ["extra"]}},
+        }}},
+        {"workspace": {"dependencies": {"generator": {"package": "actual-generator", "version": "2", "default-features": False, "features": ["base"]}}}},
+    )
+    asserts.equals(env, 2, len(got))
+    asserts.equals(env, {"name": "runtime", "req": "1", "target": "cfg(windows)"}, got[0])
+    asserts.equals(env, {
+        "name": "generator",
+        "package": "actual-generator",
+        "req": "2",
+        "target": "cfg(windows)",
+        "kind": "build",
+        "optional": True,
+        "default_features": False,
+        "features": ["base", "extra"],
+    }, got[1])
+    return unittest.end(env)
+
+target_build_dependencies_test = unittest.make(_target_build_dependencies_impl)
+
 def cargo_workspace_graph_tests():
     return unittest.suite(
         "cargo_workspace_graph_tests",
+        target_build_dependencies_test,
         cargo_toml_dependencies_handles_workspace_inheritance_test,
         cargo_toml_dependencies_normalizes_dependency_specs_test,
         resolve_handles_dependency_chains_deeper_than_previous_round_limit_test,
