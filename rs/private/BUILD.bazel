@@ -204,6 +204,7 @@ bzl_library(
     srcs = ["cargo_workspace_graph.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
+        ":cargo_toml_utils",
         ":cfg_parser",
         ":resolver",
         ":select_utils",

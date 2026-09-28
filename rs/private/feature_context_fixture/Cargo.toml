@@ -1,0 +1,4 @@
+[workspace]
+resolver = "2"
+members = ["consumer", "derive-package", "helper", "builder", "unused", "dev-only"]
+default-members = ["consumer"]

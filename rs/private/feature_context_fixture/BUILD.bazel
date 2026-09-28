@@ -1,0 +1,5 @@
+load(":tests.bzl", "feature_context_tests")
+
+package(default_testonly = True)
+
+feature_context_tests()

@@ -1,4 +1,5 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
+load("//rs/private:cargo_toml_utils.bzl", "cargo_toml_is_proc_macro")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:resolver.bzl", "collect_exec_build_dependencies", "resolve")
 load("//rs/private:select_utils.bzl", "shared_and_per_platform")
@@ -148,13 +149,15 @@ def cargo_toml_fact(cargo_toml_json, workspace_cargo_toml_json = None, strip_pre
         dependencies = cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json),
         strip_prefix = strip_prefix,
         bazel_deps = cargo_toml_json.get("package", {}).get("metadata", {}).get("bazel", {}).get("deps", []),
+        proc_macro = cargo_toml_is_proc_macro(cargo_toml_json),
+        crate_name = cargo_toml_json.get("lib", {}).get("name", cargo_toml_json["package"]["name"].replace("-", "_")),
     )
 
-def prepare_possible_deps(dependencies, converter = None, skip_internal_rustc_placeholder_crates = True):
+def prepare_possible_deps(dependencies, converter = None, skip_internal_rustc_placeholder_crates = True, include_dev = False):
     possible_deps = []
 
     for dep in dependencies:
-        if dep.get("kind") == "dev":
+        if dep.get("kind") == "dev" and not include_dev:
             continue
 
         dep_package = dep.get("package") or dep["name"]
@@ -166,9 +169,13 @@ def prepare_possible_deps(dependencies, converter = None, skip_internal_rustc_pl
         else:
             dep = dict(dep)
 
+        if dep.get("kind") == "dev":
+            dep["dev"] = True
+            dep["kind"] = "normal"
         if dep.get("default_features", True):
             dep.setdefault("features", []).append("default")
 
+        dep["index"] = len(possible_deps)
         possible_deps.append(dep)
 
     return possible_deps
@@ -327,6 +334,8 @@ def resolve_packages(packages, package_info_by_fq_crate, platform_triples, dep_c
             converter = dep_converter,
             skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
         )
+        package["proc_macro"] = package_info.get("proc_macro", False)
+        package["crate_name"] = package_info.get("crate_name", name.replace("-", "_"))
         feature_resolutions = new_feature_resolutions(package_index, possible_deps, package_info.get("features", {}), platform_triples)
         package["feature_resolutions"] = feature_resolutions
         feature_resolutions_by_fq_crate[fq] = feature_resolutions
@@ -374,6 +383,9 @@ def _resolve_possible_deps(
                 fail("Resolved %s dependency %s but no crate metadata was available" % (name, dep_fq))
             dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
             dep["package_index"] = feature_resolutions_by_fq_crate[dep_fq].package_index
+            dep["proc_macro"] = packages[dep["package_index"]].get("proc_macro", False)
+            if "default" not in feature_resolutions_by_fq_crate[dep_fq].possible_features:
+                dep["features"] = [feature for feature in dep.get("features", []) if feature != "default"]
 
             target = dep.get("target")
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
@@ -395,7 +407,7 @@ def _copy_resolutions(template_packages, platform_triples):
         template = package["feature_resolutions"]
         resolution = new_feature_resolutions(
             template.package_index,
-            [dict(dep) for dep in template.possible_deps],
+            [dict(dep) for dep in template.possible_deps if not dep.get("dev") or package.get("proc_macro")],
             template.possible_features,
             platform_triples,
         )
@@ -408,24 +420,17 @@ def _copy_resolutions(template_packages, platform_triples):
 
 def _resolve_exec_targets(ctx, target_packages, template_packages, cargo_target_triples, exec_cfg_attrs_by_triple, debug):
     exec_resolutions_by_cargo_target_triple = {}
-    resolved_seeds = {}
 
     for cargo_target_triple in cargo_target_triples:
         seeds = collect_exec_build_dependencies(target_packages, template_packages, exec_cfg_attrs_by_triple, cargo_target_triple)
-        seed_key = tuple([
-            (index, exec_platform_triple, tuple(sorted(features)))
-            for (index, exec_platform_triple), features in sorted(seeds.features.items())
-        ])
-        if seed_key not in resolved_seeds:
-            exec_packages, exec_resolutions = _copy_resolutions(template_packages, exec_cfg_attrs_by_triple)
-            for (index, exec_platform_triple), features in seeds.features.items():
-                resolution = exec_packages[index]["feature_resolutions"]
-                resolution.active.add(exec_platform_triple)
-                resolution.features_enabled[exec_platform_triple].update(features)
-            resolve(ctx, exec_packages, exec_cfg_attrs_by_triple, debug, restrict_to_active_platforms = True)
-            resolved_seeds[seed_key] = exec_resolutions
+        exec_packages, exec_resolutions = _copy_resolutions(template_packages, exec_cfg_attrs_by_triple)
+        for (index, exec_platform_triple), features in seeds.features.items():
+            resolution = exec_packages[index]["feature_resolutions"]
+            resolution.active.add(exec_platform_triple)
+            resolution.features_enabled[exec_platform_triple].update(features)
+        resolve(ctx, exec_packages, exec_cfg_attrs_by_triple, debug, restrict_to_active_platforms = True)
         exec_resolutions_by_cargo_target_triple[cargo_target_triple] = struct(
-            resolutions = resolved_seeds[seed_key],
+            resolutions = exec_resolutions,
             build_deps = seeds.build_deps,
         )
 
@@ -447,7 +452,11 @@ def resolve_cargo_workspace_members(
         debug = False,
         dep_label_prefix = "//:",
         skip_internal_rustc_placeholder_crates = True,
-        watch_manifests = False):
+        watch_manifests = False,
+        root_packages = [],
+        features = {},
+        include_dev = True,
+        default_features = True):
     platform_cfg_attrs = [triple_to_cfg_attrs(platform_triple) for platform_triple in platform_triples]
     platform_cfg_attrs_by_triple = {cfg_attr["_triple"]: cfg_attr for cfg_attr in platform_cfg_attrs}
 
@@ -457,6 +466,15 @@ def resolve_cargo_workspace_members(
 
     resolver_versions_by_name = {name: versions[:] for name, versions in versions_by_name.items()}
     workspace_members_by_key = {(package["name"], package["version"]): package for package in workspace_members}
+    selected = set(root_packages or [p["name"] for p in cargo_metadata["packages"] if p.get("id") in cargo_metadata.get("workspace_default_members", [])])
+    if not selected:
+        selected = set([p["name"] for p in cargo_metadata["packages"]])
+    unknown = selected.difference([p["name"] for p in cargo_metadata["packages"]])
+    if unknown:
+        fail("Unknown Cargo roots: " + repr(sorted(unknown)))
+    unknown_features = set(features.keys()).difference(selected)
+    if unknown_features:
+        fail("Requested features must name selected Cargo roots: " + repr(sorted(unknown_features)))
     resolver_packages = packages[:]
     for package in cargo_metadata["packages"]:
         name = package["name"]
@@ -466,10 +484,14 @@ def resolve_cargo_workspace_members(
             versions.append(version)
 
         possible_features = package.get("features", {})
+        for feature in features.get(name, []):
+            if feature not in possible_features:
+                fail("Unknown feature %s for Cargo root %s" % (feature, name))
         possible_deps = prepare_possible_deps(
             package.get("dependencies", []),
             converter = cargo_metadata_dep_to_dep_dict,
             skip_internal_rustc_placeholder_crates = skip_internal_rustc_placeholder_crates,
+            include_dev = include_dev and name in selected,
         )
 
         package_index = len(resolver_packages)
@@ -478,6 +500,7 @@ def resolve_cargo_workspace_members(
             "name": name,
             "version": version,
             "dependencies": lockfile_pkg.get("dependencies", []),
+            "proc_macro": any(["proc-macro" in target["kind"] for target in package.get("targets", [])]),
         }
 
         feature_resolutions = new_feature_resolutions(package_index, possible_deps, possible_features, platform_triples)
@@ -519,10 +542,13 @@ def resolve_cargo_workspace_members(
             ctx.watch(package["manifest_path"])
 
         package_feature_resolutions = feature_resolutions_by_fq_crate[fq_crate(package["name"], package["version"])]
-        package_feature_resolutions.active.update(platform_triples)
-        if "default" in package.get("features", {}):
+        if package["name"] in selected:
+            package_feature_resolutions.active.update(platform_triples)
             for platform_triple in platform_triples:
-                package_feature_resolutions.features_enabled[platform_triple].add("default")
+                requested = package_feature_resolutions.features_enabled[platform_triple]
+                requested.update(features.get(package["name"], []))
+                if default_features and "default" in package.get("features", {}):
+                    requested.add("default")
 
         dep_versions_by_name = compute_package_dep_versions(
             workspace_members_by_key.get((package["name"], package["version"]), {}),
@@ -558,22 +584,11 @@ def resolve_cargo_workspace_members(
                 dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
                 workspace_dep_versions_by_name.setdefault(dep_name, set()).add(dep_fq)
 
-            if dep.get("kind", "normal") == "build":
-                continue
-
-            feature_resolutions = feature_resolutions_by_fq_crate[dep_fq]
-            features = list(dep.get("features", []))
-            if dep.get("uses_default_features"):
-                features.append("default")
-
             target = dep.get("target")
             match_info = cfg_match_info_for_target(target, platform_cfg_attrs, cfg_match_cache)
-
             for platform_triple in match_info.matches:
                 if not is_first_party_dep or materialize_workspace_members:
                     workspace_dep_labels_by_triple[platform_triple].add(":" + dep_name)
-                feature_resolutions.active.add(platform_triple)
-                feature_resolutions.features_enabled[platform_triple].update(features)
 
     binary_feature_resolutions = []
     for crate, annotation_versions in annotations.items():
@@ -595,7 +610,7 @@ def resolve_cargo_workspace_members(
                 if exec_platform_triples:
                     _apply_annotation_features(exec_templates_by_fq_crate[fq], annotation)
 
-    resolve(ctx, resolver_packages, platform_cfg_attrs_by_triple, debug, include_build_dependencies = not exec_platform_triples)
+    resolve(ctx, resolver_packages, platform_cfg_attrs_by_triple, debug, include_build_dependencies = not exec_platform_triples, restrict_to_active_platforms = True)
 
     # Requested binaries are target roots even when their packages otherwise
     # occur only as build dependencies. Preserve features of packages already
@@ -611,7 +626,7 @@ def resolve_cargo_workspace_members(
         added_binary_roots = True
 
     if added_binary_roots:
-        resolve(ctx, resolver_packages, platform_cfg_attrs_by_triple, debug, include_build_dependencies = not exec_platform_triples)
+        resolve(ctx, resolver_packages, platform_cfg_attrs_by_triple, debug, include_build_dependencies = not exec_platform_triples, restrict_to_active_platforms = True)
 
     exec_resolutions_by_cargo_target_triple = _resolve_exec_targets(
         ctx,
@@ -621,6 +636,9 @@ def resolve_cargo_workspace_members(
         exec_platform_cfg_attrs_by_triple,
         debug,
     )
+
+    if exec_platform_triples:
+        _prune_compilation_contexts(resolver_packages, set([fq_crate(p["name"], p["version"]) for p in cargo_metadata["packages"] if p["name"] in selected]), binary_feature_resolutions, feature_resolutions_by_fq_crate, exec_resolutions_by_cargo_target_triple, platform_triples, exec_platform_triples, dep_label_prefix)
 
     for package in packages:
         feature_resolutions = package["feature_resolutions"]
@@ -644,6 +662,45 @@ def resolve_cargo_workspace_members(
         workspace_dep_labels_by_triple = workspace_dep_labels_by_triple,
         workspace_dep_versions_by_name = workspace_dep_versions_by_name,
     )
+
+def _prune_compilation_contexts(packages, roots, binary_roots, targets, execution, triples, hosts, prefix):
+    # Cargo selected proc-macro roots participate in target feature propagation
+    # as well as host propagation. Only host units are compiled for the macro;
+    # discard the phantom target nodes after their features have unified.
+    by_fq = {fq_crate(p["name"], p["version"]): p for p in packages}
+    by_label = {prefix + fq: fq for fq in by_fq}
+    actual_roots = [(fq, "host" if p.get("proc_macro") else "target") for fq, p in by_fq.items() if fq in roots or p["feature_resolutions"] in binary_roots]
+    reachable_targets = set()
+    for triple in triples:
+        for host in hosts:
+            seen = set()
+            pending = actual_roots[:]
+            for _ in range(len(packages) * 2 + 1):
+                if not pending:
+                    break
+                current = pending
+                pending = []
+                for fq, domain in current:
+                    if (fq, domain) in seen:
+                        continue
+                    seen.add((fq, domain))
+                    record = targets[fq] if domain == "target" else execution[triple].resolutions[fq]
+                    compilation = triple if domain == "target" else host
+                    for label in record.deps[compilation]:
+                        child = by_label[label]
+                        pending.append((child, "host" if domain == "host" or by_fq[child].get("proc_macro") else "target"))
+                    build_deps = execution[triple].build_deps.get(fq, {}).get(host, {}) if domain == "target" else record.build_deps[host]
+                    pending.extend([(by_label[label], "host") for label in build_deps])
+            if pending:
+                fail("Cargo compilation reachability did not converge")
+            reachable_targets.update([(fq, triple) for fq, domain in seen if domain == "target"])
+            for fq, record in execution[triple].resolutions.items():
+                if (fq, "host") not in seen:
+                    record.active.discard(host)
+    for fq, record in targets.items():
+        for triple in list(record.active):
+            if (fq, triple) not in reachable_targets:
+                record.active.discard(triple)
 
 def _workspace_deps(deps, local_deps):
     result = {}

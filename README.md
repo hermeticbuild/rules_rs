@@ -590,3 +590,23 @@ See https://registry.bazel.build/modules/rules_rs/latest/docs
 - [Aya](https://github.com/aya-rs/aya) and [bpf-linker](https://github.com/aya-rs/bpf-linker)
 - [Xybrid](https://github.com/xybrid-ai/xybrid)
 - [Drake](https://github.com/RobotLocomotion/drake)
+
+### Cargo feature roots and procedural macros
+
+Feature resolution uses the manifest's library kind and crate name. Procedural
+macros and their normal dependencies resolve for the execution platform, separately
+from target libraries, even when the host and target triples are equal. Registry
+manifests are read from checksum-verified archives; Git manifest facts are refreshed
+when upgrading from facts that did not include the library kind.
+
+`crate.from_cargo` defaults to Cargo's workspace default members. Set `packages`
+to select different root packages, `features` to add features by selected package
+name, and `default_features = False` to disable root default features. Development
+dependencies are included for selected roots by default; `include_dev = False`
+resolves a build-only closure. Development dependencies of transitive crates are
+excluded from execution copies.
+
+The resolver tests include unit graphs captured from Cargo for native and cross
+builds, a renamed procedural macro, shared host/target dependencies and selected
+macro roots. `rs/private/feature_context_fixture/refresh.py` refreshes that oracle
+using a nightly Cargo toolchain without compiling the fixture.

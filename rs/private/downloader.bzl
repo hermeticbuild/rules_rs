@@ -53,7 +53,7 @@ def start_github_downloads(
 
         name = package["name"]
 
-        key = source + "_" + name
+        key = source + "_" + name + "_manifest_v2"
         if key in existing_facts:
             continue
 
@@ -119,7 +119,7 @@ def start_crate_registry_downloads(
                 # Github already handled above
                 continue
 
-            key = source + "_" + name
+            key = source + "_" + name + "_manifest_v2"
             if key in existing_facts:
                 continue
 
