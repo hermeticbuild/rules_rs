@@ -216,7 +216,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {skip_deps_verification_attr}{indent})
 """
 
-def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
+def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False, extra_compile_data = []):
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
     # See `rs/private/rust_crate.bzl` for details.
     crate_features, conditional_crate_features = compute_select(
@@ -237,7 +237,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
 
     list_indent = ",\n%s        " % indent
     extra_deps = " + " + extra_deps if extra_deps else ""
-    extra_compile_data = getattr(attr, "extra_compile_data", [])
+    extra_compile_data = getattr(attr, "extra_compile_data", []) + extra_compile_data
     extra_compile_data_attr = ""
     if extra_compile_data:
         extra_compile_data_attr = """{indent}    extra_compile_data = [
