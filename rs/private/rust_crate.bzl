@@ -47,7 +47,8 @@ def rust_crate(
         use_legacy_rules_rust_platforms,
         extra_compile_data = [],
         rustc_env = {},
-        skip_deps_verification = False):
+        skip_deps_verification = False,
+        crate_visibility = ["//visibility:public"]):
     package_metadata(
         name = name + "_package_metadata",
         purl = purl,
@@ -170,13 +171,13 @@ def rust_crate(
             name = stub_name,
             tags = crate_tags,
             target_compatible_with = ["@platforms//:incompatible"],
-            visibility = ["//visibility:public"],
+            visibility = crate_visibility,
         )
         native.alias(
             name = name,
             actual = stub_name,
             tags = crate_tags,
-            visibility = ["//visibility:public"],
+            visibility = crate_visibility,
         )
 
     if has_lib:
@@ -202,7 +203,7 @@ def rust_crate(
             target_compatible_with = target_compatible_with,
             package_metadata = [name + "_package_metadata"],
             skip_deps_verification = skip_deps_verification,
-            visibility = ["//visibility:public"],
+            visibility = crate_visibility,
             skip_per_crate_rustc_flags = True,
         )
 
@@ -233,5 +234,5 @@ def rust_crate(
             tags = crate_tags,
             target_compatible_with = target_compatible_with,
             version = version,
-            visibility = ["//visibility:public"],
+            visibility = crate_visibility,
         )

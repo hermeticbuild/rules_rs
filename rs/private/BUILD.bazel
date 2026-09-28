@@ -12,6 +12,7 @@ load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
 load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
 load(":semver_test.bzl", "semver_select_tests")
+load(":visibility_test.bzl", "visibility_tests")
 
 bool_setting(
     name = "source_stdlib_building",
@@ -52,6 +53,8 @@ registry_utils_tests()
 rust_repository_utils_tests()
 
 semver_select_tests()
+
+visibility_tests()
 
 # package_metadata.bzl does not provide a bzl_library for Stardoc.
 filegroup(
@@ -416,4 +419,19 @@ bzl_library(
     name = "semver",
     srcs = ["semver.bzl"],
     visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "visibility",
+    srcs = ["visibility.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "visibility_test",
+    srcs = ["visibility_test.bzl"],
+    deps = [
+        ":visibility",
+        "@bazel_skylib//lib:unittest",
+    ],
 )
