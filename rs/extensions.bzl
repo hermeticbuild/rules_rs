@@ -936,9 +936,7 @@ def _crate_impl(mctx):
                         repo_name,
                     ))
 
-                strip_prefix = package.get("strip_prefix")
-                if strip_prefix == None:
-                    strip_prefix = json.decode(facts[source + "_" + package["name"]])["strip_prefix"]
+                strip_prefix = git_crate_strip_prefix(package, facts)
                 package_path = _git_crate_package_path(annotation, strip_prefix)
                 build_file_path = paths.join(package_path, "BUILD.bazel") if package_path else "BUILD.bazel"
                 git_repo["build_files"][build_file_path] = _additive_build_file_content(mctx, annotation)
