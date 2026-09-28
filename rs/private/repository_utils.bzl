@@ -72,6 +72,17 @@ _INHERITABLE_PACKAGE_FIELDS = [
     "version",
 ]
 
+def workspace_package_prefix(workspace_dir, member_dir):
+    """Return the workspace directory relative to a member in the same checkout."""
+    workspace = [p for p in paths.normalize(workspace_dir).split("/") if p and p != "."]
+    member = [p for p in paths.normalize(member_dir).split("/") if p and p != "."]
+    common = 0
+    for left, right in zip(workspace, member):
+        if left != right:
+            break
+        common += 1
+    return "/".join([".."] * (len(member) - common) + workspace[common:])
+
 def inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml, workspace_prefix = ""):
     """Inherit package values, with file paths relative to the member directory."""
     workspace_package = workspace_cargo_toml.get("workspace", {}).get("package", {})
