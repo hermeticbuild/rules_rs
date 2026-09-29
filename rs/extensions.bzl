@@ -317,6 +317,9 @@ def _generate_hub_and_spokes(
             snippet_path = suggested_annotation_snippet_paths.get(crate_name)
             if snippet_path:
                 suggested_annotation = mctx.read(snippet_path).strip()
+        deps_select = _select(feature_resolutions.deps)
+        for triple, deps in annotation.deps_select.items():
+            deps_select[triple] = deps_select.get(triple, []) + deps
 
         if suggested_annotation:
             print("""
@@ -359,8 +362,11 @@ crate.annotation(
             data = annotation.data,
             deps = annotation.deps,
             crate_tags = annotation.tags,
-            deps_select = _select(feature_resolutions.deps),
+            deps_select = deps_select,
             link_deps = annotation.link_deps,
+            link_deps_select = annotation.link_deps_select,
+            target_compatible_with = annotation.target_compatible_with,
+            target_compatible_with_select = annotation.target_compatible_with_select,
             aliases = feature_resolutions.aliases,
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
@@ -992,8 +998,17 @@ _ANNOTATION_SELECTABLE_ATTRS = {
     "crate_features": attr.string_list(
         doc = "Features to add to a crate's `rust_library::crate_features` attribute.",
     ),
+    "deps": attr.label_list(
+        doc = "Dependencies to add to a crate's `rust_library::deps` attribute.",
+    ),
+    "link_deps": attr.label_list(
+        doc = "Native dependencies to add to a crate's `rust_library::link_deps` attribute.",
+    ),
     "rustc_flags": attr.string_list(
         doc = "Flags to add to a crate's `rust_library::rustc_flags` attribute.",
+    ),
+    "target_compatible_with": attr.label_list(
+        doc = "Constraints to add to a crate's `target_compatible_with` attribute.",
     ),
 }
 
@@ -1055,9 +1070,6 @@ _annotation = tag_class(
         # ),
         "deps": attr.label_list(
             doc = "A list of labels to add to a crate's `rust_library::deps` attribute.",
-        ),
-        "link_deps": attr.string_list(
-            doc = "Labels to add to a crate's `rust_library::link_deps` attribute.",
         ),
         "tags": attr.string_list(
             doc = "A list of tags to add to a crate's generated targets.",

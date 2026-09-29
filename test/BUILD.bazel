@@ -41,6 +41,18 @@ cc_library(
     srcs = ["rustdoc_musl_unwind.cc"],
 )
 
+cc_library(
+    name = "annotation_select_native_dep",
+    srcs = ["annotation_select_native_dep.cc"],
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "annotation_select_rust_dep",
+    srcs = ["annotation_select_rust_dep.rs"],
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "rustdoc_musl_unwind",
     srcs = ["rustdoc_musl_unwind.rs"],
@@ -194,6 +206,38 @@ genquery(
     name = "cfg_feature_target_dep_inner_deps",
     expression = "deps(@cfg_feature_target_dep//:inner-0.1.0)",
     scope = ["@cfg_feature_target_dep//:inner-0.1.0"],
+)
+
+genquery(
+    name = "annotation_select_deps",
+    expression = "deps(@build_script_env_select//:bitflags-2.9.4)",
+    scope = ["@build_script_env_select//:bitflags-2.9.4"],
+)
+
+genquery(
+    name = "annotation_link_deps",
+    expression = "deps(@build_script_aliases//:proc-macro2-1.0.101)",
+    scope = ["@build_script_aliases//:proc-macro2-1.0.101"],
+)
+
+genrule(
+    name = "verify_annotation_platform_controls",
+    srcs = [
+        ":annotation_link_deps",
+        ":annotation_select_deps",
+    ],
+    outs = ["verify_annotation_platform_controls.txt"],
+    cmd = """
+        grep 'annotation_select_rust_dep' $(location :annotation_select_deps)
+        grep 'annotation_select_native_dep' $(location :annotation_select_deps)
+        grep 'platforms.*os:linux' $(location :annotation_select_deps)
+        grep 'annotation_select_native_dep' $(location :annotation_link_deps)
+        echo ok > $@
+    """,
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 genrule(
@@ -400,6 +444,7 @@ filegroup(
     ] + select({
         "@platforms//os:windows": [],
         "//conditions:default": [
+            ":verify_annotation_platform_controls",
             ":verify_annotation_tags",
             ":verify_cfg_feature_target_dep",
             ":verify_first_party_feature_propagation",

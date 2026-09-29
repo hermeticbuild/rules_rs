@@ -207,14 +207,22 @@ crate.annotation_select(
     build_script_data = ["//:dummy_test.sh"],
     build_script_tools = ["//:dummy_test.sh"],
     crate = "bitflags",
+    link_deps = ["//:annotation_select_native_dep"],
     repositories = ["build_script_env_select"],
+    target_compatible_with = ["@platforms//os:linux"],
     triples = ["x86_64-unknown-linux-gnu"],
+    deps = ["//:annotation_select_rust_dep"],
 )
 crate.annotation_select(
     build_script_env = {"OS": "linux"},
     crate = "bitflags",
     repositories = ["build_script_env_select"],
     triples = ["x86_64-unknown-linux-musl"],
+)
+crate.annotation(
+    crate = "proc-macro2",
+    link_deps = [":annotation_select_native_dep"],
+    repositories = ["build_script_aliases"],
 )
 crate.annotation(
     crate = "tokenizers",

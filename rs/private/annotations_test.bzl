@@ -38,6 +38,7 @@ _ANNOTATION_DEFAULTS = {
     "rustc_flags": [],
     "strip_prefix": "",
     "tags": [],
+    "target_compatible_with": [],
     "workspace_cargo_toml": "Cargo.toml",
 }
 
@@ -46,7 +47,10 @@ _ANNOTATION_SELECT_DEFAULTS = {
     "build_script_env": {},
     "build_script_tools": [],
     "crate_features": [],
+    "deps": [],
+    "link_deps": [],
     "rustc_flags": [],
+    "target_compatible_with": [],
 }
 
 def _annotation(crate, version = "*", **kwargs):
@@ -114,14 +118,20 @@ def _wildcard_and_exact_select_payloads_compose_impl(ctx):
                     "example",
                     ["x86_64-unknown-linux-gnu"],
                     build_script_env = {"COMMON": "wildcard", "OVERRIDE": "wildcard"},
+                    deps = ["//:wildcard_dep"],
+                    link_deps = ["//:wildcard_link_dep"],
                     rustc_flags = ["--cfg=wildcard"],
+                    target_compatible_with = ["//:wildcard_constraint"],
                 ),
                 _annotation_select(
                     "example",
                     ["x86_64-unknown-linux-gnu"],
                     version = "1.0.0",
                     build_script_env = {"EXACT": "exact", "OVERRIDE": "exact"},
+                    deps = ["//:exact_dep"],
+                    link_deps = ["//:exact_link_dep"],
                     rustc_flags = ["--cfg=exact"],
+                    target_compatible_with = ["//:exact_constraint"],
                 ),
             ],
         ),
@@ -139,6 +149,18 @@ def _wildcard_and_exact_select_payloads_compose_impl(ctx):
         "aarch64-apple-darwin": [],
         "x86_64-unknown-linux-gnu": ["--cfg=wildcard", "--cfg=exact"],
     }, annotation.rustc_flags_select)
+    asserts.equals(env, {
+        "aarch64-apple-darwin": [],
+        "x86_64-unknown-linux-gnu": ["//:wildcard_dep", "//:exact_dep"],
+    }, annotation.deps_select)
+    asserts.equals(env, {
+        "aarch64-apple-darwin": [],
+        "x86_64-unknown-linux-gnu": ["//:wildcard_link_dep", "//:exact_link_dep"],
+    }, annotation.link_deps_select)
+    asserts.equals(env, {
+        "aarch64-apple-darwin": [],
+        "x86_64-unknown-linux-gnu": ["//:wildcard_constraint", "//:exact_constraint"],
+    }, annotation.target_compatible_with_select)
 
     return unittest.end(env)
 
