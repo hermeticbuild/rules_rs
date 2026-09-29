@@ -18,6 +18,13 @@ def _cfg_parser_smoke_test_impl(ctx):
     wasm = "wasm32-unknown-unknown"
     riscv32imac = "riscv32imac-unknown-none-elf"
     riscv64gc = "riscv64gc-unknown-linux-musl"
+    thumbv6m = "thumbv6m-none-eabi"
+    thumbv7em_hf = "thumbv7em-none-eabihf"
+    msp430 = "msp430-none-elf"
+    wasm32v1 = "wasm32v1-none"
+    armv7_linux = "armv7-unknown-linux-gnueabihf"
+    armeb_linux = "armeb-unknown-linux-gnueabi"
+    arm64ec = "arm64ec-pc-windows-msvc"
 
     # MacOS facts facts
     asserts.true(env, cfg_matches(_cfg("unix"), mac))
@@ -59,6 +66,27 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg('target_arch = "riscv64"'), riscv64gc))
     asserts.true(env, cfg_matches(_cfg('target_pointer_width = "64"'), riscv64gc))
     asserts.false(env, cfg_matches(_cfg('target_arch = "riscv64gc"'), riscv64gc))
+    asserts.true(env, cfg_matches(_cfg('target_os = "none"'), riscv32imac))
+
+    # Bare-metal triples may omit the vendor, and Rust reports every 32-bit Arm ISA as `arm`.
+    asserts.true(env, cfg_matches(_cfg('target_os = "none"'), thumbv6m))
+    asserts.true(env, cfg_matches(_cfg('target_vendor = "unknown"'), thumbv6m))
+    asserts.true(env, cfg_matches(_cfg('target_env = ""'), thumbv6m))
+    asserts.true(env, cfg_matches(_cfg('target_abi = "eabi"'), thumbv6m))
+    asserts.true(env, cfg_matches(_cfg('target_arch = "arm"'), thumbv6m))
+    asserts.true(env, cfg_matches(_cfg('target_pointer_width = "32"'), thumbv6m))
+    asserts.false(env, cfg_matches(_cfg("unix"), thumbv6m))
+    asserts.true(env, cfg_matches(_cfg('target_abi = "eabihf"'), thumbv7em_hf))
+    asserts.true(env, cfg_matches(_cfg('target_pointer_width = "32"'), thumbv7em_hf))
+    asserts.true(env, cfg_matches(_cfg('target_os = "none"'), msp430))
+    asserts.true(env, cfg_matches(_cfg('target_abi = ""'), msp430))
+    asserts.true(env, cfg_matches(_cfg('target_os = "none"'), wasm32v1))
+    asserts.true(env, cfg_matches(_cfg('target_vendor = "unknown"'), wasm32v1))
+    asserts.true(env, cfg_matches(_cfg('target_arch = "arm"'), armv7_linux))
+    asserts.true(env, cfg_matches(_cfg('target_os = "linux"'), armv7_linux))
+    asserts.true(env, cfg_matches(_cfg('target_arch = "arm64ec"'), arm64ec))
+    asserts.true(env, cfg_matches(_cfg('target_arch = "arm"'), armeb_linux))
+    asserts.true(env, cfg_matches(_cfg('target_endian = "big"'), armeb_linux))
 
     # Combinators
     asserts.false(env, cfg_matches(_cfg("any()"), mac))

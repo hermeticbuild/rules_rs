@@ -166,6 +166,10 @@ def _normalize_arch(arch_raw):
         return "riscv32"
     if arch_raw.startswith("riscv64"):
         return "riscv64"
+
+    # 32-bit Arm triples encode the ISA version (armv7, thumbv7em, ...); `arm64*` is AArch64.
+    if arch_raw.startswith("thumb") or (arch_raw.startswith("arm") and not arch_raw.startswith("arm64")):
+        return "arm"
     return arch_raw
 
 def _family_for_os(os_name):
@@ -264,15 +268,26 @@ def triple_to_cfg_attrs(triple):
         `unix`, and the triple itself as `_triple`.
     """
     parts = triple.split("-")
-    arch_part = _normalize_arch(_get(parts, 0, ""))
+    arch_raw_part = _get(parts, 0, "")
+    arch_part = _normalize_arch(arch_raw_part)
     vendor_part = _get(parts, 1, "unknown")
     os_raw_part = _get(parts, 2, "none")
     env_part = "-".join(parts[3:])
+    abi_guess = _abi_from_env(env_part)
+
+    # `none` is the OS of bare-metal triples, which may omit the vendor: `<arch>-none[-<abi>]`,
+    # e.g. `thumbv6m-none-eabi` or `wasm32v1-none`.
+    # https://doc.rust-lang.org/cargo/appendix/glossary.html#target
+    if vendor_part == "none":
+        vendor_part = "unknown"
+        os_raw_part = "none"
+        abi_part = _get(parts, 2, "")
+        abi_guess = abi_part if abi_part in ["eabi", "eabihf"] else ""
+
     os_norm = _normalize_os(os_raw_part)
     fam = _family_for_arch_and_os(arch_part, os_norm)
     width = _pointer_width_for_arch(arch_part)
-    endian = _endian_for_arch(arch_part)
-    abi_guess = _abi_from_env(env_part)
+    endian = _endian_for_arch(arch_raw_part)  # keeps big-endian markers, e.g. `armeb`
 
     return {
         "_triple": triple,
