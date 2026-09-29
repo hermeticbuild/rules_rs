@@ -1,0 +1,6 @@
+[package]
+name = "unversioned_path_demo"
+edition = "2024"
+
+[dependencies]
+unversioned = { path = "../unversioned" }

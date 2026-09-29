@@ -126,6 +126,7 @@ TESTS = [
     "platform_dep_features",
     "self_dev_dependency",
     "target_workspace_dep_feature",
+    "unversioned_path_dependency",
     "vendored_crate_override",
     "workspace_default_features",
     "vendored_workspace_dep",

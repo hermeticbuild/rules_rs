@@ -1,0 +1,8 @@
+load("@rules_rs//rs:rust_test.bzl", "rust_test")
+
+rust_test(
+    name = "unversioned_path_demo_test",
+    srcs = ["app/src/lib.rs"],
+    edition = "2024",
+    deps = ["@unversioned_path_dependency//:unversioned"],
+)

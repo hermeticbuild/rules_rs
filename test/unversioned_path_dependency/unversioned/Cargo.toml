@@ -1,0 +1,3 @@
+[package]
+name = "unversioned"
+edition = "2024"
