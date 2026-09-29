@@ -528,12 +528,11 @@ crates using `package.metadata.bazel.deps` must also declare those dependencies
 with `crate.annotation(deps = ...)` when configurations would otherwise be
 shared. Cargo registry metadata does not include these Bazel dependencies.
 
-Proc macros reached through normal dependencies use the existing conservative
-target feature resolution for their normal dependencies. They do not share
-features enabled only through build dependencies, so they may need explicit
-`crate_features` annotations.
-For example, a PyO3 toolchain that sets `PYO3_NO_PYTHON` needs its chosen
-`abi3-py3*` feature on `pyo3-build-config` in both resolutions.
+Procedural macros and their normal dependencies resolve in the execution feature
+context. Features from build dependencies unify with them when Cargo places the
+same package in that context; target-library features remain separate.
+`crate_features` annotations can add toolchain requirements, such as PyO3's chosen
+`abi3-py3*` feature when `PYO3_NO_PYTHON` is set.
 
 `gen_binaries` resolves requested binaries for the target platform. For a package
 used only by build dependencies, it enables default features and `crate_features`
@@ -590,3 +589,29 @@ See https://registry.bazel.build/modules/rules_rs/latest/docs
 - [Aya](https://github.com/aya-rs/aya) and [bpf-linker](https://github.com/aya-rs/bpf-linker)
 - [Xybrid](https://github.com/xybrid-ai/xybrid)
 - [Drake](https://github.com/RobotLocomotion/drake)
+
+### Cargo feature roots and procedural macros
+
+Feature resolution uses the manifest's library kind and crate name. Procedural
+macros and their normal dependencies resolve for the execution platform, separately
+from target libraries, even when the host and target triples are equal. Registry
+manifests are read from checksum-verified archives; Git manifest facts are refreshed
+when upgrading from facts that did not include the library kind.
+
+`crate.from_cargo` defaults to Cargo's workspace default members. Set `packages`
+to select different root packages, `features` to add features by selected package
+name, and `default_features = False` to disable root default features. Development
+dependencies are included for selected roots by default; `include_dev = False`
+resolves a build-only closure. Development dependencies of transitive crates are
+excluded from execution copies.
+
+The resolver tests include unit graphs captured from Cargo for native and cross
+builds, a renamed procedural macro, shared host/target dependencies and selected
+macro roots. `rs/private/feature_context_fixture/refresh.py` refreshes that oracle
+using a nightly Cargo toolchain without compiling the fixture.
+
+The compiler analyzes dependency copies in both target and execution configurations
+before selecting ordinary libraries and procedural macros. Generated library aliases
+keep unused copies analyzable without their dependencies, annotations, or build
+scripts. Compiling such a copy directly reports that it has no resolved Cargo
+configuration. Generated binaries remain unavailable outside their resolved rows.

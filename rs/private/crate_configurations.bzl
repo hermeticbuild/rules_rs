@@ -7,6 +7,7 @@ def _configuration(fq, is_exec, resolution, exec_resolutions_by_cargo_target_tri
     features = {
         platform_triple: sorted([feature for feature in values if not feature.startswith("dep:")])
         for platform_triple, values in resolution.features_enabled.items()
+        if platform_triple in resolution.active
     } if resolution.active else {}
     if is_exec:
         exec_build_deps = _dependency_map(resolution.build_deps, exec_platform_triples)

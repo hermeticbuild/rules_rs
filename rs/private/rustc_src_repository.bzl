@@ -271,6 +271,8 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
         },
         platform_triples = ALL_TARGET_TRIPLES,
         materialize_workspace_members = True,
+        # Build the sysroot libraries without their own test dependencies.
+        include_dev = False,
         dep_label_prefix = "//{}:".format(source_root),
         skip_internal_rustc_placeholder_crates = False,
     )

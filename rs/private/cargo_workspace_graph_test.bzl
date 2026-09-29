@@ -366,11 +366,12 @@ def _resolve_cargo_workspace_members_preserves_proc_macro_host_dependencies_impl
     linux = "x86_64-unknown-linux-gnu"
     macos = "aarch64-apple-darwin"
 
-    # Registry facts do not identify proc macros. A Linux-only normal
-    # dependency can therefore still need its dependencies on macOS.
+    # Manifest-backed facts identify the macro, so its normal dependencies
+    # resolve on the execution platform even for a Linux-only target edge.
     got = _resolve_test_workspace(
         {
             "macro": {
+                "proc_macro": True,
                 "dependencies": [
                     {"default_features": False, "name": "macro-support"},
                     {"default_features": False, "name": "macro-helper", "optional": True},
@@ -408,14 +409,15 @@ def _resolve_cargo_workspace_members_preserves_proc_macro_host_dependencies_impl
         )}},
     )
 
-    macro = got.feature_resolutions_by_fq_crate["macro-1.0.0"]
+    macro = got.exec_resolutions_by_cargo_target_triple[linux].resolutions["macro-1.0.0"]
     support = got.feature_resolutions_by_fq_crate["macro-support-1.0.0"]
     exec_support = got.exec_resolutions_by_cargo_target_triple[linux].resolutions["macro-support-1.0.0"]
+    asserts.equals(env, [], sorted(got.feature_resolutions_by_fq_crate["macro-1.0.0"].active))
     asserts.equals(env, ["//:macro-support-1.0.0"], sorted(macro.deps[linux]))
     asserts.equals(env, ["//:macro-helper-1.0.0", "//:macro-support-1.0.0"], sorted(macro.deps[macos]))
     asserts.equals(env, ["dep:macro-helper", "helper"], sorted(macro.features_enabled[macos]))
-    asserts.false(env, linux in got.exec_resolutions_by_cargo_target_triple[linux].build_deps["macro-support-1.0.0"])
-    asserts.equals(env, ["//:darwin-build-1.0.0"], sorted(got.exec_resolutions_by_cargo_target_triple[linux].build_deps["macro-support-1.0.0"][macos]))
+    asserts.equals(env, {}, exec_support.build_deps[linux])
+    asserts.equals(env, ["//:darwin-build-1.0.0"], sorted(exec_support.build_deps[macos]))
     asserts.equals(env, [macos], sorted(got.exec_resolutions_by_cargo_target_triple[linux].resolutions["darwin-build-1.0.0"].active))
 
     # Expanding normal dependencies to other platforms must not process the
@@ -769,10 +771,10 @@ def _resolve_cargo_workspace_members_groups_seeds_preserving_owners_impl(ctx):
     asserts.equals(env, {"owner-b-1.0.0": {macos: {"//:shared-1.0.0": "selected_b"}}}, got.exec_resolutions_by_cargo_target_triple[macos].build_deps)
     asserts.equals(env, ["annotated"], sorted(got.exec_resolutions_by_cargo_target_triple[linux].resolutions["shared-1.0.0"].features_enabled[macos]))
 
-    # Both target triples must reference the same resolved dictionary, not
-    # independently computed dictionaries with equal contents.
+    # Reachability pruning is target-specific; mutating one resolution must
+    # not change the other even when their feature seeds happen to match.
     got.exec_resolutions_by_cargo_target_triple[linux].resolutions["grouping_test"] = True
-    asserts.equals(env, True, got.exec_resolutions_by_cargo_target_triple[macos].resolutions.get("grouping_test"))
+    asserts.equals(env, None, got.exec_resolutions_by_cargo_target_triple[macos].resolutions.get("grouping_test"))
     return unittest.end(env)
 
 def _resolve_cargo_workspace_members_preserves_no_exec_resolution_impl(ctx):
@@ -964,6 +966,72 @@ resolve_cargo_workspace_members_groups_seeds_preserving_owners_test = unittest.m
 resolve_cargo_workspace_members_preserves_no_exec_resolution_test = unittest.make(_resolve_cargo_workspace_members_preserves_no_exec_resolution_impl)
 optional_dependency_aliases_follow_enabled_features_test = unittest.make(_optional_dependency_aliases_follow_enabled_features_impl)
 
+def _workspace_aggregation_uses_resolved_versions_and_contexts_impl(ctx):
+    env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    macos = "aarch64-apple-darwin"
+    for enabled in [False, True]:
+        packages = [{
+            "name": name,
+            "version": version,
+            "dependencies": ["shared 2.0.0"] if name == "macro" else [],
+        } for name, version in [("shared", "1.0.0"), ("shared", "2.0.0"), ("macro", "1.0.0"), ("optional", "1.0.0"), ("unselected", "1.0.0")]]
+        facts = {p["name"] + "-" + p["version"]: {"features": {"target": [], "host": []}} for p in packages}
+        facts["macro-1.0.0"] = {
+            "proc_macro": True,
+            "dependencies": [{"name": "shared", "req": "2", "features": ["host"]}],
+        }
+        resolved = resolve_packages(packages, facts, [linux, macos])
+        root_deps = [
+            {"name": "shared", "req": "1", "features": ["target"]},
+            {"name": "shared", "req": "1", "kind": "build", "features": ["host"], "target": 'cfg(target_os = "macos")'},
+            {"name": "macro"},
+            {"name": "optional", "rename": "maybe", "optional": True, "target": 'cfg(target_os = "linux")'},
+            {"name": "local", "req": "*", "source": None, "path": "/workspace/local"},
+        ]
+        members = [
+            {"name": "consumer", "dependencies": root_deps, "features": {"enable": ["dep:maybe"]}},
+            {"name": "local", "dependencies": []},
+            {"name": "unused", "dependencies": [{"name": "shared", "req": "2"}, {"name": "unselected"}]},
+        ]
+        metadata = {
+            "workspace_root": "/workspace",
+            "packages": [dict(p, version = "0.1.0", manifest_path = "/workspace/" + p["name"] + "/Cargo.toml", dependencies = [dict({
+                "req": "1",
+                "source": "registry+https://github.com/rust-lang/crates.io-index",
+                "uses_default_features": False,
+            }, **dep) for dep in p["dependencies"]]) for p in members],
+        }
+        got = resolve_cargo_workspace_members(
+            None,
+            cargo_metadata = metadata,
+            packages = packages,
+            workspace_members = [
+                {"name": "consumer", "version": "0.1.0", "dependencies": ["shared 1.0.0", "macro 1.0.0", "optional 1.0.0", "local 0.1.0"]},
+                {"name": "local", "version": "0.1.0", "dependencies": []},
+                {"name": "unused", "version": "0.1.0", "dependencies": ["shared 2.0.0", "unselected 1.0.0"]},
+            ],
+            versions_by_name = resolved.versions_by_name,
+            feature_resolutions_by_fq_crate = resolved.feature_resolutions_by_fq_crate,
+            annotations = {},
+            platform_triples = [linux, macos],
+            exec_platform_triples = [macos, linux],
+            materialize_workspace_members = False,
+            root_packages = ["consumer"],
+            features = {"consumer": ["enable"]} if enabled else {},
+        )
+        asserts.equals(env, [":optional-1.0.0", ":shared-1.0.0"] if enabled else [":shared-1.0.0"], got.workspace_dep_labels_by_triple[linux])
+        asserts.equals(env, [":shared-1.0.0"], got.workspace_dep_labels_by_triple[macos])
+        asserts.equals(env, [":macro-1.0.0", ":shared-1.0.0"], got.workspace_exec_dep_labels_by_cargo_target_triple[linux][macos])
+        asserts.equals(env, [":macro-1.0.0", ":shared-1.0.0"], got.workspace_exec_dep_labels_by_cargo_target_triple[macos][macos])
+        for target in [linux, macos]:
+            asserts.equals(env, [":macro-1.0.0"], got.workspace_exec_dep_labels_by_cargo_target_triple[target][linux])
+        asserts.equals(env, ["target"], sorted(got.feature_resolutions_by_fq_crate["shared-1.0.0"].features_enabled[linux]))
+        asserts.equals(env, ["host"], sorted(got.exec_resolutions_by_cargo_target_triple[linux].resolutions["shared-1.0.0"].features_enabled[macos]))
+    return unittest.end(env)
+
+workspace_aggregation_uses_resolved_versions_and_contexts_test = unittest.make(_workspace_aggregation_uses_resolved_versions_and_contexts_impl)
+
 def cargo_workspace_graph_tests():
     return unittest.suite(
         "cargo_workspace_graph_tests",
@@ -988,4 +1056,5 @@ def cargo_workspace_graph_tests():
         resolve_packages_attaches_feature_resolutions_test,
         select_package_dep_version_test,
         split_lockfile_packages_finds_local_package_paths_test,
+        workspace_aggregation_uses_resolved_versions_and_contexts_test,
     )

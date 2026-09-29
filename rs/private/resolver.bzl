@@ -1,4 +1,4 @@
-load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs")
+load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 
 def _count(packages):
     n = 0
@@ -86,6 +86,8 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
                         continue
 
                 deps[triple][bazel_target] = alias
+                if dep.get("proc_macro") and not include_build_dependencies:
+                    continue
 
                 if triple not in dep_feature_resolutions.active:
                     dep_feature_resolutions.active.add(triple)
@@ -140,7 +142,7 @@ def _propagate_feature_enablement(
                     if dep_name != dep["name"]:
                         continue
 
-                    defer_build_dependency = dep.get("kind", "normal") == "build" and not include_build_dependencies
+                    defer_build_dependency = (dep.get("kind", "normal") == "build" or dep.get("proc_macro")) and not include_build_dependencies
                     if not defer_build_dependency and not _dep_target_matches_triple(dep, triple, feature_set, cfg_attrs_by_triple):
                         continue
 
@@ -200,9 +202,23 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
         target_features = target_resolution.features_enabled[cargo_target_triple]
         owner = package["name"] + "-" + package["version"]
 
-        for target_dep, dep in zip(target_resolution.possible_deps, exec_resolution.possible_deps):
+        # A selected workspace proc macro is itself an execution root. Its
+        # dependencies and feature closure must be resolved on the compiler host.
+        if package.get("proc_macro"):
+            for exec_platform_triple in exec_cfg_attrs_by_triple:
+                features.setdefault((target_resolution.package_index, exec_platform_triple), set()).update(target_features)
+            continue
+
+        exec_deps = {dep["index"]: dep for dep in exec_resolution.possible_deps}
+        for target_dep in target_resolution.possible_deps:
+            # A root's dev-only macro still runs on the host, even though its
+            # edge is deliberately absent from an ordinary host library copy.
+            dep = exec_deps.get(target_dep["index"], target_dep)
             bazel_target = dep.get("bazel_target")
-            if dep.get("kind", "normal") != "build" or not bazel_target:
+            is_build = dep.get("kind", "normal") == "build"
+            if not (is_build or dep.get("proc_macro")) or not bazel_target:
+                continue
+            if not is_build and not _dep_target_matches_triple(target_dep, cargo_target_triple, target_features, exec_cfg_attrs_by_triple | {cargo_target_triple: triple_to_cfg_attrs(cargo_target_triple)}):
                 continue
 
             dep_name = dep["name"]
@@ -212,11 +228,12 @@ def collect_exec_build_dependencies(packages, exec_template_packages, exec_cfg_a
 
             dep_resolution = exec_template_packages[dep["package_index"]]["feature_resolutions"]
             feature_sensitive = "target_expr" in dep
-            for exec_platform_triple in dep["target"]:
-                if feature_sensitive and not _dep_target_matches_triple(dep, exec_platform_triple, target_features, exec_cfg_attrs_by_triple):
+            for exec_platform_triple in (dep["target"] if is_build else exec_cfg_attrs_by_triple):
+                if is_build and feature_sensitive and not _dep_target_matches_triple(dep, exec_platform_triple, target_features, exec_cfg_attrs_by_triple):
                     continue
 
-                build_deps.setdefault(owner, {}).setdefault(exec_platform_triple, {})[bazel_target] = alias
+                if is_build:
+                    build_deps.setdefault(owner, {}).setdefault(exec_platform_triple, {})[bazel_target] = alias
 
                 requested_features = features.setdefault((dep_resolution.package_index, exec_platform_triple), set())
                 requested_features.update(dep_resolution.features_enabled[exec_platform_triple])

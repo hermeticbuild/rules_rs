@@ -209,3 +209,10 @@ register_toolchains(
     "@llvm//toolchain:all",
     dev_dependency = True,
 )
+
+rendered_repository = use_repo_rule("//rs/private/feature_context_fixture:rendered.bzl", "rendered_repository")
+
+rendered_repository(
+    name = "feature_context_rendered",
+    dev_dependency = True,
+)
