@@ -1,3 +1,5 @@
+"""Unit tests for `cfg_parser.bzl`."""
+
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
 load(":cfg_parser.bzl", "cfg_matches", "cfg_matches_expr_for_cfg_attrs", "cfg_matches_expr_for_triples", "triple_to_cfg_attrs")
 

@@ -1,3 +1,5 @@
+"""Parses Cargo `cfg(...)` expressions and evaluates them against target triples."""
+
 def _get(xs, index, default):
     if index < len(xs):
         return xs[index]
@@ -9,7 +11,7 @@ def _emit_pending(frames, pending_ident, pending_eq_key):
     if pending_eq_key:
         fail("cfg parse error: expected string literal after '=' for key '" + pending_eq_key[:-2] + "'.")
     if pending_ident:
-        frames[len(frames)-1]["args"].append({"kind": "pred", "name": pending_ident})
+        frames[len(frames) - 1]["args"].append({"kind": "pred", "name": pending_ident})
 
 ############################################
 # Tokenizer
@@ -36,24 +38,24 @@ def _cfg_tokenize(expr):
                 in_string = False
             else:
                 str_buf.append(ch)
+        elif ch.isalpha() or ch == "_" or (ident_buf and ch.isdigit()):
+            ident_buf.append(ch)
         else:
-            if ch.isalpha() or ch == "_" or (ident_buf and ch.isdigit()):
-                ident_buf.append(ch)
-            else:
-                if ident_buf != []:
-                    tokens.append({"t": "IDENT", "v": "".join(ident_buf)})
-                    ident_buf = []
-                if ch == "(":
-                    tokens.append({"t": "LPAREN"})
-                elif ch == ")":
-                    tokens.append({"t": "RPAREN"})
-                elif ch == ",":
-                    tokens.append({"t": "COMMA"})
-                elif ch == "=":
-                    tokens.append({"t": "EQ"})
-                elif ch == "\"":
-                    in_string = True
-                # ignore whitespace/other
+            if ident_buf != []:
+                tokens.append({"t": "IDENT", "v": "".join(ident_buf)})
+                ident_buf = []
+            if ch == "(":
+                tokens.append({"t": "LPAREN"})
+            elif ch == ")":
+                tokens.append({"t": "RPAREN"})
+            elif ch == ",":
+                tokens.append({"t": "COMMA"})
+            elif ch == "=":
+                tokens.append({"t": "EQ"})
+            elif ch == "\"":
+                in_string = True
+
+            # ignore whitespace/other
 
     if in_string:
         fail("cfg parse error: unterminated string literal.")
@@ -61,12 +63,19 @@ def _cfg_tokenize(expr):
         tokens.append({"t": "IDENT", "v": "".join(ident_buf)})
     return tokens
 
-
 ############################################
 # Parser (non-recursive; stack of frames)
 ############################################
 
 def cfg_parse(expr):
+    """Parses a Cargo `cfg(...)` expression.
+
+    Args:
+        expr: The expression, e.g. `cfg(all(unix, target_arch = "x86_64"))`.
+
+    Returns:
+        A tuple of the expression's AST and whether it tests a `feature`.
+    """
     tokens = _cfg_tokenize(expr)
     frames = [{"fn": "__ROOT__", "args": []}]
     pending_ident = None
@@ -163,8 +172,19 @@ def _family_for_os(os_name):
     if os_name == "windows":
         return "windows"
     if os_name in [
-        "linux", "macos", "ios", "freebsd", "netbsd", "openbsd", "dragonfly",
-        "android", "solaris", "illumos", "aix", "haiku", "hurd",
+        "linux",
+        "macos",
+        "ios",
+        "freebsd",
+        "netbsd",
+        "openbsd",
+        "dragonfly",
+        "android",
+        "solaris",
+        "illumos",
+        "aix",
+        "haiku",
+        "hurd",
     ]:
         return "unix"
     return ""
@@ -176,13 +196,28 @@ def _family_for_arch_and_os(arch, os_name):
 
 def _pointer_width_for_arch(arch):
     # Common targets
-    arch64 = ["s390x","bpfel","bpfeb"]
+    arch64 = ["s390x", "bpfel", "bpfeb"]
     if "64" in arch or arch in arch64:
         return "64"
 
     arch32 = [
-        "i686","i586","i386","x86","arm","armv7","thumbv7","thumbv6","mips","mipsel",
-        "powerpc","ppc","sparc","riscv32","wasm32","m68k","loongarch32",
+        "i686",
+        "i586",
+        "i386",
+        "x86",
+        "arm",
+        "armv7",
+        "thumbv7",
+        "thumbv6",
+        "mips",
+        "mipsel",
+        "powerpc",
+        "ppc",
+        "sparc",
+        "riscv32",
+        "wasm32",
+        "m68k",
+        "loongarch32",
     ]
     if "32" in arch or arch in arch32:
         return "32"
@@ -190,7 +225,7 @@ def _pointer_width_for_arch(arch):
     return "64"
 
 def _endian_for_arch(arch):
-    big_set = ["m68k","s390x","sparc","sparc64","powerpc","powerpc64"]
+    big_set = ["m68k", "s390x", "sparc", "sparc64", "powerpc", "powerpc64"]
     if arch.endswith("be") or arch.endswith("eb") or arch in big_set:
         return "big"
     if arch.startswith("mips") and (not arch.endswith("el")):
@@ -219,6 +254,15 @@ def _target_has_feature(ctx, feature):
     return False
 
 def triple_to_cfg_attrs(triple):
+    """Derives the `cfg` attributes of a target triple.
+
+    Args:
+        triple: The target triple, e.g. `x86_64-unknown-linux-gnu`.
+
+    Returns:
+        A dict of `cfg` keys such as `target_os` to their values, the bare predicates such as
+        `unix`, and the triple itself as `_triple`.
+    """
     parts = triple.split("-")
     arch_part = _normalize_arch(_get(parts, 0, ""))
     vendor_part = _get(parts, 1, "unknown")
@@ -232,7 +276,6 @@ def triple_to_cfg_attrs(triple):
 
     return {
         "_triple": triple,
-
         "target_arch": arch_part,
         "target_vendor": vendor_part,
         "target_os": os_norm,
@@ -260,11 +303,18 @@ def _eval_eq(ctx, key, value, features):
     if key == "target_feature":
         return _target_has_feature(ctx, value)
     known = [
-        "target_os","target_family","target_arch","target_env",
-        "target_vendor","target_endian","target_pointer_width","target_abi",
+        "target_os",
+        "target_family",
+        "target_arch",
+        "target_env",
+        "target_vendor",
+        "target_endian",
+        "target_pointer_width",
+        "target_abi",
     ]
     if key in known:
         return ctx.get(key, "") == value
+
     # Unknown keys evaluate to False
     # fail("Unknown key %s" % key)
     return False
@@ -272,8 +322,7 @@ def _eval_eq(ctx, key, value, features):
 def _eval_pred(ctx, name):
     return ctx.get(name, False)
 
-
-def _cfg_eval(ast, ctx, features=[]):
+def _cfg_eval(ast, ctx, features = []):
     todo = [{"op": "VISIT", "node": ast}]
     results = []
     for _ in range(200000):
@@ -321,16 +370,16 @@ def _cfg_eval(ast, ctx, features=[]):
         fail("cfg eval error: unexpected result stack size.")
     return results[0]
 
-def cfg_matches(expr, triple, features=[]):
+def cfg_matches(expr, triple, features = []):
     ast, _ = cfg_parse(expr)
     ctx = triple_to_cfg_attrs(triple)
     return _cfg_eval(ast, ctx, features)
 
-def cfg_matches_expr_for_triples(expr, triples, features=[]):
+def cfg_matches_expr_for_triples(expr, triples, features = []):
     cfg_attrs = [triple_to_cfg_attrs(triple) for triple in triples]
     return cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features)
 
-def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features=[]):
+def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features = []):
     if expr.startswith("cfg("):
         ast, uses_feature_cfg = cfg_parse(expr)
         return struct(
@@ -344,5 +393,5 @@ def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features=[]):
             uses_feature_cfg = False,
         )
 
-def cfg_matches_ast_for_triples(ast, cfg_attrs, features=[]):
+def cfg_matches_ast_for_triples(ast, cfg_attrs, features = []):
     return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if _cfg_eval(ast, cfg_attr, features)]
