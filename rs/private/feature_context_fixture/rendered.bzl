@@ -137,3 +137,8 @@ def rendered_fixture():
         target_deps = {_WINDOWS: [":shared"]},
         exec_deps = {_WINDOWS: {host: [":shared", ":host_only", ":generated_macro"] for host in SUPPORTED_EXEC_TRIPLES}},
     )
+    cargo_workspace_deps(
+        name = "single_host_dependency",
+        target_deps = {},
+        exec_deps = {_WINDOWS: {host: [":host_only"] for host in SUPPORTED_EXEC_TRIPLES}},
+    )

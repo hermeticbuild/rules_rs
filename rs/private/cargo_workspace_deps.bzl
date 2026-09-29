@@ -14,7 +14,12 @@ _cargo_target = transition(
 )
 
 def _exec_deps_impl(ctx):
-    return [ctx.attr.actual[DefaultInfo]]
+    actual = ctx.attr.actual[DefaultInfo]
+    return [DefaultInfo(
+        files = actual.files,
+        default_runfiles = actual.default_runfiles,
+        data_runfiles = actual.data_runfiles,
+    )]
 
 _exec_deps = rule(
     implementation = _exec_deps_impl,
@@ -28,7 +33,14 @@ _exec_deps = rule(
 )
 
 def cargo_workspace_deps(name, target_deps, exec_deps, use_legacy_rules_rust_platforms = False):
-    """Aggregate target dependencies and host dependencies without changing domains."""
+    """Aggregate dependencies without changing their compilation domains.
+
+    Args:
+        name: Name of the combined filegroup.
+        target_deps: Version-qualified dependency labels by target triple.
+        exec_deps: Dependency labels by original target triple and execution triple.
+        use_legacy_rules_rust_platforms: Select the standard compiler's platform labels.
+    """
     execution = {}
     for target_triple, by_host in exec_deps.items():
         execution[target_triple] = []
@@ -36,6 +48,9 @@ def cargo_workspace_deps(name, target_deps, exec_deps, use_legacy_rules_rust_pla
             continue
         host_group = name + "__host_" + target_triple
         wrapper = name + "__exec_" + target_triple
+
+        # Select the wrapper on the target platform, preserve that Cargo context,
+        # then select the actual dependencies after the execution transition.
         native.filegroup(
             name = host_group,
             srcs = cargo_select({"": by_host}, "", use_legacy_rules_rust_platforms, default = []),

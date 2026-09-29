@@ -62,6 +62,18 @@ _workspace_dependencies_test = analysistest.make(_workspace_dependencies_impl, c
     _SETTING: "",
 })
 
+def _single_host_dependency_impl(ctx):
+    env = analysistest.begin(ctx)
+    files = analysistest.target_under_test(env)[DefaultInfo].files.to_list()
+    asserts.equals(env, 1, len(files))
+    asserts.true(env, "host_only" in files[0].basename, str(files))
+    return analysistest.end(env)
+
+_single_host_dependency_test = analysistest.make(_single_host_dependency_impl, config_settings = {
+    "//command_line_option:platforms": str(Label("//rs/platforms:" + _WINDOWS)),
+    _SETTING: "",
+})
+
 _inactive_macro_test = analysistest.make(_inactive_macro_impl, extra_target_under_test_aspects = [rust_analyzer_aspect], config_settings = {
     "//command_line_option:platforms": str(Label("//rs/platforms:x86_64-unknown-linux-musl")),
     _SETTING: _WINDOWS,
@@ -85,6 +97,7 @@ _inactive_test = analysistest.make(_inactive_impl, config_settings = {
 })
 
 def rendered_tests():
+    _single_host_dependency_test(name = "single_host_dependency_test", target_under_test = "@feature_context_rendered//:single_host_dependency")
     _workspace_dependencies_test(name = "workspace_dependencies_test", target_under_test = "@feature_context_rendered//:workspace_dependencies")
     _inactive_macro_test(name = "inactive_macro_editor_test", target_under_test = "@feature_context_rendered//:generated_macro")
     _prost_windows_test(name = "prost_windows_context_test", target_under_test = "//rs/private/prost:default_prost_toolchain_impl")
