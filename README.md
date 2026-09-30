@@ -355,6 +355,31 @@ crate.annotation_select(
 </details>
 
 <details>
+<summary>Restrict generated crate visibility</summary>
+
+Set `visibility` on `crate.annotation` in `MODULE.bazel` to restrict direct use of a
+Cargo package. The existing `version` and `repositories` attributes select which
+versions and hubs receive the annotation; both default to all.
+
+```starlark
+crate.annotation(
+    crate = "tauri",
+    repositories = ["crates"],
+    visibility = ["//apps:__subpackages__"],
+)
+```
+
+The setting covers generated libraries, procedural macros, binaries, and hub
+aliases, including versioned aliases. Labels resolve in the declaring module,
+including repository mappings for package groups. Unconfigured crates remain
+public. Generated crates in the same Cargo closure retain access to each other
+so transitive dependencies still build. Package metadata remains public for
+metadata collectors. Empty or private visibility prevents direct workspace use
+while retaining that internal dependency access.
+
+</details>
+
+<details>
 <summary>Use legacy rules_rust toolchains or platforms</summary>
 
 You can keep an existing `rules_rust` toolchain setup during migration. In that mode, configure toolchains from `@rules_rust` and tell `crate.from_cargo(...)` to render selects against legacy `rules_rust` platform labels.
@@ -588,25 +613,3 @@ See https://registry.bazel.build/modules/rules_rs/latest/docs
 - [Aya](https://github.com/aya-rs/aya) and [bpf-linker](https://github.com/aya-rs/bpf-linker)
 - [Xybrid](https://github.com/xybrid-ai/xybrid)
 - [Drake](https://github.com/RobotLocomotion/drake)
-
-### Restricting crate visibility
-
-Use `crate.visibility` in `MODULE.bazel` to restrict direct use of selected Cargo
-packages. Names match exactly, or by prefix with a trailing `*`. Settings apply to
-all hubs declared by the same module unless `repositories` selects specific hubs.
-Overlapping settings for a crate are rejected.
-
-```starlark
-crate.visibility(
-    crates = ["tauri", "tauri-*"],
-    repositories = ["crates"],
-    visibility = ["//apps:__subpackages__"],
-)
-```
-
-The setting covers generated libraries, procedural macros, binaries, and hub
-aliases, including versioned aliases. Labels resolve in the declaring module.
-Unconfigured crates remain public. Generated crates in the same Cargo closure
-retain access to each other so transitive dependencies still build. Package
-metadata remains public for metadata collectors. Empty or private visibility
-prevents direct workspace use while retaining that internal dependency access.

@@ -39,6 +39,7 @@ _ANNOTATION_DEFAULTS = {
     "strip_prefix": "",
     "tags": [],
     "target_compatible_with": [],
+    "visibility": [Label("//visibility:public")],
     "workspace_cargo_toml": "Cargo.toml",
 }
 
@@ -53,10 +54,10 @@ _ANNOTATION_SELECT_DEFAULTS = {
     "target_compatible_with": [],
 }
 
-def _annotation(crate, version = "*", **kwargs):
+def _annotation(crate, version = "*", repositories = [], **kwargs):
     values = dict(_ANNOTATION_DEFAULTS)
     values.update(kwargs)
-    return struct(crate = crate, repositories = [], version = version, **values)
+    return struct(crate = crate, repositories = repositories, version = version, **values)
 
 def _annotation_select(crate, triples, version = "*", **kwargs):
     values = dict(_ANNOTATION_SELECT_DEFAULTS)
@@ -223,6 +224,31 @@ def _selected_windows_gnullvm_annotation_keeps_implicit_values_impl(ctx):
 
     return unittest.end(env)
 
+def _visibility_uses_annotation_selection_impl(ctx):
+    env = unittest.begin(ctx)
+    public = [Label("//visibility:public")]
+    private = [Label("//visibility:private")]
+    allowed = [Label("//rs/private:__pkg__")]
+    mod = _mod(
+        annotations = [
+            _annotation("example", visibility = private, repositories = ["repo"]),
+            _annotation("example", version = "1.0.0", visibility = allowed, repositories = ["repo"]),
+            _annotation("empty", visibility = []),
+        ],
+        annotation_selects = [_annotation_select("example", _TRIPLES, version = "2.0.0", rustc_flags = ["--cfg=example"])],
+    )
+    annotations = build_annotation_map(mod, "repo", _TRIPLES)
+    asserts.equals(env, allowed, annotation_for(annotations, "example", "1.0.0", "repo").visibility)
+    asserts.equals(env, private, annotation_for(annotations, "example", "2.0.0", "repo").visibility)
+    asserts.equals(env, private, annotation_for(annotations, "example", "3.0.0", "repo").visibility)
+    asserts.equals(env, [], annotation_for(annotations, "empty", "1.0.0", "repo").visibility)
+    asserts.equals(env, public, annotation_for(annotations, "unannotated", "1.0.0", "repo").visibility)
+    other = build_annotation_map(mod, "other", _TRIPLES)
+    asserts.equals(env, public, annotation_for(other, "example", "1.0.0", "other").visibility)
+    return unittest.end(env)
+
+visibility_uses_annotation_selection_test = unittest.make(_visibility_uses_annotation_selection_impl)
+
 exact_annotation_replaces_wildcard_and_composes_with_select_test = unittest.make(_exact_annotation_replaces_wildcard_and_composes_with_select_impl)
 wildcard_and_exact_select_payloads_compose_test = unittest.make(_wildcard_and_exact_select_payloads_compose_impl)
 wildcard_select_composes_with_exact_annotation_test = unittest.make(_wildcard_select_composes_with_exact_annotation_impl)
@@ -231,6 +257,7 @@ selected_windows_gnullvm_annotation_keeps_implicit_values_test = unittest.make(_
 def annotations_tests():
     return unittest.suite(
         "annotations_tests",
+        visibility_uses_annotation_selection_test,
         exact_annotation_replaces_wildcard_and_composes_with_select_test,
         wildcard_and_exact_select_payloads_compose_test,
         wildcard_select_composes_with_exact_annotation_test,

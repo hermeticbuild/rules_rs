@@ -209,28 +209,3 @@ register_toolchains(
     "@llvm//toolchain:all",
     dev_dependency = True,
 )
-
-visibility_fixtures = use_extension("//rs/private/visibility_fixture:repos.bzl", "fixtures", dev_dependency = True)
-use_repo(visibility_fixtures, "visibility_dependent", "visibility_lib", "visibility_macro")
-
-visibility_crate = use_extension("//rs:extensions.bzl", "crate", dev_dependency = True)
-visibility_crate.from_cargo(
-    name = "visibility_hub",
-    cargo_lock = "//rs/private/visibility_fixture/workspace:Cargo.lock",
-    cargo_toml = "//rs/private/visibility_fixture/workspace:Cargo.toml",
-    platform_triples = [
-        "aarch64-apple-darwin",
-        "x86_64-apple-darwin",
-        "x86_64-unknown-linux-gnu",
-        "aarch64-unknown-linux-gnu",
-        "x86_64-pc-windows-msvc",
-    ],
-)
-visibility_crate.visibility(
-    crates = ["itoa"],
-    repositories = ["visibility_hub"],
-    visibility = ["//rs/private/visibility_fixture/allowed:__pkg__"],
-)
-
-# Import the spoke deliberately to test that direct labels cannot bypass visibility.
-use_repo(visibility_crate, "visibility_hub", "visibility_hub__itoa-1.0.18")

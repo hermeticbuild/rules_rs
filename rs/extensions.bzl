@@ -27,7 +27,7 @@ load("//rs/private:registry_config_repository.bzl", "registry_config_repository"
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
 load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:toml2json.bzl", "run_toml2json")
-load("//rs/private:visibility.bzl", "visibility_for")
+load("//rs/private:visibility.bzl", "visibility_with_internal_access")
 
 def _spoke_repo(hub_name, name, version):
     s = "%s__%s-%s" % (hub_name, name, version)
@@ -122,7 +122,6 @@ def _generate_hub_and_spokes(
         debug,
         generate_lint_config,
         use_legacy_rules_rust_platforms,
-        visibilities = [],
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
@@ -141,7 +140,6 @@ def _generate_hub_and_spokes(
         validate_lockfile (bool): If true, validate we have appropriate versions in Cargo.lock
         debug (bool): Enable debug logging
         generate_lint_config (bool): Generate per-package Cargo lint configuration.
-        visibilities: Visibility tags from the declaring module.
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
     """
     _date(mctx, "start")
@@ -361,7 +359,7 @@ crate.annotation(
 
         kwargs = dict(
             hub_name = hub_name,
-            crate_visibility = visibility_for(visibilities, hub_name, crate_name, internal_packages),
+            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages),
             gen_build_script = annotation.gen_build_script,
             build_script_deps = [],
             build_script_deps_select = _select(feature_resolutions.build_deps),
@@ -503,9 +501,9 @@ crate.annotation(
 
     hub_contents = []
     for name, versions in versions_by_name.items():
-        crate_visibility = visibility_for(visibilities, hub_name, name, internal_packages)
         for version in versions:
             annotation = annotation_for(annotations, name, version, hub_name)
+            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages)
             package = package_by_fq[_fq_crate(name, version)]
             target_repo_name = package["target_repo_name"]
             target_package_path = package["target_package_path"]
@@ -543,6 +541,7 @@ alias(
             fq = sorted(workspace_versions)[-1]
             default_version = fq[len(name) + 1:]
             annotation = annotation_for(annotations, name, default_version, hub_name)
+            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages)
 
             hub_contents.append("""
 alias(
@@ -562,6 +561,7 @@ alias(
         if len(versions) == 1:
             version = versions[0]
             annotation = annotation_for(annotations, name, version, hub_name)
+            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages)
             for alias_name in sorted(annotation.extra_aliased_targets.keys()):
                 hub_contents.append("""
 alias(
@@ -860,9 +860,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms, visibilities = mod.tags.visibility, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms, visibilities = mod.tags.visibility)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms)
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
@@ -1150,6 +1150,10 @@ _annotation = tag_class(
         #     doc = "An optional timestamp used for crates originating from a git repository instead of a crate registry. This flag optimizes fetching the source code.",
         # ),
         "strip_prefix": attr.string(),
+        "visibility": attr.label_list(
+            default = ["//visibility:public"],
+            doc = "Visibility of generated libraries, procedural macros, binaries, and hub aliases. Labels resolve in the declaring module. Generated dependencies within the Cargo closure retain access; package metadata remains public.",
+        ),
         "workspace_cargo_toml": attr.string(
             doc = "For crates from git, the ruleset assumes the (workspace) Cargo.toml is in the repo root. This attribute overrides the assumption.",
             default = "Cargo.toml",
@@ -1167,15 +1171,6 @@ _annotation_select = tag_class(
     } | _ANNOTATION_SELECTABLE_ATTRS,
 )
 
-_visibility = tag_class(
-    doc = "Visibility of generated crates and hub aliases. Generated dependencies remain accessible within the Cargo closure; package metadata remains public.",
-    attrs = {
-        "crates": attr.string_list(mandatory = True, doc = "Exact Cargo names or prefixes ending in *; overlapping settings are rejected."),
-        "repositories": attr.string_list(doc = "Hub names. Empty applies to every hub declared by this module."),
-        "visibility": attr.label_list(mandatory = True, doc = "Allowed consumer packages or package groups. Labels resolve in the declaring module."),
-    },
-)
-
 crate = module_extension(
     implementation = _crate_impl,
     tag_classes = {
@@ -1183,7 +1178,6 @@ crate = module_extension(
         "annotation_select": _annotation_select,
         "config": _config,
         "from_cargo": _from_cargo,
-        "visibility": _visibility,
     },
 )
 
