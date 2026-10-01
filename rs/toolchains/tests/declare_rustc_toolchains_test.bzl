@@ -24,6 +24,7 @@ def _selection_test_impl(ctx):
     asserts.equals(env, ctx.attr.expected_edition, toolchain.default_edition)
     asserts.equals(env, ctx.attr.expected_bootstrap, toolchain._bootstrapping)
     asserts.equals(env, ctx.attr.expected_linker_preference, toolchain.linker_preference or "")
+    asserts.equals(env, ctx.attr.expected_linker, toolchain.linker.basename if toolchain.linker else "")
     return analysistest.end(env)
 
 def _selection_test(triple, bootstrap = False):
@@ -33,6 +34,7 @@ def _selection_test(triple, bootstrap = False):
             "expected_triple": attr.string(default = triple),
             "expected_edition": attr.string(default = "2024"),
             "expected_bootstrap": attr.bool(default = bootstrap),
+            "expected_linker": attr.string(),
             "expected_linker_preference": attr.string(),
         },
         config_settings = {
@@ -56,6 +58,9 @@ _musl_bootstrap_test = _selection_test("x86_64-unknown-linux-musl", bootstrap = 
 _gnu_bootstrap_test = _selection_test("x86_64-unknown-linux-gnu", bootstrap = True)
 _bpfel_test = _selection_test("bpfel-unknown-none")
 _bpfeb_test = _selection_test("bpfeb-unknown-none")
+_thumbv6m_test = _selection_test("thumbv6m-none-eabi")
+_riscv32imac_test = _selection_test("riscv32imac-unknown-none-elf")
+_x86_64_none_test = _selection_test("x86_64-unknown-none")
 
 def _analyze_declarations_impl(_ctx):
     return []
@@ -89,6 +94,9 @@ def declare_rustc_toolchains_test_suite(name):
             "x86_64-unknown-linux-musl",
             "aarch64-unknown-linux-musl",
             "bpfel-unknown-none",
+            "thumbv6m-none-eabi",
+            "riscv32imac-unknown-none-elf",
+            "x86_64-unknown-none",
         ],
     )
     declare_rustc_toolchains(
@@ -111,8 +119,11 @@ def declare_rustc_toolchains_test_suite(name):
         ("gnu_fallback", _gnu_test, {"expected_edition": "2021"}),
         ("musl_bootstrap", _musl_bootstrap_test, {}),
         ("gnu_bootstrap_fallback", _gnu_bootstrap_test, {"expected_edition": "2021"}),
-        ("bpfel", _bpfel_test, {"expected_linker_preference": "rust"}),
-        ("bpfeb_fallback", _bpfeb_test, {"expected_edition": "2021", "expected_linker_preference": "rust"}),
+        ("bpfel", _bpfel_test, {"expected_linker": "bpf-linker", "expected_linker_preference": "rust"}),
+        ("bpfeb_fallback", _bpfeb_test, {"expected_edition": "2021", "expected_linker": "bpf-linker", "expected_linker_preference": "rust"}),
+        ("thumbv6m", _thumbv6m_test, {"expected_linker": "rust-lld"}),
+        ("riscv32imac", _riscv32imac_test, {"expected_linker": "rust-lld"}),
+        ("x86_64_none", _x86_64_none_test, {"expected_linker": "rust-lld"}),
     ]:
         test_rule(
             name = test_name + "_test",
