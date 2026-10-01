@@ -1,0 +1,5 @@
+exports_files([
+    "defs.bzl",
+    "additive.BUILD.bazel",
+    "include.MODULE.bazel",
+])

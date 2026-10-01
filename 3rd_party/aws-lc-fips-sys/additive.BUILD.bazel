@@ -1,0 +1,21 @@
+load("@aws-lc-fips//bazel:defs.bzl", "aws_lc_fips_libraries")
+load("@rules_rs//3rd_party/aws-lc-fips-sys:defs.bzl", "aws_lc_fips_sys")
+
+# This sys crate bundles AWS-LC FIPS 3.1.0. Its version determines the namespace.
+AWS_LC_FIPS_SYS_VERSION = "0.13.11"
+
+aws_lc_fips_libraries(
+    name = "aws_lc_fips",
+    prefix = "aws_lc_fips_" + AWS_LC_FIPS_SYS_VERSION.replace(".", "_"),
+    prefix_headers = [
+        "generated-include/openssl/boringssl_prefix_symbols.h",
+        "generated-include/openssl/boringssl_prefix_symbols_asm.h",
+    ],
+)
+
+aws_lc_fips_sys(
+    name = "aws_lc_fips_sys_build_info",
+    crypto = ":aws_lc_fips_crypto",
+    headers = ":aws_lc_fips_headers",
+    version = AWS_LC_FIPS_SYS_VERSION,
+)
