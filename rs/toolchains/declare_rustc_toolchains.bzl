@@ -65,7 +65,8 @@ def declare_rustc_toolchains(
       clippy_driver: Optional clippy-driver label or labels keyed by execution triple.
       cargo_clippy: Optional cargo-clippy label or labels keyed by execution triple.
       rust_objcopy: Optional rust-objcopy label or labels keyed by execution triple.
-      rust_lld: Optional rust-lld label or labels keyed by execution triple.
+      rust_lld: Optional rust-lld label or labels keyed by execution triple. Links bare-metal
+        (`@platforms//os:none`) and wasm targets.
       bpf_linker: Optional bpf-linker label or labels keyed by execution triple.
       rust_std: Optional standard-library label or labels keyed by target triple.
     """
@@ -149,8 +150,9 @@ def declare_rustc_toolchains(
             llvm_cov = "@llvm//tools:llvm-cov",
             llvm_profdata = "@llvm//tools:llvm-profdata",
             linker = select({
-                "@rules_rs//rs/platforms/config:riscv32imac-unknown-none-elf": lld_label,
-                "@rules_rs//rs/platforms/config:riscv32imc-unknown-none-elf": lld_label,
+                # Bare-metal targets link with the bundled rust-lld, as the Rust target specs do.
+                # The BPF toolchains below set their own linker.
+                "@platforms//os:none": lld_label,
                 "@platforms//cpu:wasm32": lld_label,
                 "@platforms//cpu:wasm64": lld_label,
                 "//conditions:default": None,
