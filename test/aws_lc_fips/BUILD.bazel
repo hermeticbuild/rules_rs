@@ -1,0 +1,21 @@
+load("@rules_rs//rs:rust_test.bzl", "rust_test")
+
+rust_test(
+    name = "ssl_test",
+    srcs = ["ssl_test.rs"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        "@aws_lc_fips_ssl//:aws-lc-fips-sys",
+        "@aws_lc_fips_ssl//:aws-lc-rs",
+    ],
+)
+
+rust_test(
+    name = "crypto_test",
+    srcs = ["crypto_test.rs"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        "@aws_lc_fips_crypto//:aws-lc-fips-sys",
+        "@aws_lc_fips_crypto//:aws-lc-rs",
+    ],
+)

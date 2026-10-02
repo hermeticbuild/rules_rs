@@ -406,3 +406,63 @@ crate.annotation(
     crate = "gtk-sys",
     gen_build_script = "off",
 )
+
+# FIPS fixtures use scoped annotations rather than the global FIPS snippet,
+# since this workspace also tests the non-FIPS AWS-LC adapter.
+bazel_dep(name = "aws-lc-fips", version = "3.1.0")
+
+# The pending native module hardcodes libgcc; test with LLVM's compiler-rt.
+single_version_override(
+    module_name = "aws-lc-fips",
+    patch_strip = 1,
+    patches = ["//:aws_lc_fips/compiler-runtime.patch"],
+)
+
+inject_repo(crate, "aws-lc-fips")
+
+[
+    crate.from_cargo(
+        name = hub,
+        cargo_lock = "//:aws_lc_fips/" + folder + "/Cargo.lock",
+        cargo_toml = "//:aws_lc_fips/" + folder + "/Cargo.toml",
+        platform_triples = [
+            "x86_64-unknown-linux-gnu",
+            "aarch64-unknown-linux-gnu",
+        ],
+    )
+    for hub, folder in [
+        ("aws_lc_fips_ssl", "ssl"),
+        ("aws_lc_fips_crypto", "crypto"),
+    ]
+]
+
+use_repo(crate, "aws_lc_fips_crypto", "aws_lc_fips_ssl")
+
+[
+    crate.annotation(
+        crate = "aws-lc-rs",
+        gen_build_script = "on",
+        repositories = [hub],
+        version = "1.17.1",
+    )
+    for hub in [
+        "aws_lc_fips_ssl",
+        "aws_lc_fips_crypto",
+    ]
+]
+
+[
+    crate.annotation(
+        additive_build_file = "@rules_rs//3rd_party/aws-lc-fips-sys:additive.BUILD.bazel",
+        crate = "aws-lc-fips-sys",
+        extra_aliased_targets = {"aws_lc_fips_sys_build_info": "aws_lc_fips_sys_build_info"},
+        gen_build_script = "off",
+        repositories = [hub],
+        version = "0.13.11",
+        deps = ["@" + hub + "//:aws_lc_fips_sys_build_info"],
+    )
+    for hub in [
+        "aws_lc_fips_ssl",
+        "aws_lc_fips_crypto",
+    ]
+]
