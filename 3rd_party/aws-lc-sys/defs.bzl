@@ -69,6 +69,10 @@ def aws_lc_sys(name, crypto, ssl):
         clang_flags = [
             "-DAWS_LC_RUST_INCLUDE_SSL",
             "-DBORINGSSL_PREFIX_SYMBOLS_H",
+            # Linux target bindgen actions can still see the macOS host
+            # libc++ headers. Their vendor availability annotations require
+            # Apple SDK macros that are intentionally absent for Linux.
+            "-D_LIBCPP_DISABLE_AVAILABILITY",
         ],
         header = "include/rust_wrapper.h",
     )
