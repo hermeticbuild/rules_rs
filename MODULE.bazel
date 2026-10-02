@@ -1,6 +1,6 @@
 module(
     name = "rules_rs",
-    bazel_compatibility = [">=7.7.0"],
+    bazel_compatibility = [">=8.5.0"],
 )
 
 ########### BECOME THE RULES_RUST FACADE ################
