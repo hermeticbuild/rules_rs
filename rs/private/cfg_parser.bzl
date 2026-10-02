@@ -189,6 +189,7 @@ def _family_for_os(os_name):
         "aix",
         "haiku",
         "hurd",
+        "nto",
     ]:
         return "unix"
     return ""
@@ -273,6 +274,8 @@ def triple_to_cfg_attrs(triple):
     vendor_part = _get(parts, 1, "unknown")
     os_raw_part = _get(parts, 2, "none")
     env_part = "-".join(parts[3:])
+    if os_raw_part == "nto":
+        env_part = {"qnx710": "nto71", "qnx800": "nto80"}.get(env_part, env_part)
     abi_guess = _abi_from_env(env_part)
 
     # `none` is the OS of bare-metal triples, which may omit the vendor: `<arch>-none[-<abi>]`,

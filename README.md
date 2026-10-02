@@ -418,6 +418,8 @@ ARM soft-float (`*eabi`) and hard-float (`*eabihf`) triples — and the `aarch64
 
 Similarly, `wasm32-wasip1` and `wasm32-wasip1-threads` are disambiguated by a WebAssembly threads constraint that defaults to threads-off (`@rules_rs//rs/platforms/constraints:wasm_threads_off`); the threaded variant opts in with `@rules_rs//rs/platforms/constraints:wasm_threads_on`.
 
+The QNX 7.1 (`*-nto-qnx710`) and 8.0 (`*-nto-qnx800`) targets are disambiguated by `@rules_rs//rs/platforms/constraints:qnx_version`. Custom QNX platforms default to 7.1; add `@rules_rs//rs/platforms/constraints:qnx800` to target 8.0. The published triple platforms already include the appropriate constraint. These target names are supported by Rust 1.89; building for QNX also requires a compatible Rust toolchain and QNX SDK.
+
 </details>
 
 <details>

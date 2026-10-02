@@ -49,6 +49,15 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg('target_env = "gnu"'), win_gnu))
     asserts.true(env, cfg_matches(_cfg('target_env = "gnullvm"'), win_gnullvm))
 
+    # QNX cfg values match rustc 1.89 for both supported architectures.
+    for arch in ["aarch64-unknown", "x86_64-pc"]:
+        for version, target_env in [("710", "nto71"), ("800", "nto80")]:
+            qnx = arch + "-nto-qnx" + version
+            asserts.true(env, cfg_matches(_cfg("unix"), qnx))
+            asserts.true(env, cfg_matches(_cfg('target_os = "nto"'), qnx))
+            asserts.true(env, cfg_matches(_cfg('target_env = "%s"' % target_env), qnx))
+            asserts.false(env, cfg_matches(_cfg("windows"), qnx))
+
     # Wasm facts
     asserts.true(env, cfg_matches(_cfg("wasm"), wasm))
     asserts.false(env, cfg_matches(_cfg("unix"), wasm))

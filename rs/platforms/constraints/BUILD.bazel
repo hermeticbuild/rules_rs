@@ -1,6 +1,23 @@
 package(default_visibility = ["//visibility:public"])
 
 constraint_setting(
+    # QNX releases share CPU/OS constraints but use different SDKs and Rust cfg
+    # environments. Keep existing custom QNX platforms on the 7.1 target.
+    name = "qnx_version",
+    default_constraint_value = "qnx710",
+)
+
+constraint_value(
+    name = "qnx710",
+    constraint_setting = "qnx_version",
+)
+
+constraint_value(
+    name = "qnx800",
+    constraint_setting = "qnx_version",
+)
+
+constraint_setting(
     name = "linux_libc",
     # Keep plain Linux platforms on the normal GNU path unless they explicitly
     # opt into musl. This lets Rust toolchains match either a versioned LLVM
