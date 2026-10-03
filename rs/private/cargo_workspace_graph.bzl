@@ -178,6 +178,16 @@ def cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json = None):
                 target = target,
             ))
 
+        for dep, spec in value.get("build-dependencies", {}).items():
+            dependencies.append(cargo_toml_dep_to_dep_dict(
+                dep,
+                spec,
+                package_name,
+                workspace_cargo_toml_json,
+                is_build = True,
+                target = target,
+            ))
+
     return dependencies
 
 def cargo_toml_fact(cargo_toml_json, workspace_cargo_toml_json = None, strip_prefix = ""):
