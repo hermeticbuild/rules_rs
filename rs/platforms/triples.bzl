@@ -26,6 +26,8 @@ def triple_to_rust_constraint_set(target_triple):
         # https://github.com/rust-lang/rust/blob/c935696dd07ca51e6fba2f6579919eea2a50863b/compiler/rustc_target/src/spec/base/windows_gnu.rs#L44
         if t.abi in ("gnu", "gnullvm"):
             constraints.append("@llvm//constraints/windows/crt:msvcrt")
+    elif t.system == "nto" and t.abi in ("qnx710", "qnx800"):
+        constraints.append("@rules_rs//rs/platforms/constraints:" + t.abi)
 
     riscv_isa_constraint = _RISCV_ISA_CONSTRAINTS.get(target_triple)
     if riscv_isa_constraint:
@@ -181,6 +183,7 @@ SUPPORTED_TIER_3_TRIPLES = [
     "aarch64-unknown-freebsd",
     "aarch64-unknown-netbsd",
     "aarch64-unknown-nto-qnx710",
+    "aarch64-unknown-nto-qnx800",
     "aarch64-unknown-openbsd",
     "arm64e-apple-darwin",
     "arm64e-apple-ios",
@@ -208,6 +211,8 @@ SUPPORTED_TIER_3_TRIPLES = [
     "sparc64-unknown-netbsd",
     "sparc64-unknown-openbsd",
     "wasm64-unknown-unknown",
+    "x86_64-pc-nto-qnx710",
+    "x86_64-pc-nto-qnx800",
     "x86_64-unknown-openbsd",
 ]
 
