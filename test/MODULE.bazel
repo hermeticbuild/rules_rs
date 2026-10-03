@@ -423,3 +423,43 @@ crate.annotation(
     crate = "gtk-sys",
     gen_build_script = "off",
 )
+
+visibility_fixtures = use_extension("//visibility:repos.bzl", "fixtures")
+use_repo(
+    visibility_fixtures,
+    "visibility_dependent",
+    "visibility_empty",
+    "visibility_lib",
+    "visibility_macro",
+    "visibility_private",
+    "visibility_public",
+    allowed_packages = "visibility_groups",
+)
+
+crate.from_cargo(
+    name = "visibility_hub",
+    cargo_lock = "//visibility/workspace:Cargo.lock",
+    cargo_toml = "//visibility/workspace:Cargo.toml",
+    platform_triples = [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc",
+    ],
+)
+crate.annotation(
+    crate = "itoa",
+    repositories = ["visibility_hub"],
+    visibility = ["//visibility:private"],
+)
+crate.annotation(
+    crate = "itoa",
+    repositories = ["visibility_hub"],
+    version = "1.0.18",
+    visibility = ["@allowed_packages//:consumers"],
+)
+
+# Import the spoke deliberately to test that direct labels cannot bypass visibility.
+use_repo(crate, "visibility_hub", "visibility_hub__itoa-1.0.18")

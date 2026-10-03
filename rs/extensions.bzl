@@ -27,6 +27,7 @@ load("//rs/private:registry_config_repository.bzl", "registry_config_repository"
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
 load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:toml2json.bzl", "run_toml2json")
+load("//rs/private:visibility.bzl", "visibility_with_internal_access")
 
 def _spoke_repo(hub_name, name, version):
     s = "%s__%s-%s" % (hub_name, name, version)
@@ -304,6 +305,21 @@ def _generate_hub_and_spokes(
 
     use_home_cargo_credentials = bool(cargo_credentials)
 
+    # Generated crates must remain able to depend on each other even when their
+    # use from the consuming workspace is restricted. Include the real Git
+    # checkout repositories, not just their metadata spokes.
+    internal_packages = {"@%s//:__pkg__" % hub_name: True}
+    for package in packages:
+        source = package["source"]
+        if source.startswith("git+"):
+            remote, commit = parse_git_url(source)
+            repo_name = _external_repo_for_git_source(hub_name, remote, commit)
+        else:
+            repo_name = _spoke_repo(hub_name, package["name"], package["version"])
+        label = "@%s//:__subpackages__" % repo_name
+        internal_packages[label] = True
+    internal_packages = internal_packages.keys()
+
     for package in packages:
         crate_name = package["name"]
         version = package["version"]
@@ -343,6 +359,7 @@ crate.annotation(
 
         kwargs = dict(
             hub_name = hub_name,
+            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages),
             gen_build_script = annotation.gen_build_script,
             build_script_deps = [],
             build_script_deps_select = _select(feature_resolutions.build_deps),
@@ -486,6 +503,7 @@ crate.annotation(
     for name, versions in versions_by_name.items():
         for version in versions:
             annotation = annotation_for(annotations, name, version, hub_name)
+            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages)
             package = package_by_fq[_fq_crate(name, version)]
             target_repo_name = package["target_repo_name"]
             target_package_path = package["target_package_path"]
@@ -494,21 +512,25 @@ crate.annotation(
 alias(
     name = "{name}-{version}",
     actual = "{actual}",
-)""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
+    visibility = {visibility},
+)""".format(visibility = crate_visibility, name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""
 alias(
     name = "{name}-{version}__{binary}",
     actual = "{actual}",
-)""".format(name = name, version = version, binary = binary, actual = _target_label(target_repo_name, target_package_path, binary + "__bin")))
+    visibility = {visibility},
+)""".format(visibility = crate_visibility, name = name, version = version, binary = binary, actual = _target_label(target_repo_name, target_package_path, binary + "__bin")))
 
             for alias_name, target in sorted(annotation.extra_aliased_targets.items()):
                 hub_contents.append("""
 alias(
     name = "{alias_name}-{version}",
     actual = "{actual}",
+    visibility = {visibility},
 )""".format(
+                    visibility = crate_visibility,
                     alias_name = alias_name,
                     version = version,
                     actual = _target_label(target_repo_name, target_package_path, target),
@@ -519,29 +541,35 @@ alias(
             fq = sorted(workspace_versions)[-1]
             default_version = fq[len(name) + 1:]
             annotation = annotation_for(annotations, name, default_version, hub_name)
+            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages)
 
             hub_contents.append("""
 alias(
     name = "{name}",
     actual = ":{fq}",
-)""".format(name = name, fq = fq))
+    visibility = {visibility},
+)""".format(visibility = crate_visibility, name = name, fq = fq))
 
             for binary in annotation.gen_binaries:
                 hub_contents.append("""
 alias(
     name = "{name}__{binary}",
     actual = ":{fq}__{binary}",
-)""".format(name = name, fq = fq, binary = binary))
+    visibility = {visibility},
+)""".format(visibility = crate_visibility, name = name, fq = fq, binary = binary))
 
         if len(versions) == 1:
             version = versions[0]
             annotation = annotation_for(annotations, name, version, hub_name)
+            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages)
             for alias_name in sorted(annotation.extra_aliased_targets.keys()):
                 hub_contents.append("""
 alias(
     name = "{alias_name}",
     actual = ":{alias_name}-{version}",
+    visibility = {visibility},
 )""".format(
+                    visibility = crate_visibility,
                     alias_name = alias_name,
                     version = version,
                 ))
@@ -1122,6 +1150,10 @@ _annotation = tag_class(
         #     doc = "An optional timestamp used for crates originating from a git repository instead of a crate registry. This flag optimizes fetching the source code.",
         # ),
         "strip_prefix": attr.string(),
+        "visibility": attr.label_list(
+            default = ["//visibility:public"],
+            doc = "Visibility of generated libraries, procedural macros, binaries, and hub aliases. Labels resolve in the declaring module. Generated dependencies within the Cargo closure retain access; package metadata remains public.",
+        ),
         "workspace_cargo_toml": attr.string(
             doc = "For crates from git, the ruleset assumes the (workspace) Cargo.toml is in the repo root. This attribute overrides the assumption.",
             default = "Cargo.toml",
