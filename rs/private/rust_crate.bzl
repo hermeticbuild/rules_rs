@@ -1,3 +1,4 @@
+load("@package_metadata//licenses:defs.bzl", "license", "license_kind")
 load("@package_metadata//rules:package_metadata.bzl", "package_metadata")
 load(
     "@rules_rust//rust/private:rust.bzl",
@@ -45,13 +46,29 @@ def rust_crate(
         has_lib,
         binaries,
         use_legacy_rules_rust_platforms,
+        license_expression = "",
+        license_file = None,
         extra_compile_data = [],
         rustc_env = {},
         skip_deps_verification = False,
         crate_visibility = ["//visibility:public"]):
+    license_attributes = []
+    if license_expression or license_file:
+        license_kind(
+            name = name + "_license_kind",
+            identifier = license_expression or "NOASSERTION",
+            full_name = license_expression or "License specified in Cargo license-file",
+        )
+        license(
+            name = name + "_license",
+            kind = ":" + name + "_license_kind",
+            text = license_file,
+        )
+        license_attributes.append(":" + name + "_license")
     package_metadata(
         name = name + "_package_metadata",
         purl = purl,
+        attributes = license_attributes,
         visibility = ["//visibility:public"],
     )
 

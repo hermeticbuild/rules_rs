@@ -1,3 +1,4 @@
+load("@bazel_skylib//lib:paths.bzl", "paths")
 load(":cargo_toml_utils.bzl", "cargo_toml_is_proc_macro")
 load(":select_utils.bzl", "compute_select")
 load(":semver.bzl", "parse_full_version")
@@ -51,36 +52,74 @@ def _exclude_deps_from_features(features):
     return [f for f in features if not f.startswith("dep:")]
 
 _INHERITABLE_PACKAGE_FIELDS = [
-    "version",
-    "edition",
+    "authors",
+    "categories",
     "description",
+    "documentation",
+    "edition",
+    "exclude",
     "homepage",
-    "repository",
+    "include",
+    "keywords",
     "license",
-    # TODO(zbarsky): Do we need to fixup the path for readme and license_file?
+    "license-file",
     "license_file",
-    "rust_version",
+    "publish",
     "readme",
+    "repository",
+    "rust-version",
+    "rust_version",
+    "version",
 ]
 
-def inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml):
-    workspace_package = workspace_cargo_toml.get("workspace", {}).get("package")
-    if not workspace_package:
-        return cargo_toml
+def workspace_package_prefix(workspace_dir, member_dir):
+    """Return the workspace directory relative to a member in the same checkout."""
+    workspace = [p for p in paths.normalize(workspace_dir).split("/") if p and p != "."]
+    member = [p for p in paths.normalize(member_dir).split("/") if p and p != "."]
+    common = 0
+    for left, right in zip(workspace, member):
+        if left != right:
+            break
+        common += 1
+    return "/".join([".."] * (len(member) - common) + workspace[common:])
 
-    crate_package = cargo_toml["package"]
+def inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml, workspace_prefix = ""):
+    """Inherit package values, with file paths relative to the member directory."""
+    workspace_package = workspace_cargo_toml.get("workspace", {}).get("package", {})
+    crate_package = dict(cargo_toml["package"])
     for field in _INHERITABLE_PACKAGE_FIELDS:
         value = crate_package.get(field)
         if type(value) == "dict" and value.get("workspace") == True:
-            crate_package[field] = workspace_package.get(field)
-
-    return cargo_toml
+            if field not in workspace_package:
+                fail("Missing workspace.package." + field)
+            inherited = workspace_package[field]
+            if field in ["readme", "license-file", "license_file"] and type(inherited) == "string":
+                inherited = paths.normalize(paths.join(workspace_prefix, inherited))
+            crate_package[field] = inherited
+    return dict(cargo_toml, package = crate_package)
 
 def package_version(package):
     """Returns the `[package]` version of a decoded Cargo.toml, or Cargo's default `0.0.0`."""
 
     # https://doc.rust-lang.org/cargo/reference/manifest.html#the-version-field
     return package.get("version", "0.0.0")
+
+def _license_file(rctx, package_dir, package):
+    path = package.get("license-file", package.get("license_file"))
+    if path == None:
+        return None
+    if type(path) != "string" or not path or paths.is_absolute(path):
+        fail("package.license-file must be a nonempty relative path")
+    source = package_dir.get_child(path).realpath
+    root = str(rctx.path(".").realpath)
+    if not str(source).startswith(root + "/") or not source.exists or source.is_dir:
+        fail("package.license-file must name a file inside the source repository: " + path)
+
+    # A workspace license can live across a BUILD package boundary. Materialize
+    # its contents beside the crate so metadata can refer to one local label.
+    dest = "__rules_rs_cargo_license.txt"
+    rctx.file(package_dir.get_child(dest), rctx.read(source), executable = False)
+    return dest
 
 def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", gen_build_script = None):
     package_dir = rctx.path(package_path or ".")
@@ -108,7 +147,7 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
         "CARGO_PKG_HOMEPAGE": package.get("homepage", ""),
         "CARGO_PKG_REPOSITORY": package.get("repository", ""),
         "CARGO_PKG_LICENSE": package.get("license", ""),
-        "CARGO_PKG_LICENSE_FILE": package.get("license_file", ""),
+        "CARGO_PKG_LICENSE_FILE": package.get("license-file", package.get("license_file", "")),
         "CARGO_PKG_RUST_VERSION": package.get("rust-version", ""),
         "CARGO_PKG_README": readme,
     }
@@ -168,6 +207,8 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
             "has_lib": repr(has_lib),
             "is_proc_macro": repr(is_proc_macro),
             "links": repr(links),
+            "license_expression": repr(package.get("license", "")),
+            "license_file": repr(_license_file(rctx, package_dir, package)),
         },
     )
 
@@ -175,6 +216,8 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    name = {name},
 {indent}    crate_name = {crate_name},
 {indent}    purl = {purl},
+{indent}    license_expression = {license_expression},
+{indent}    license_file = {license_file},
 {indent}    version = {version},
 {indent}    crate_visibility = {crate_visibility},
 {indent}    aliases = {{
@@ -258,6 +301,8 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         name = values["name"],
         crate_name = values["crate_name"],
         purl = values["purl"],
+        license_expression = values.get("license_expression", repr("")),
+        license_file = values.get("license_file", "None"),
         version = values["version"],
         aliases = list_indent.join(['"%s": "%s"' % kv for kv in attr.aliases.items()]),
         deps = list_indent.join(['"%s"' % d for d in sorted(deps)]),

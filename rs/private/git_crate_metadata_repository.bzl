@@ -14,7 +14,9 @@ def crate(
         is_proc_macro,
         has_lib,
         binaries,
-        package_metadata_bazel_deps):
+        package_metadata_bazel_deps,
+        license_expression = "",
+        license_file = None):
 {rust_crate_call}""".format(
         hub_name = rctx.attr.hub_name,
         rust_crate_call = render_rust_crate_call(
@@ -31,6 +33,8 @@ def crate(
                 has_lib = "has_lib",
                 is_proc_macro = "is_proc_macro",
                 links = "links",
+                license_expression = "license_expression",
+                license_file = "license_file",
                 name = repr(rctx.attr.package_name),
                 purl = repr(rctx.attr.purl),
                 version = repr(rctx.attr.package_version),

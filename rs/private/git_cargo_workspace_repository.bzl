@@ -1,6 +1,7 @@
+load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
-load(":repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields", "package_version")
+load(":repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields", "package_version", "workspace_package_prefix")
 load(":toml2json.bzl", "run_toml2json")
 
 def _render_label_list(labels):
@@ -12,11 +13,11 @@ def _spoke_repo(hub_name, name, version):
         s = s.replace("+", "-")
     return s
 
-def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, workspace_cargo_toml):
+def render_crate_build_file(rctx, dest, additive_build_file_content, gen_binaries, workspace_cargo_toml):
     package_path = rctx.path(dest).dirname
     cargo_toml_path = package_path.get_child("Cargo.toml")
     cargo_toml = run_toml2json(rctx, cargo_toml_path)
-    cargo_toml = inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml)
+    cargo_toml = inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml, workspace_package_prefix(paths.dirname(rctx.attr.workspace_cargo_toml), paths.dirname(dest)))
     package = cargo_toml["package"]
 
     cargo = cargo_build_file_values(
@@ -37,6 +38,8 @@ crate(
     crate_root = {crate_root},
     edition = {edition},
     links = {links},
+    license_expression = {license_expression},
+    license_file = {license_file},
     build_script = {build_script},
     is_proc_macro = {is_proc_macro},
     has_lib = {has_lib},
@@ -51,6 +54,8 @@ crate(
         crate_root = cargo.values["crate_root"],
         edition = cargo.values["edition"],
         links = cargo.values["links"],
+        license_expression = cargo.values["license_expression"],
+        license_file = cargo.values["license_file"],
         build_script = cargo.values["build_script"],
         is_proc_macro = cargo.values["is_proc_macro"],
         has_lib = cargo.values["has_lib"],
@@ -68,7 +73,7 @@ def _git_cargo_workspace_repository_impl(rctx):
 
     workspace_cargo_toml = run_toml2json(rctx, rctx.attr.workspace_cargo_toml)
     for dest, additive_build_file_content in rctx.attr.build_files.items():
-        _render_build_file(rctx, dest, additive_build_file_content, rctx.attr.gen_binaries.get(dest, []), workspace_cargo_toml)
+        render_crate_build_file(rctx, dest, additive_build_file_content, rctx.attr.gen_binaries.get(dest, []), workspace_cargo_toml)
 
     return rctx.repo_metadata(reproducible = True)
 

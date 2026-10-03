@@ -1,0 +1,63 @@
+load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load(":tests.bzl", "license_test", "metadata_test")
+
+package(default_testonly = True)
+
+[
+    metadata_test(
+        name = name + "_metadata_test",
+        licensed = name != "absent",
+        purl = "pkg:cargo/%s@0.1.0" % name,
+        target_under_test = "@license_registry//" + name + ":" + name + "_package_metadata",
+        with_file = name in [
+            "file",
+            "both",
+        ],
+    )
+    for name in [
+        "expression",
+        "file",
+        "both",
+        "absent",
+    ]
+]
+
+[
+    license_test(
+        name = name + "_license_test",
+        expression = "NOASSERTION" if name == "file" else "(MIT OR Apache-2.0) AND BSD-3-Clause",
+        target_under_test = "@license_registry//" + name + ":" + name + "_license",
+        with_file = name != "expression",
+    )
+    for name in [
+        "expression",
+        "file",
+        "both",
+    ]
+]
+
+metadata_test(
+    name = "inherited_metadata_test",
+    purl = "pkg:cargo/member@0.1.0",
+    target_under_test = "@license_checkout//crates/member:member_package_metadata",
+    with_file = True,
+)
+
+license_test(
+    name = "inherited_license_test",
+    expression = "MIT OR Apache-2.0",
+    target_under_test = "@license_checkout//crates/member:member_license",
+    with_file = True,
+)
+
+diff_test(
+    name = "registry_text_test",
+    file1 = "@license_registry//file:legal/LICENSE",
+    file2 = "@license_registry//file:__rules_rs_cargo_license.txt",
+)
+
+diff_test(
+    name = "inherited_text_test",
+    file1 = "@license_checkout//:LICENSE",
+    file2 = "@license_checkout//crates/member:__rules_rs_cargo_license.txt",
+)
