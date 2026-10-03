@@ -1,0 +1,8 @@
+bazel_dep(name = "libusb", version = "1.0.30")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "libusb1-sys",
+    gen_build_script = "off",
+    deps = ["@libusb"],
+)

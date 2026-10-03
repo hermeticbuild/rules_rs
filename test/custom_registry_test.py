@@ -13,6 +13,7 @@ import tarfile
 import tempfile
 import textwrap
 import unittest
+import xml.etree.ElementTree as ET
 
 
 CRATE_NAME = "registry_smoke"
@@ -41,6 +42,7 @@ def _write_registry(directory: pathlib.Path) -> tuple[str, str]:
                 edition = "2021"
                 """,
             "src/lib.rs": "pub fn answer() -> u32 { 42 }\n",
+            "build.rs": 'fn main() { println!("cargo:warning=dependency warning"); }\n',
         },
     )
     archive_path.parent.mkdir(parents=True, exist_ok=True)
@@ -114,7 +116,8 @@ class CustomRegistryTest(unittest.TestCase):
                             "query",
                             "--lockfile_mode=off",
                             "--noimplicit_deps",
-                            f"deps(@{hub_name}//:{CRATE_NAME}, 2)",
+                            "--output=xml",
+                            f"deps(@{hub_name}//:{CRATE_NAME}, 4)",
                         ],
                         cwd=workspace,
                         check=False,
@@ -129,7 +132,14 @@ class CustomRegistryTest(unittest.TestCase):
                         f"{registry_kind} registry Bazel query failed\n"
                         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
                     )
-                    labels = result.stdout.splitlines()
+                    rules = ET.fromstring(result.stdout).findall("rule")
+                    labels = [rule.attrib["name"] for rule in rules]
+                    warnings = [
+                        value.attrib["value"]
+                        for rule in rules
+                        for value in rule.findall("boolean[@name='emit_warnings']")
+                    ]
+                    self.assertEqual(warnings, ["false"])
                     self.assertIn(f"@{hub_name}//:{CRATE_NAME}", labels)
                     self.assertTrue(
                         any(

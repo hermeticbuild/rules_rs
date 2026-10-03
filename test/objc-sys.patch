@@ -1,0 +1,12 @@
+diff --git a/build.rs b/build.rs
+--- a/build.rs
++++ b/build.rs
+@@ -114,6 +114,7 @@
+     if let Runtime::ObjFW(_) = &runtime {
+         // Add compability headers to make `#include <objc/objc.h>` work.
+-        let compat_headers = Path::new(env!("CARGO_MANIFEST_DIR")).join("compat-headers-objfw");
++        let compat_headers =
++            Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap()).join("compat-headers-objfw");
+         cc_args.push_str(" -I");
+         cc_args.push_str(compat_headers.to_str().unwrap());
+     }

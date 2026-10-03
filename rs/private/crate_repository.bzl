@@ -1,8 +1,8 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
-load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
+load("@bazel_tools//tools/build_defs/repo:utils.bzl", "get_auth", "patch")
 load(":cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
 load(":registry_utils.bzl", "registry_download_url_from_template")
-load(":repository_utils.bzl", "cargo_build_file_values", "common_attrs", "render_build_file_content")
+load(":repository_utils.bzl", "cargo_build_file_values", "common_attrs", "package_version", "render_build_file_content")
 load(":toml2json.bzl", "run_toml2json")
 
 def _cargo_purl(package_name, version, qualifiers = {}):
@@ -17,11 +17,12 @@ def _cargo_purl(package_name, version, qualifiers = {}):
 def _generate_build_file(rctx, cargo_toml, purl_qualifiers = {}, package_path = ""):
     cargo = cargo_build_file_values(rctx, cargo_toml, rctx.attr.gen_binaries, package_path = package_path)
     package = cargo_toml["package"]
+    version = package_version(package)
     values = dict(cargo.values)
     values.update({
         "name": repr(package["name"]),
-        "purl": repr(_cargo_purl(package["name"], package["version"], purl_qualifiers)),
-        "version": repr(package["version"]),
+        "purl": repr(_cargo_purl(package["name"], version, purl_qualifiers)),
+        "version": repr(version),
     })
     return render_build_file_content(rctx, rctx.attr, values, bazel_metadata = cargo.bazel_metadata)
 
@@ -43,6 +44,10 @@ def _crate_repository_impl(rctx):
 
     url = registry_download_url_from_template(dl, crate_name, version, sha256)
 
+    auth = {}
+    if not headers:
+        auth = get_auth(rctx, [url])
+
     rctx.download_and_extract(
         url,
         type = "tar.gz",
@@ -50,6 +55,7 @@ def _crate_repository_impl(rctx):
         headers = headers,
         strip_prefix = "%s-%s" % (crate_name, version),
         sha256 = sha256,
+        auth = auth,
     )
 
     patch(rctx)

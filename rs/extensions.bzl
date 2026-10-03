@@ -1,6 +1,6 @@
 load("@bazel_lib//lib:repo_utils.bzl", "repo_utils")
 load("@bazel_skylib//lib:paths.bzl", "paths")
-load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL")
+load("@host_cargo//:defs.bzl", "RS_HOST_CARGO_LABEL")
 load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
 load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
 load(
@@ -22,14 +22,12 @@ load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repos
 load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_repository")
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
-load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags")
+load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
 load("//rs/private:repository_utils.bzl", "render_select")
 load("//rs/private:toml2json.bzl", "run_toml2json")
-
-# Bazel 8 does not define attr.label_list_dict.
-_label_list_dict = getattr(attr, "label_list_dict", attr.string_list_dict)
+load("//rs/private:visibility.bzl", "visibility_with_internal_access")
 
 def _spoke_repo(hub_name, name, version):
     s = "%s__%s-%s" % (hub_name, name, version)
@@ -52,7 +50,35 @@ def _git_crate_purl(name, version, remote, commit):
 
 def _render_ordered_string_list(items):
     """Like _render_string_list but preserves insertion order."""
-    return ",\n        ".join(['"%s"' % item for item in items])
+    return ",\n        ".join([repr(item) for item in items])
+
+def _render_alias(name, actual, visibility):
+    return """
+alias(
+    name = %r,
+    actual = %r,
+    visibility = %r,
+)""" % (name, actual, visibility)
+
+def _render_cargo_lints_target(name, lint_flags):
+    return """
+cargo_lints(
+    name = {name},
+    rustc_lint_flags = [
+        {rustc}
+    ],
+    clippy_lint_flags = [
+        {clippy}
+    ],
+    rustdoc_lint_flags = [
+        {rustdoc}
+    ],
+)""".format(
+        name = repr(name),
+        rustc = _render_ordered_string_list(lint_flags.rustc_lint_flags),
+        clippy = _render_ordered_string_list(lint_flags.clippy_lint_flags),
+        rustdoc = _render_ordered_string_list(lint_flags.rustdoc_lint_flags),
+    )
 
 def _date(ctx, label):
     return
@@ -102,6 +128,7 @@ def _generate_hub_and_spokes(
         cargo_config,
         validate_lockfile,
         debug,
+        generate_lint_config,
         use_legacy_rules_rust_platforms,
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
@@ -120,6 +147,7 @@ def _generate_hub_and_spokes(
         cargo_config (label): .cargo/config.toml file
         validate_lockfile (bool): If true, validate we have appropriate versions in Cargo.lock
         debug (bool): Enable debug logging
+        generate_lint_config (bool): Generate per-package Cargo lint configuration.
         dry_run (bool): Run all computations but do not create repos. Useful for benchmarking.
     """
     _date(mctx, "start")
@@ -285,6 +313,20 @@ def _generate_hub_and_spokes(
 
     use_home_cargo_credentials = bool(cargo_credentials)
 
+    # Generated crates must remain able to depend on each other even when their
+    # use from the consuming workspace is restricted. Include the real Git
+    # checkout repositories, not just their metadata spokes.
+    internal_packages = set(["@%s//:__pkg__" % hub_name])
+    for package in packages:
+        source = package["source"]
+        if source.startswith("git+"):
+            remote, commit = parse_git_url(source)
+            repo_name = _external_repo_for_git_source(hub_name, remote, commit)
+        else:
+            repo_name = _spoke_repo(hub_name, package["name"], package["version"])
+        internal_packages.add("@%s//:__subpackages__" % repo_name)
+    internal_packages = list(internal_packages)
+
     for package in packages:
         crate_name = package["name"]
         version = package["version"]
@@ -298,16 +340,19 @@ def _generate_hub_and_spokes(
             snippet_path = suggested_annotation_snippet_paths.get(crate_name)
             if snippet_path:
                 suggested_annotation = mctx.read(snippet_path).strip()
+        deps_select = _select(feature_resolutions.deps)
+        for triple, deps in annotation.deps_select.items():
+            deps_select[triple] = deps_select.get(triple, []) + deps
 
         if suggested_annotation:
             print("""
-WARNING: A well-known crate annotation exists for {crate}! Apply the following to your MODULE.bazel:
+WARNING: A well-known crate annotation exists to make builds of {crate} more hermetic! Apply the following to your MODULE.bazel:
 
 ```
 {formatted_well_known_annotation}
 ```
 
-You can disable this warning by configuring your MODULE.bazel like so:
+If non-hermetic builds of {crate} are acceptable, then you can disable this warning by configuring your MODULE.bazel like so:
 
 ```
 crate.annotation(
@@ -321,6 +366,7 @@ crate.annotation(
 
         kwargs = dict(
             hub_name = hub_name,
+            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages),
             gen_build_script = annotation.gen_build_script,
             build_script_deps = [],
             build_script_deps_select = _select(feature_resolutions.build_deps),
@@ -334,12 +380,17 @@ crate.annotation(
             build_script_tags = annotation.build_script_tags,
             build_script_tools_select = annotation.build_script_tools_select,
             build_script_env_select = annotation.build_script_env_select,
+            rustc_env = annotation.rustc_env,
             rustc_flags = annotation.rustc_flags,
             rustc_flags_select = annotation.rustc_flags_select,
             data = annotation.data,
             deps = annotation.deps,
             crate_tags = annotation.tags,
-            deps_select = _select(feature_resolutions.deps),
+            deps_select = deps_select,
+            link_deps = annotation.link_deps,
+            link_deps_select = annotation.link_deps_select,
+            target_compatible_with = annotation.target_compatible_with,
+            target_compatible_with_select = annotation.target_compatible_with_select,
             aliases = feature_resolutions.aliases,
             crate_features = annotation.crate_features,
             crate_features_select = _select(feature_resolutions.features_enabled),
@@ -426,69 +477,77 @@ crate.annotation(
     repo_root = _normalize_path(cargo_metadata["workspace_root"])
     workspace_package = _label_directory(cargo_lock_path)
 
+    workspace_lints_present = generate_lint_config and "lints" in workspace_cargo_toml_json.get("workspace", {})
+    workspace_manifest_path = paths.join(repo_root, "Cargo.toml")
+    lint_configs = {}
+    package_lint_targets = []
+    lint_packages = cargo_metadata["packages"] if generate_lint_config else []
+    for index, package in enumerate(lint_packages):
+        manifest_path = _normalize_path(package["manifest_path"])
+        if manifest_path == workspace_manifest_path:
+            cargo_toml_json = workspace_cargo_toml_json
+        else:
+            cargo_toml_json = run_toml2json(mctx, package["manifest_path"])
+        lints = cargo_toml_json.get("lints", {})
+        package_dir = _manifest_package_dir(manifest_path, repo_root)
+        bazel_package = paths.join(workspace_package, package_dir) if package_dir else workspace_package
+
+        if lints.get("workspace") == True:
+            if workspace_lints_present:
+                lint_configs[bazel_package] = "@%s//:workspace_cargo_lints" % hub_name
+        elif lints.get("rust") or lints.get("clippy") or lints.get("rustdoc"):
+            if manifest_path == workspace_manifest_path:
+                lint_configs[bazel_package] = "@%s//:cargo_lints" % hub_name
+            else:
+                target_name = "_cargo_lints_%d" % index
+                lint_configs[bazel_package] = "@%s//:%s" % (hub_name, target_name)
+                package_lint_targets.append((
+                    target_name,
+                    cargo_toml_lint_flags(cargo_toml_json),
+                ))
+
     hub_contents = []
     for name, versions in versions_by_name.items():
+        workspace_versions = workspace_dep_versions_by_name.get(name)
+        default_fq = sorted(workspace_versions)[-1] if workspace_versions else None
         for version in versions:
+            fq = _fq_crate(name, version)
             annotation = annotation_for(annotations, name, version, hub_name)
-            package = package_by_fq[_fq_crate(name, version)]
+            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages)
+            package = package_by_fq[fq]
             target_repo_name = package["target_repo_name"]
             target_package_path = package["target_package_path"]
 
-            hub_contents.append("""
-alias(
-    name = "{name}-{version}",
-    actual = "{actual}",
-)""".format(name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
-
+            hub_contents.append(_render_alias(
+                fq,
+                _target_label(target_repo_name, target_package_path, name),
+                crate_visibility,
+            ))
             for binary in annotation.gen_binaries:
-                hub_contents.append("""
-alias(
-    name = "{name}-{version}__{binary}",
-    actual = "{actual}",
-)""".format(name = name, version = version, binary = binary, actual = _target_label(target_repo_name, target_package_path, binary + "__bin")))
+                hub_contents.append(_render_alias(
+                    "%s__%s" % (fq, binary),
+                    _target_label(target_repo_name, target_package_path, binary + "__bin"),
+                    crate_visibility,
+                ))
 
             for alias_name, target in sorted(annotation.extra_aliased_targets.items()):
-                hub_contents.append("""
-alias(
-    name = "{alias_name}-{version}",
-    actual = "{actual}",
-)""".format(
-                    alias_name = alias_name,
-                    version = version,
-                    actual = _target_label(target_repo_name, target_package_path, target),
+                versioned_alias = "%s-%s" % (alias_name, version)
+                hub_contents.append(_render_alias(
+                    versioned_alias,
+                    _target_label(target_repo_name, target_package_path, target),
+                    crate_visibility,
                 ))
+                if len(versions) == 1:
+                    hub_contents.append(_render_alias(alias_name, ":" + versioned_alias, crate_visibility))
 
-        workspace_versions = workspace_dep_versions_by_name.get(name)
-        if workspace_versions:
-            fq = sorted(workspace_versions)[-1]
-            default_version = fq[len(name) + 1:]
-            annotation = annotation_for(annotations, name, default_version, hub_name)
-
-            hub_contents.append("""
-alias(
-    name = "{name}",
-    actual = ":{fq}",
-)""".format(name = name, fq = fq))
-
-            for binary in annotation.gen_binaries:
-                hub_contents.append("""
-alias(
-    name = "{name}__{binary}",
-    actual = ":{fq}__{binary}",
-)""".format(name = name, fq = fq, binary = binary))
-
-        if len(versions) == 1:
-            version = versions[0]
-            annotation = annotation_for(annotations, name, version, hub_name)
-            for alias_name in sorted(annotation.extra_aliased_targets.keys()):
-                hub_contents.append("""
-alias(
-    name = "{alias_name}",
-    actual = ":{alias_name}-{version}",
-)""".format(
-                    alias_name = alias_name,
-                    version = version,
-                ))
+            if fq == default_fq:
+                hub_contents.append(_render_alias(name, ":" + fq, crate_visibility))
+                for binary in annotation.gen_binaries:
+                    hub_contents.append(_render_alias(
+                        "%s__%s" % (name, binary),
+                        ":%s__%s" % (fq, binary),
+                        crate_visibility,
+                    ))
 
     for package in cargo_metadata["packages"]:
         package_dir = _manifest_package_dir(package["manifest_path"], repo_root)
@@ -499,14 +558,10 @@ alias(
             # at the bazel workspace root, there's no path component to
             # derive a name from.
             continue
-        hub_contents.append("""
-alias(
-    name = "{name}-{version}",
-    actual = "@@//{bazel_package}",
-)""".format(
-            name = package["name"],
-            version = package["version"],
-            bazel_package = bazel_package,
+        hub_contents.append(_render_alias(
+            _fq_crate(package["name"], package["version"]),
+            "@@//" + bazel_package,
+            ["//visibility:public"],
         ))
 
     workspace_deps, conditional_workspace_deps = render_select(
@@ -532,28 +587,21 @@ filegroup(
         ),
     )
 
-    lint_flags = cargo_toml_lint_flags(workspace_cargo_toml_json)
-    hub_contents.append(
-        """
-load("@rules_rs//rs/private:cargo_lints.bzl", "cargo_lints")
+    hub_contents.append("""load("@rules_rs//rs/private:cargo_lints.bzl", "cargo_lints")""")
 
-cargo_lints(
-    name = "cargo_lints",
-    rustc_lint_flags = [
-        {rustc}
-    ],
-    clippy_lint_flags = [
-        {clippy}
-    ],
-    rustdoc_lint_flags = [
-        {rustdoc}
-    ],
-)""".format(
-            rustc = _render_ordered_string_list(lint_flags.rustc_lint_flags),
-            clippy = _render_ordered_string_list(lint_flags.clippy_lint_flags),
-            rustdoc = _render_ordered_string_list(lint_flags.rustdoc_lint_flags),
-        ),
-    )
+    hub_contents.append(_render_cargo_lints_target(
+        "cargo_lints",
+        cargo_toml_lint_flags(workspace_cargo_toml_json),
+    ))
+
+    if workspace_lints_present:
+        hub_contents.append(_render_cargo_lints_target(
+            "workspace_cargo_lints",
+            workspace_cargo_toml_lint_flags(workspace_cargo_toml_json),
+        ))
+
+    for target_name, lint_flags in package_lint_targets:
+        hub_contents.append(_render_cargo_lints_target(target_name, lint_flags))
 
     resolved_platforms = []
     for triple in platform_triples:
@@ -589,6 +637,13 @@ def edition(package_name = None):
         return None
 
     return dep_data["edition"]
+
+def lint_config(package_name = None):
+    dep_data = DEP_DATA.get(package_name or native.package_name())
+    if not dep_data:
+        return None
+
+    return dep_data.get("lint_config")
 
 def all_crate_deps(
         normal = False,
@@ -631,6 +686,7 @@ RESOLVED_PLATFORMS = select({{
         repo_root = repo_root,
         workspace_package = workspace_package,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        lint_configs = lint_configs,
     ))
 
     if dry_run:
@@ -687,7 +743,7 @@ def _crate_impl(mctx):
             fail("`.from_cargo` is required. Please update %s" % mod.name)
 
         for cfg in mod.tags.from_cargo:
-            annotations = build_annotation_map(mod, cfg.name)
+            annotations = build_annotation_map(mod, cfg.name, cfg.platform_triples)
             annotations_by_hub_name[cfg.name] = annotations
             mctx.watch(cfg.cargo_lock)
             mctx.watch(cfg.cargo_toml)
@@ -720,7 +776,7 @@ def _crate_impl(mctx):
 
     for mod in mctx.modules:
         for cfg in mod.tags.from_cargo:
-            annotations = build_annotation_map(mod, cfg.name)
+            annotations = annotations_by_hub_name[cfg.name]
             effective_cargo_config = cargo_config_by_hub_name[cfg.name]
             use_home_cargo_credentials = cfg.use_home_cargo_credentials or global_use_home_cargo_credentials
 
@@ -771,19 +827,19 @@ def _crate_impl(mctx):
             effective_cargo_config = cargo_config_by_hub_name[cfg.name]
             cargo_credentials = cargo_credentials_by_hub_name[cfg.name]
 
-            annotations = build_annotation_map(mod, cfg.name)
+            annotations = annotations_by_hub_name[cfg.name]
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.use_legacy_rules_rust_platforms)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms)
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
     for mod in mctx.modules:
         for cfg in mod.tags.from_cargo:
-            annotations = build_annotation_map(mod, cfg.name)
+            annotations = annotations_by_hub_name[cfg.name]
             for package in packages_by_hub_name[cfg.name]:
                 source = package.get("source", "")
                 if not source.startswith("git+"):
@@ -891,6 +947,10 @@ _from_cargo = tag_class(
         ),
         "cargo_lock": attr.label(),
         "cargo_config": attr.label(),
+        "generate_lint_config": attr.bool(
+            doc = "If true, generate per-package Cargo lint configuration by reading workspace member manifests.",
+            default = False,
+        ),
         "use_home_cargo_credentials": attr.bool(
             doc = "If set, the ruleset will load `~/cargo/credentials.toml` and attach those credentials to registry requests.",
         ),
@@ -910,22 +970,50 @@ _from_cargo = tag_class(
     },
 )
 
+_ANNOTATION_COMMON_ATTRS = {
+    "crate": attr.string(
+        doc = "The name of the crate the annotation is applied to",
+        mandatory = True,
+    ),
+    "version": attr.string(
+        doc = "The version of the crate the annotation is applied to. Defaults to all versions.",
+        default = "*",
+    ),
+    "repositories": attr.string_list(
+        doc = "Repository names specified by crate.from_cargo(name=...). Defaults to all repositories.",
+    ),
+}
+
+_ANNOTATION_SELECTABLE_ATTRS = {
+    "build_script_data": attr.label_list(
+        doc = "Labels to add to a crate's `cargo_build_script::data` attribute.",
+    ),
+    "build_script_env": attr.string_dict(
+        doc = "Environment variables to add to a crate's `cargo_build_script::env` attribute.",
+    ),
+    "build_script_tools": attr.label_list(
+        doc = "Labels to add to a crate's `cargo_build_script::tools` attribute.",
+    ),
+    "crate_features": attr.string_list(
+        doc = "Features to add to a crate's `rust_library::crate_features` attribute.",
+    ),
+    "deps": attr.label_list(
+        doc = "Dependencies to add to a crate's `rust_library::deps` attribute.",
+    ),
+    "link_deps": attr.label_list(
+        doc = "Native dependencies to add to a crate's `rust_library::link_deps` attribute.",
+    ),
+    "rustc_flags": attr.string_list(
+        doc = "Flags to add to a crate's `rust_library::rustc_flags` attribute.",
+    ),
+    "target_compatible_with": attr.label_list(
+        doc = "Constraints to add to a crate's `target_compatible_with` attribute.",
+    ),
+}
+
 _annotation = tag_class(
     doc = "A collection of extra attributes and settings for a particular crate.",
-    attrs = {
-        "crate": attr.string(
-            doc = "The name of the crate the annotation is applied to",
-            mandatory = True,
-        ),
-        "version": attr.string(
-            doc = "The version of the crate the annotation is applied to. Defaults to all versions.",
-            default = "*",
-        ),
-        "repositories": attr.string_list(
-            doc = "A list of repository names specified from `crate.from_cargo(name=...)` that this annotation is applied to. Defaults to all repositories.",
-            default = [],
-        ),
-    } | {
+    attrs = _ANNOTATION_COMMON_ATTRS | _ANNOTATION_SELECTABLE_ATTRS | {
         "additive_build_file": attr.label(
             doc = "A file containing extra contents to write to the bottom of generated BUILD files.",
         ),
@@ -935,24 +1023,12 @@ _annotation = tag_class(
         # "alias_rule": attr.string(
         #     doc = "Alias rule to use instead of `native.alias()`.  Overrides [render_config](#render_config)'s 'default_alias_rule'.",
         # ),
-        "build_script_data": attr.label_list(
-            doc = "A list of labels to add to a crate's `cargo_build_script::data` attribute.",
-        ),
         # "build_script_data_glob": attr.string_list(
         #     doc = "A list of glob patterns to add to a crate's `cargo_build_script::data` attribute",
         # ),
-        "build_script_data_select": _label_list_dict(
-            doc = "Labels to add to a crate's `cargo_build_script::data` attribute, keyed by platform triplet.",
-        ),
         # "build_script_deps": attr.label_list(
         #     doc = "A list of labels to add to a crate's `cargo_build_script::deps` attribute.",
         # ),
-        "build_script_env": attr.string_dict(
-            doc = "Additional environment variables to set on a crate's `cargo_build_script::env` attribute.",
-        ),
-        "build_script_env_select": attr.string_dict(
-            doc = "Additional environment variables to set on a crate's `cargo_build_script::env` attribute. Key should be the platform triplet. Value should be a JSON encoded dictionary mapping variable names to values, for example `{\"FOO\": \"bar\"}`.",
-        ),
         "build_script_env_files": attr.label_list(
             doc = "Files containing additional environment variables for a crate's `cargo_build_script`.",
             allow_files = True,
@@ -976,12 +1052,6 @@ _annotation = tag_class(
         "build_script_tags": attr.string_list(
             doc = "A list of tags to add to a crate's `cargo_build_script` target.",
         ),
-        "build_script_tools": attr.label_list(
-            doc = "A list of labels to add to a crate's `cargo_build_script::tools` attribute.",
-        ),
-        "build_script_tools_select": _label_list_dict(
-            doc = "Labels to add to a crate's `cargo_build_script::tools` attribute, keyed by platform triplet.",
-        ),
         # "compile_data": attr.label_list(
         # doc = "A list of labels to add to a crate's `rust_library::compile_data` attribute.",
         # ),
@@ -991,12 +1061,6 @@ _annotation = tag_class(
         # "compile_data_glob_excludes": attr.string_list(
         # doc = "A list of glob patterns to be excllued from a crate's `rust_library::compile_data` attribute.",
         # ),
-        "crate_features": attr.string_list(
-            doc = "A list of strings to add to a crate's `rust_library::crate_features` attribute.",
-        ),
-        "crate_features_select": attr.string_list_dict(
-            doc = "A list of strings to add to a crate's `rust_library::crate_features` attribute. Keys should be the platform triplet. Value should be a list of features.",
-        ),
         "data": attr.label_list(
             doc = "A list of labels to add to a crate's `rust_library::data` attribute.",
         ),
@@ -1047,22 +1111,20 @@ _annotation = tag_class(
         "patches": attr.label_list(
             doc = "The `patches` attribute of a Bazel repository rule. See [http_archive.patches](https://docs.bazel.build/versions/main/repo/http.html#http_archive-patches)",
         ),
-        # "rustc_env": attr.string_dict(
-        #     doc = "Additional variables to set on a crate's `rust_library::rustc_env` attribute.",
-        # ),
+        "rustc_env": attr.string_dict(
+            doc = "Additional variables to set on a crate's `rust_library::rustc_env` attribute.",
+        ),
         # "rustc_env_files": attr.label_list(
         #     doc = "A list of labels to set on a crate's `rust_library::rustc_env_files` attribute.",
         # ),
-        "rustc_flags": attr.string_list(
-            doc = "A list of strings to set on a crate's `rust_library::rustc_flags` attribute.",
-        ),
-        "rustc_flags_select": attr.string_list_dict(
-            doc = "A list of strings to set on a crate's `rust_library::rustc_flags` attribute. Keys should be the platform triplet. Value should be a list of flags.",
-        ),
         # "shallow_since": attr.string(
         #     doc = "An optional timestamp used for crates originating from a git repository instead of a crate registry. This flag optimizes fetching the source code.",
         # ),
         "strip_prefix": attr.string(),
+        "visibility": attr.label_list(
+            default = ["//visibility:public"],
+            doc = "Visibility of generated libraries, procedural macros, binaries, and hub aliases. Labels resolve in the declaring module. Generated dependencies within the Cargo closure retain access; package metadata remains public.",
+        ),
         "workspace_cargo_toml": attr.string(
             doc = "For crates from git, the ruleset assumes the (workspace) Cargo.toml is in the repo root. This attribute overrides the assumption.",
             default = "Cargo.toml",
@@ -1070,10 +1132,21 @@ _annotation = tag_class(
     },
 )
 
+_annotation_select = tag_class(
+    doc = "A collection of build attributes applied to a crate for selected platform triples. Source attributes such as patches and workspace_cargo_toml belong on crate.annotation.",
+    attrs = _ANNOTATION_COMMON_ATTRS | {
+        "triples": attr.string_list(
+            doc = "Platform triples to which the annotation applies.",
+            mandatory = True,
+        ),
+    } | _ANNOTATION_SELECTABLE_ATTRS,
+)
+
 crate = module_extension(
     implementation = _crate_impl,
     tag_classes = {
         "annotation": _annotation,
+        "annotation_select": _annotation_select,
         "config": _config,
         "from_cargo": _from_cargo,
     },

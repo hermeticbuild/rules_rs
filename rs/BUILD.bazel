@@ -77,17 +77,11 @@ bzl_library(
         "//rs/private:registry_utils",
         "//rs/private:repository_utils",
         "//rs/private:toml2json",
+        "//rs/private:visibility",
         "@bazel_lib//lib:repo_utils",
         "@bazel_skylib//lib:paths",
-        "@rs_rust_host_tools//:defs.bzl",
+        "@host_cargo//:defs.bzl",
     ],
-)
-
-# TODO(zbarsky): Stardoc won't work here
-filegroup(
-    name = "rust_crate",
-    srcs = ["rust_crate.bzl"],
-    visibility = ["//visibility:public"],
 )
 
 bzl_library(

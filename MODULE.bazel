@@ -1,6 +1,6 @@
 module(
     name = "rules_rs",
-    bazel_compatibility = [">=7.7.0"],
+    bazel_compatibility = [">=8.5.0"],
 )
 
 ########### BECOME THE RULES_RUST FACADE ################
@@ -29,9 +29,13 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 toolchains = use_extension("//rs/toolchains:module_extension.bzl", "toolchains")
 use_repo(
     toolchains,
-    "default_rust_toolchains",
-    "rs_rust_host_tools",
+    "host_cargo",
+    "rust_toolchain_labels",
 )
+
+dev_toolchains = use_extension("//rs/toolchains:module_extension.bzl", "toolchains", dev_dependency = True)
+dev_toolchains.toolchain()
+use_repo(dev_toolchains, "default_rust_toolchains")
 
 [
     http_file(
@@ -56,11 +60,10 @@ bazel_dep(name = "bazel_skylib", version = "1.4.1")
 bazel_dep(name = "hermetic_launcher", version = "0.0.8")
 bazel_dep(name = "package_metadata", version = "0.0.7")
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "protobuf", version = "34.0.bcr.1", repo_name = "com_google_protobuf")
 bazel_dep(name = "rules_cc", version = "0.2.8")
 bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "rules_python", version = "1.6.3")
-bazel_dep(name = "llvm", version = "0.8.9")
+bazel_dep(name = "llvm", version = "0.8.18")
 
 osx = use_extension("@llvm//extensions:osx.bzl", "osx")
 use_repo(osx, "macos_sdk")
@@ -190,7 +193,7 @@ bazel_dep(name = "bazel_skylib_gazelle_plugin", version = "1.8.2", dev_dependenc
 bazel_dep(name = "buildifier_prebuilt", version = "6.1.2", dev_dependency = True)
 
 register_toolchains(
-    "@default_rust_toolchains//:all",
+    "@default_rust_toolchains//...",
     dev_dependency = True,
 )
 

@@ -76,6 +76,12 @@ def inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml):
 
     return cargo_toml
 
+def package_version(package):
+    """Returns the `[package]` version of a decoded Cargo.toml, or Cargo's default `0.0.0`."""
+
+    # https://doc.rust-lang.org/cargo/reference/manifest.html#the-version-field
+    return package.get("version", "0.0.0")
+
 def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", gen_build_script = None):
     package_dir = rctx.path(package_path or ".")
     package = cargo_toml["package"]
@@ -83,7 +89,7 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
         gen_build_script = rctx.attr.gen_build_script
 
     name = package["name"]
-    version = package["version"]
+    version = package_version(package)
     parsed_version = parse_full_version(version)
 
     readme = package.get("readme", "")
@@ -170,12 +176,16 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    crate_name = {crate_name},
 {indent}    purl = {purl},
 {indent}    version = {version},
+{indent}    crate_visibility = {crate_visibility},
 {indent}    aliases = {{
 {indent}        {aliases}
 {indent}    }},
 {indent}    deps = [
 {indent}        {deps}
 {indent}    ]{extra_deps}{conditional_deps},
+{indent}    link_deps = [
+{indent}        {link_deps}
+{indent}    ]{conditional_link_deps},
 {indent}    data = [
 {indent}        {data}
 {indent}    ],
@@ -186,7 +196,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 {indent}    edition = {edition},
 {rustc_env_attr}{indent}    rustc_flags = {rustc_flags}{conditional_rustc_flags},
 {indent}    tags = {tags},
-{indent}    target_compatible_with = RESOLVED_PLATFORMS,
+{indent}    target_compatible_with = RESOLVED_PLATFORMS + {target_compatible_with}{conditional_target_compatible_with},
 {indent}    links = {links},
 {indent}    build_script = {build_script},
 {indent}    build_script_data = {build_script_data}{conditional_build_script_data},
@@ -208,7 +218,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
-    # See `rust_crate.bzl` for details.
+    # See `rs/private/rust_crate.bzl` for details.
     crate_features, conditional_crate_features = compute_select(
         _exclude_deps_from_features(attr.crate_features),
         {platform: _exclude_deps_from_features(features) for platform, features in attr.crate_features_select.items()},
@@ -219,6 +229,8 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     build_script_tools, conditional_build_script_tools = render_select(attr.build_script_tools, attr.build_script_tools_select, use_legacy_rules_rust_platforms)
     rustc_flags, conditional_rustc_flags = render_select(attr.rustc_flags, attr.rustc_flags_select, use_legacy_rules_rust_platforms)
     deps, conditional_deps = render_select(attr.deps + bazel_metadata.get("deps", []), attr.deps_select, use_legacy_rules_rust_platforms)
+    link_deps, conditional_link_deps = render_select(getattr(attr, "link_deps", []), getattr(attr, "link_deps_select", {}), use_legacy_rules_rust_platforms)
+    target_compatible_with, conditional_target_compatible_with = render_select(getattr(attr, "target_compatible_with", []), getattr(attr, "target_compatible_with_select", {}), use_legacy_rules_rust_platforms)
     build_script_env_files = getattr(attr, "build_script_env_files", []) + ["cargo_toml_env_vars.env"]
 
     conditional_build_script_env = render_select_build_script_env(attr.build_script_env_select, use_legacy_rules_rust_platforms)
@@ -241,6 +253,7 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
     skip_deps_verification_attr = "%s    skip_deps_verification = True,\n" % indent if skip_deps_verification else ""
 
     return _RUST_CRATE_MACRO_CALL.format(
+        crate_visibility = repr([str(label) for label in attr.crate_visibility]),
         indent = indent,
         name = values["name"],
         crate_name = values["crate_name"],
@@ -250,6 +263,8 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         deps = list_indent.join(['"%s"' % d for d in sorted(deps)]),
         extra_deps = extra_deps,
         conditional_deps = " + " + conditional_deps if conditional_deps else "",
+        link_deps = list_indent.join(['"%s"' % d for d in sorted(link_deps)]),
+        conditional_link_deps = " + " + conditional_link_deps if conditional_link_deps else "",
         data = list_indent.join(['"%s"' % str(d) for d in attr.data]),
         extra_compile_data_attr = extra_compile_data_attr,
         crate_features = repr(sorted(crate_features)),
@@ -261,6 +276,8 @@ def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", i
         rustc_flags = repr(rustc_flags),
         conditional_rustc_flags = " + " + conditional_rustc_flags if conditional_rustc_flags else "",
         tags = repr(attr.crate_tags),
+        target_compatible_with = repr(sorted(target_compatible_with)),
+        conditional_target_compatible_with = " + " + conditional_target_compatible_with if conditional_target_compatible_with else "",
         links = values["links"],
         build_script = values["build_script"],
         build_script_data = repr(build_script_data),
@@ -290,7 +307,7 @@ def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
     additive_build_file_content += bazel_metadata.get("additive_build_file_content", "")
 
     return """\
-load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
@@ -300,6 +317,7 @@ load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
     ) + additive_build_file_content
 
 rust_crate_attrs = {
+    "crate_visibility": attr.label_list(default = ["//visibility:public"]),
     "hub_name": attr.string(),
     "gen_build_script": attr.string(),
     "build_script_deps": attr.label_list(),
@@ -316,12 +334,17 @@ rust_crate_attrs = {
     "build_script_tools": attr.label_list(),
     "build_script_tools_select": _label_list_dict(),
     "build_script_tags": attr.string_list(),
+    "rustc_env": attr.string_dict(),
     "rustc_flags": attr.string_list(),
     "rustc_flags_select": attr.string_list_dict(),
     "crate_tags": attr.string_list(),
     "data": attr.label_list(),
     "deps": attr.label_list(),
     "deps_select": _label_list_dict(),
+    "link_deps": attr.label_list(),
+    "link_deps_select": _label_list_dict(),
+    "target_compatible_with": attr.label_list(),
+    "target_compatible_with_select": _label_list_dict(),
     "aliases": attr.string_dict(),
     "crate_features": attr.string_list(),
     "crate_features_select": attr.string_list_dict(),

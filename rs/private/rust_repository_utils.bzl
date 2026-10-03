@@ -2,6 +2,7 @@ load("@bazel_tools//tools/build_defs/repo:utils.bzl", "get_auth")
 load("@rules_rust//rust/platform:triple_mappings.bzl", "system_to_dylib_ext")
 
 DEFAULT_STATIC_RUST_URL_TEMPLATES = ["https://static.rust-lang.org/dist/{}.tar.xz"]
+RUST_REDIST_RELEASE_URL_TEMPLATE = "https://github.com/hermeticbuild/rust-redist/releases/download/{}/"
 
 _rustc_lib_build_file_tmpl = """\
 filegroup(
@@ -62,12 +63,20 @@ def rustc_lib_build_file(target_triple):
         target_triple = target_triple.str,
     )
 
-def _archive_extension(urls):
+def rust_redist_manifest_url(version):
+    return RUST_REDIST_RELEASE_URL_TEMPLATE.format(version) + "manifest.json"
+
+def rust_redist_url_templates(version):
+    return [RUST_REDIST_RELEASE_URL_TEMPLATE.format(version) + "{}.tar.zst"]
+
+def rust_archive_extension(urls):
     url = urls[0] if urls else ""
     if url.endswith(".tar.gz"):
         return ".tar.gz"
     if url.endswith(".tar.xz"):
         return ".tar.xz"
+    if url.endswith(".tar.zst"):
+        return ".tar.zst"
     return ""
 
 def rust_tool_archive(rctx, tool, dir, triple, sha256 = None):
@@ -76,7 +85,7 @@ def rust_tool_archive(rctx, tool, dir, triple, sha256 = None):
     tool_path = produce_tool_path(tool, rctx.attr.version, triple)
     return struct(
         auth = get_auth(rctx, urls),
-        output = tool_suburl.replace("/", "_").replace(":", "_") + _archive_extension(urls),
+        output = tool_suburl.replace("/", "_").replace(":", "_") + rust_archive_extension(urls),
         sha256 = sha256 or rctx.attr.sha256,
         strip_prefix = "{}/{}".format(tool_path, dir),
         urls = urls,

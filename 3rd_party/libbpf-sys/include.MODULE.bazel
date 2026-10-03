@@ -1,0 +1,8 @@
+bazel_dep(name = "libbpf", version = "1.7.0")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "libbpf-sys",
+    gen_build_script = "off",
+    deps = ["@libbpf"],
+)

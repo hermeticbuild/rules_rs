@@ -8,6 +8,9 @@ load(
     "includes_rust_analyzer_proc_macro_srv",
     "produce_tool_path",
     "produce_tool_suburl",
+    "rust_archive_extension",
+    "rust_redist_manifest_url",
+    "rust_redist_url_templates",
     "rustc_lib_build_file",
 )
 
@@ -21,6 +24,26 @@ def _rust_tool_archive_names_test_impl(ctx):
     asserts.equals(env, "rustc-1.92.0-x86_64-unknown-linux-gnu", produce_tool_suburl("rustc", linux_triple, "1.92.0", "2026-04-20"))
     asserts.equals(env, "2026-04-20/rustc-nightly-x86_64-unknown-linux-gnu", produce_tool_suburl("rustc", linux_triple, "nightly", "2026-04-20"))
     asserts.equals(env, "2026-04-20/rust-src-beta", produce_tool_suburl("rust-src", None, "beta", "2026-04-20"))
+
+    return unittest.end(env)
+
+def _rust_archive_urls_test_impl(ctx):
+    env = unittest.begin(ctx)
+
+    asserts.equals(
+        env,
+        "https://github.com/hermeticbuild/rust-redist/releases/download/1.97.1/manifest.json",
+        rust_redist_manifest_url("1.97.1"),
+    )
+    asserts.equals(
+        env,
+        ["https://github.com/hermeticbuild/rust-redist/releases/download/1.97.1/{}.tar.zst"],
+        rust_redist_url_templates("1.97.1"),
+    )
+    asserts.equals(env, ".tar.zst", rust_archive_extension(rust_redist_url_templates("1.97.1")))
+    asserts.equals(env, ".tar.xz", rust_archive_extension(DEFAULT_STATIC_RUST_URL_TEMPLATES))
+    asserts.equals(env, ".tar.gz", rust_archive_extension(["https://static.rust-lang.org/dist/{}.tar.gz"]))
+    asserts.equals(env, "", rust_archive_extension([]))
 
     return unittest.end(env)
 
@@ -49,6 +72,7 @@ def _rustc_lib_build_file_test_impl(ctx):
     return unittest.end(env)
 
 _rust_tool_archive_names_test = unittest.make(_rust_tool_archive_names_test_impl)
+_rust_archive_urls_test = unittest.make(_rust_archive_urls_test_impl)
 _rust_analyzer_proc_macro_srv_versions_test = unittest.make(_rust_analyzer_proc_macro_srv_versions_test_impl)
 _rustc_lib_build_file_test = unittest.make(_rustc_lib_build_file_test_impl)
 
@@ -56,6 +80,7 @@ def rust_repository_utils_tests():
     return unittest.suite(
         "rust_repository_utils_tests",
         _rust_tool_archive_names_test,
+        _rust_archive_urls_test,
         _rust_analyzer_proc_macro_srv_versions_test,
         _rustc_lib_build_file_test,
     )

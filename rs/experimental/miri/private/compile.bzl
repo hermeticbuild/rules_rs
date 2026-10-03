@@ -298,6 +298,7 @@ def _miri_rustc_compile_toolchain(toolchain, rust_toolchain, sysroot, target_tri
 
 def _miri_host_crate_info_dict(crate, output, deps, proc_macro_deps):
     crate_info = structs.to_dict(crate)
+    crate_info.pop("extra_named_deps")
     crate_info.update({
         "deps": deps,
         "metadata": None,
@@ -325,6 +326,7 @@ def _miri_host_compile_action(ctx, crate, toolchain, rust_toolchain, deps, proc_
         tool_file = toolchain.miri,
         toolchain = MIRI_TOOLCHAIN_TYPE,
         crate_info_dict = _miri_host_crate_info_dict(crate, output, deps, proc_macro_deps),
+        extra_named_deps = crate.extra_named_deps,
         env = {
             "MIRI_BE_RUSTC": "host",
             "MIRI_SYSROOT": toolchain.host_miri_sysroot.path,

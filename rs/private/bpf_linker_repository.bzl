@@ -1,14 +1,14 @@
 """Repository rule for downloading bpf-linker."""
 
-_BPF_LINKER_VERSION = "0.10.4"
+_BPF_LINKER_VERSION = "0.11.0"
 
 _BPF_LINKER_ARCHIVES = {
-    "aarch64-apple-darwin": "7e0c692b2e839afdb3e2f1053bd9a94e55b99f7b6a94ef69990449a6d72837ce",
-    "aarch64-pc-windows-gnullvm": "341ea6db58a7d5ac7348d835e86a8da9ef351445704646f9632a4410d89ae60a",
-    "aarch64-unknown-linux-musl": "c3638cd3cb735ff85705905a07e0df61c0f9426480334c8e2efe5cb92fd9d3de",
-    "x86_64-apple-darwin": "55771c82883b414f3f4e8bd081a182e8deefa1b953ab249c85b253fc2b69de48",
-    "x86_64-pc-windows-gnullvm": "d3e3448333f4dd7e49103071a547ff9a944d6f277b48bdcfe9d9326dca725260",
-    "x86_64-unknown-linux-musl": "4dda77daab6c5f120a468e6d3ede2498f5bd47ece712172cfb7290176d93d015",
+    "aarch64-apple-darwin": "d3b1952971472334e3f3e76760c33a6a97f151af45b9b89a70e06d92e5bb4a75",
+    "aarch64-pc-windows-gnullvm": "6ff367c572498f7b27e6ad902c303b6936fcd6bdee0bfd26d904f598ca849791",
+    "aarch64-unknown-linux-musl": "d09ddd83303e9ab1443f51e0e284680154009646a3ce141c63d838ee61b73eb9",
+    "x86_64-apple-darwin": "10eec9ff4397ec69d15e522ba6d579aecd8fc4cbec34d86cae7ea943bb5a9a55",
+    "x86_64-pc-windows-gnullvm": "b6ff405d8f8469f8bb34c6e40c000d664bdf97f291cca8e76492658a9703ec6c",
+    "x86_64-unknown-linux-musl": "10f62ba9ab7e544d538370552660efcb4f1a19153d5752bbf0f6b51f3bada450",
 }
 
 _BPF_LINKER_ARCHIVE_TRIPLES = {

@@ -178,6 +178,16 @@ def cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json = None):
                 target = target,
             ))
 
+        for dep, spec in value.get("build-dependencies", {}).items():
+            dependencies.append(cargo_toml_dep_to_dep_dict(
+                dep,
+                spec,
+                package_name,
+                workspace_cargo_toml_json,
+                is_build = True,
+                target = target,
+            ))
+
     return dependencies
 
 def cargo_toml_fact(cargo_toml_json, workspace_cargo_toml_json = None, strip_prefix = ""):
@@ -670,7 +680,8 @@ def workspace_dep_data(
         cfg_match_cache,
         repo_root,
         workspace_package,
-        use_legacy_rules_rust_platforms):
+        use_legacy_rules_rust_platforms,
+        lint_configs = {}):
     dep_data = {}
     for package in cargo_metadata["packages"]:
         aliases = {}
@@ -753,7 +764,7 @@ def workspace_dep_data(
         build_deps, build_deps_by_platform = shared_and_per_platform(build_deps, use_legacy_rules_rust_platforms)
         dev_deps, dev_deps_by_platform = shared_and_per_platform(dev_deps, use_legacy_rules_rust_platforms)
 
-        dep_data[bazel_package] = {
+        package_dep_data = {
             "aliases": aliases,
             "binaries": binaries,
             "build_deps": build_deps,
@@ -768,6 +779,10 @@ def workspace_dep_data(
             "edition": package.get("edition", "2015"),
             "shared_libraries": shared_libraries,
         }
+        lint_config = lint_configs.get(bazel_package)
+        if lint_config:
+            package_dep_data["lint_config"] = lint_config
+        dep_data[bazel_package] = package_dep_data
 
     return dep_data
 

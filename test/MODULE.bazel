@@ -1,5 +1,5 @@
 bazel_dep(name = "platforms", version = "1.1.0")
-bazel_dep(name = "llvm", version = "0.8.11")
+bazel_dep(name = "llvm", version = "0.8.18")
 bazel_dep(name = "apple_support", version = "1.24.2")
 
 # SBOM
@@ -90,7 +90,7 @@ toolchains.toolchain(
 toolchains.experimental_miri(version = "nightly/2026-04-20")
 use_repo(toolchains, "default_rust_toolchains", "miri_toolchains")
 
-register_toolchains("@default_rust_toolchains//:all")
+register_toolchains("@default_rust_toolchains//...")
 
 register_toolchains("@miri_toolchains//:all")
 
@@ -126,6 +126,7 @@ TESTS = [
     "platform_dep_features",
     "self_dev_dependency",
     "target_workspace_dep_feature",
+    "unversioned_path_dependency",
     "vendored_crate_override",
     "workspace_default_features",
     "vendored_workspace_dep",
@@ -133,6 +134,7 @@ TESTS = [
     "workspace_git_dep",
     "workspace_path_dependency",
     "workspace_hyphen_dep_aliases",
+    "workspace_lints",
     "workspace_renamed_path_dep_aliases",
     "binaries",
     "binary_only",
@@ -147,6 +149,7 @@ TESTS = [
         # cargo_config = "//:.cargo/config.toml",
         # use_home_cargo_credentials = True,
         debug = True,
+        generate_lint_config = test == "workspace_lints",
         platform_triples = [
             "aarch64-unknown-linux-gnu",
             "aarch64-apple-darwin",
@@ -167,6 +170,7 @@ crate.from_cargo(
     cargo_lock = "//:Cargo.lock",
     cargo_toml = "//:Cargo.toml",
     debug = True,
+    generate_lint_config = True,
     platform_triples = [
         "aarch64-unknown-linux-gnu",
         "aarch64-apple-darwin",
@@ -177,35 +181,48 @@ crate.from_cargo(
     ],
 )
 use_repo(crate, "root_package")
-
 crate.annotation(
     crate = "rustls",
     # Test for https://github.com/bazelbuild/rules_rust/issues/3626
     crate_features = ["fips"],
-    crate_features_select = {
-        "x86_64-unknown-linux-gnu": ["fips"],
-    },
     repositories = ["annotation_crate_features"],
-    rustc_flags_select = {
-        "x86_64-unknown-linux-gnu": ["--cfg=rules_rs_annotation_smoke"],
-    },
 )
-crate.annotation(
+crate.annotation_select(
+    crate = "rustls",
+    crate_features = ["fips"],
+    repositories = ["annotation_crate_features"],
+    rustc_flags = ["--cfg=rules_rs_annotation_smoke"],
+    triples = ["x86_64-unknown-linux-gnu"],
+)
+crate.annotation_select(
+    build_script_data = ["//:main.rs"],
+    build_script_env = {"OS": "darwin"},
+    build_script_tools = ["//:main.rs"],
     # Smoke test the select attributes.
-    build_script_data_select = {
-        "aarch64-apple-darwin": ["//:main.rs"],
-        "x86_64-unknown-linux-gnu": ["//:dummy_test.sh"],
-    },
-    build_script_env_select = {
-        "aarch64-apple-darwin": '{"OS": "darwin"}',
-        "x86_64-unknown-linux-musl": '{"OS": "linux"}',
-    },
-    build_script_tools_select = {
-        "aarch64-apple-darwin": ["//:main.rs"],
-        "x86_64-unknown-linux-gnu": ["//:dummy_test.sh"],
-    },
     crate = "bitflags",
     repositories = ["build_script_env_select"],
+    triples = ["aarch64-apple-darwin"],
+)
+crate.annotation_select(
+    build_script_data = ["//:dummy_test.sh"],
+    build_script_tools = ["//:dummy_test.sh"],
+    crate = "bitflags",
+    link_deps = ["//:annotation_select_native_dep"],
+    repositories = ["build_script_env_select"],
+    target_compatible_with = ["@platforms//os:linux"],
+    triples = ["x86_64-unknown-linux-gnu"],
+    deps = ["//:annotation_select_rust_dep"],
+)
+crate.annotation_select(
+    build_script_env = {"OS": "linux"},
+    crate = "bitflags",
+    repositories = ["build_script_env_select"],
+    triples = ["x86_64-unknown-linux-musl"],
+)
+crate.annotation(
+    crate = "proc-macro2",
+    link_deps = [":annotation_select_native_dep"],
+    repositories = ["build_script_aliases"],
 )
 crate.annotation(
     crate = "tokenizers",
@@ -215,6 +232,14 @@ crate.annotation(
     crate = "member_foo",
     crate_features = ["json"],
     repositories = ["workspace_member_annotation_features"],
+)
+crate.annotation(
+    crate = "wasmtime-internal-jit-debug",
+    extra_aliased_targets = {
+        "workspace_cargo_lints": "wasmtime-internal-jit-debug",
+    },
+    repositories = ["build_script_aliases"],
+    version = "37.0.0",
 )
 
 # Test gen_binaries
@@ -244,6 +269,24 @@ crate.annotation(
     patch_args = ["-p1"],
     patches = ["//:windows-version.patch"],
 )
+crate.annotation(
+    crate = "datafusion-common",
+    patch_args = ["-p1"],
+    patches = ["//:datafusion-common.patch"],
+    repositories = ["many_workspace_deps"],
+)
+crate.annotation(
+    crate = "objc-sys",
+    patch_args = ["-p1"],
+    patches = ["//:objc-sys.patch"],
+    version = "0.3.5",
+)
+crate.annotation(
+    crate = "wasmtime-internal-component-macro",
+    patch_args = ["-p1"],
+    patches = ["//:wasmtime-internal-component-macro.patch"],
+    version = "37.0.3",
+)
 
 # Workaround not parsing `members = ["crates/*"]` yet.
 [
@@ -259,16 +302,34 @@ crate.annotation(
 
 ### Fix -sys crates
 include("//:3rd_party/aws-lc-sys/include.MODULE.bazel")
+
 include("//:3rd_party/bzip2-sys/include.MODULE.bazel")
+
+include("//:3rd_party/curl-sys/include.MODULE.bazel")
+
 include("//:3rd_party/glib-sys/include.MODULE.bazel")
+
+include("//:3rd_party/libbpf-sys/include.MODULE.bazel")
+
+include("//:3rd_party/libnghttp2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libssh2-sys/include.MODULE.bazel")
+
+include("//:3rd_party/libusb1-sys/include.MODULE.bazel")
+
 include("//:3rd_party/lzma-sys/include.MODULE.bazel")
+
+include("//:3rd_party/lz4-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libudev-sys/include.MODULE.bazel")
+
 include("//:3rd_party/apriltag-sys/include.MODULE.bazel")
+
 include("//:3rd_party/zstd-sys/include.MODULE.bazel")
 
-# TODO(zbarsky): alsa-sys is not curently tested, fix it
+# TODO(zbarsky): alsa-sys is not currently tested, fix it
 include("//:3rd_party/alsa-sys/include.MODULE.bazel")
+
 include("//:3rd_party/openssl-sys/include.MODULE.bazel")
 
 single_version_override(
@@ -278,6 +339,7 @@ single_version_override(
         "//:openssl-perl-genrule.patch",
         "//:openssl-windows-udp-netreset.patch",
     ],
+    version = "3.5.5.bcr.0",
 )
 
 crate.annotation(
@@ -298,7 +360,6 @@ crate.annotation(
     build_script_tags = ["annotation-build-script-tag-test"],
     build_script_tools = ["@nasm//:nasm"],
     crate = "rav1e",
-    patch_tool = "patch",
     patches = ["//:rav1e-nasm-0.8.1.patch"],
     tags = ["annotation-tag-test"],
     version = "0.8.1",
@@ -313,7 +374,9 @@ crate.annotation(
 )
 
 include("//:3rd_party/gdk-pixbuf-sys/include.MODULE.bazel")
+
 include("//:3rd_party/cairo-sys-rs/include.MODULE.bazel")
+
 include("//:3rd_party/atk-sys/include.MODULE.bazel")
 
 crate.annotation(
@@ -338,7 +401,9 @@ clang++: error: no such file or directory: 'bcrypt.lib'
 #)
 
 include("//:3rd_party/libz-sys/include.MODULE.bazel")
+
 include("//:3rd_party/libgit2-sys/include.MODULE.bazel")
+
 include("//:3rd_party/coreaudio-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): fix this for realz
@@ -358,3 +423,44 @@ crate.annotation(
     crate = "gtk-sys",
     gen_build_script = "off",
 )
+
+visibility_fixtures = use_extension("//visibility:repos.bzl", "fixtures")
+use_repo(
+    visibility_fixtures,
+    "visibility_dependent",
+    "visibility_empty",
+    "visibility_lib",
+    "visibility_macro",
+    "visibility_private",
+    "visibility_public",
+    allowed_packages = "visibility_groups",
+)
+
+crate.from_cargo(
+    name = "visibility_hub",
+    cargo_lock = "//visibility/workspace:Cargo.lock",
+    cargo_toml = "//visibility/workspace:Cargo.toml",
+    platform_triples = [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc",
+    ],
+)
+crate.annotation(
+    crate = "itoa",
+    repositories = ["visibility_hub"],
+    visibility = ["//visibility:private"],
+)
+crate.annotation(
+    crate = "itoa",
+    extra_aliased_targets = {"itoa_metadata": "itoa_package_metadata"},
+    repositories = ["visibility_hub"],
+    version = "1.0.18",
+    visibility = ["@allowed_packages//:consumers"],
+)
+
+# Import the spoke deliberately to test that direct labels cannot bypass visibility.
+use_repo(crate, "visibility_hub", "visibility_hub__itoa-1.0.18")

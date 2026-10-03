@@ -1,0 +1,30 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+
+alias(
+    name = "sample",
+    actual = "@visibility_lib//:sample",
+)
+
+alias(
+    name = "probe",
+    actual = "@visibility_lib//:probe__bin",
+)
+
+alias(
+    name = "macro",
+    actual = "@visibility_macro//:sample",
+)
+
+build_test(
+    name = "allowed_test",
+    targets = [
+        "@visibility_dependent//:dependent",
+        "@visibility_hub//:itoa",
+        "@visibility_hub//:itoa-1.0.18",
+        "@visibility_hub//:itoa_metadata",
+        "@visibility_hub//:itoa_metadata-1.0.18",
+        ":sample",
+        ":probe",
+        ":macro",
+    ],
+)

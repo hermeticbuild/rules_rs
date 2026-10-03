@@ -41,7 +41,7 @@ rules_rust = use_extension("@rules_rs//rs:rules_rust.bzl", "rules_rust")
 use_repo(rules_rust, "rules_rust")
 
 register_toolchains(
-    "@default_rust_toolchains//:all",
+    "@default_rust_toolchains//...",
     "@llvm//toolchain:all",
 )
 
@@ -63,6 +63,53 @@ use_repo(crate, "crates")
 ```
 
 `platform_triples` should include every exec and target triple that can participate in the build. For the common case, include the host triples you use locally and in CI plus the target triples you build for.
+
+### Toolchain declarations in dependencies
+
+When multiple modules declare `toolchains.toolchain` with the same `name`
+(defaulting to `default_rust_toolchains`), a declaration in the root module
+controls the complete configuration. Otherwise, `rules_rs` independently selects
+the highest Rust version, edition, rustfmt version, and rust-analyzer version.
+Omitted rustfmt and rust-analyzer versions use each declaration's Rust version
+before comparison. Stable versions are compared numerically; dated beta or
+nightly versions are compared by date within the same channel.
+
+Dependencies that mix stable, beta, or nightly versions, or specify different
+`extra_rustc_flags` or `extra_exec_rustc_flags`, must use different toolchain repo
+names or be overridden by a root-module declaration. Conflicting declarations
+within the root module are errors. Without a root override, any declaration with
+`use_rust_redist = False` disables redistribution for the selected versions.
+
+### Rust toolchain archives
+
+Stable Rust toolchains use Zstandard-compressed archives from
+[hermeticbuild/rust-redist](https://github.com/hermeticbuild/rust-redist) when
+available. Other stable versions and nightly toolchains continue to use
+`static.rust-lang.org`.
+
+Set `use_rust_redist = False` to download a toolchain and its configured
+rustfmt and rust-analyzer versions directly from `static.rust-lang.org`:
+
+```bzl
+toolchains.toolchain(
+    edition = "2024",
+    version = "1.97.1",
+    use_rust_redist = False,
+)
+```
+
+`MODULE.bazel.lock` records the selected archive filenames and SHA-256 values.
+Existing `.tar.xz` archives remain locked to `static.rust-lang.org` after a
+redistributed release becomes available. Update the lockfile to use the new
+`.tar.zst` archives with:
+
+```shell
+bazel mod deps --lockfile_mode=update --repo_env=RULES_RS_RUST_REDIST_REFRESH=1
+bazel mod deps --lockfile_mode=update
+```
+
+The second command restores the normal environment before the updated lockfile
+is committed.
 
 ### Global Cargo configuration
 
@@ -128,6 +175,51 @@ rust_binary(
 )
 ```
 
+### Cargo lint configuration
+
+Enable Cargo lint configuration for a dependency closure through its
+`crate.from_cargo` tag:
+
+```bzl
+crate.from_cargo(
+    name = "crates",
+    cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
+    generate_lint_config = True,
+    platform_triples = [...],
+)
+```
+
+When enabled, the crate extension parses each workspace member's `Cargo.toml`
+and exposes its effective Cargo lint configuration through the generated
+`lint_config()` helper. A member with `[lints] workspace = true` receives
+`[workspace.lints]`, a member with package lints receives those lints, and a
+member without a `[lints]` table receives no lint configuration.
+
+Pass the generated helper to the existing Rust rule alongside the other
+`DEP_DATA` helpers:
+
+```bzl
+load(
+    "@crates//:defs.bzl",
+    "aliases",
+    "all_crate_deps",
+    "lint_config",
+)
+load("@rules_rs//rs:rust_library.bzl", "rust_library")
+
+rust_library(
+    name = "lib",
+    srcs = ["src/lib.rs"],
+    aliases = aliases(),
+    deps = all_crate_deps(normal = True),
+    lint_config = lint_config(),
+)
+```
+
+The selection follows each member manifest for both virtual and non-virtual
+workspaces. Workspace lints are not applied to members that do not opt in.
+
 ## rust-analyzer
 
 See the upstream `rules_rust` rust-analyzer docs for editor setup details:
@@ -140,11 +232,150 @@ upstream instructions with `@rules_rs//tools/rust_analyzer:setup`.
 ## Advanced Options
 
 <details>
+<summary>Use the host macOS SDK</summary>
+
+`rules_rs` uses a hermetic macOS SDK by default. Add this setting to
+`.bazelrc` when the build must use the macOS SDK selected by Xcode or the
+C/C++ toolchain instead:
+
+```bazelrc
+common --@rules_rust//rust/settings:use_hermetic_macos_sdkroot=false
+```
+
+</details>
+
+<details>
+<summary>Register a custom Rust compiler</summary>
+
+`declare_rustc_toolchains` accepts a custom compiler and reuses the generated
+toolchain's standard libraries, rustdoc, Cargo, Clippy, and linkers.
+
+Create a dedicated `toolchains/BUILD.bazel` package:
+
+```bzl
+load("@rules_rs//rs/toolchains:declare_rustc_toolchains.bzl", "declare_rustc_toolchains")
+
+declare_rustc_toolchains(
+    name = "custom_rust",
+    edition = "2024",
+    rustc = {
+        "aarch64-apple-darwin": "//tools/rust:rustc_macos_arm64",
+        "x86_64-unknown-linux-gnu": "//tools/rust:rustc_linux_x86_64",
+    },
+    version = "1.92.0",
+)
+```
+
+A `rustc` dictionary selects execution triples automatically. A single compiler
+label can instead be combined with `exec_triples`. Use `target_triples` to limit
+supported target platforms. Omit `rustc` to use the generated compiler while
+overriding another component.
+
+Register the custom package instead of the generated Rust compiler toolchains in
+`MODULE.bazel`:
+
+```bzl
+register_toolchains(
+    "//toolchains:all",
+    "@default_rust_toolchains//rustfmt:all",
+    "@default_rust_toolchains//rust-analyzer:all",
+    "@llvm//toolchain:all",
+)
+```
+
+Keep `@default_rust_toolchains` available through `use_repo` for the Rustfmt and
+rust-analyzer registrations above.
+Override `rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
+`rust_objcopy`, `rust_lld`, `bpf_linker`, or `rust_std` when necessary.
+
+</details>
+
+<details>
+<summary>Use a custom host Cargo without downloading Rust toolchains</summary>
+
+This can be useful with the Ferrocene toolchain: dependency resolution can use
+its Cargo executable without downloading the default Rust toolchain.
+
+Configure Cargo for dependency resolution in the root `MODULE.bazel`:
+
+```bzl
+toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
+toolchains.host_cargo(
+    linux_amd64 = "//toolchain/linux_amd64:bin/cargo",
+    linux_arm64 = "//toolchain/linux_arm64:bin/cargo",
+    macos_amd64 = "//toolchain/macos_amd64:bin/cargo",
+    macos_arm64 = "//toolchain/macos_arm64:bin/cargo",
+    windows_amd64 = "//toolchain/windows_amd64:bin/cargo.exe",
+    windows_arm64 = "//toolchain/windows_arm64:bin/cargo.exe",
+)
+
+register_toolchains("@our_toolchains//...")
+```
+
+Provide the attributes for the hosts you use; the other attributes can be omitted.
+Cargo is selected for the operating system and architecture of the machine
+running Bazel, independently of the build target or remote execution platform.
+`amd64` covers x86-64, and `arm64` covers AArch64. If the current host's attribute
+is missing, repository setup fails with an error identifying it.
+
+Each label must refer to an existing executable file, not a build target.
+Labels in external repositories are also supported. Only the root module's
+`host_cargo` tag is used; dependency modules' tags are ignored.
+
+When no module declares `toolchains.toolchain`, custom host Cargo disables the
+implicit default Rust toolchain and its downloads. Explicit `toolchains.toolchain`
+and `toolchains.experimental_miri` declarations still provision their requested
+toolchains. Without `host_cargo`, the default behavior is unchanged.
+
+When the implicit default is disabled, `default_rust_toolchains` is not created.
+Supply all required compiler components when using `declare_rustc_toolchains`
+with fully custom toolchains.
+
+</details>
+
+<details>
 <summary>Reference targets added by <code>crate.annotation</code></summary>
 
 Label attributes in `crate.annotation` are resolved in `MODULE.bazel`, so a relative label does not refer to the generated crate package. Use `extra_aliased_targets` to expose a public target from the generated crate package under an explicit name in the hub repository, then use that hub label. The repository name is the `name` passed to `crate.from_cargo`.
 
 See [`3rd_party/apriltag-sys/include.MODULE.bazel`](3rd_party/apriltag-sys/include.MODULE.bazel) for an example.
+
+Use `crate.annotation_select` to add dependencies, native link dependencies, or compatibility constraints only for selected target triples:
+
+```bzl
+crate.annotation_select(
+    crate = "example-sys",
+    deps = ["//native:shim"],
+    link_deps = ["@native_libs//:example"],
+    target_compatible_with = ["@platforms//os:linux"],
+    triples = ["x86_64-unknown-linux-gnu"],
+)
+```
+
+</details>
+
+<details>
+<summary>Restrict generated crate visibility</summary>
+
+Set `visibility` on `crate.annotation` in `MODULE.bazel` to restrict direct use of a
+Cargo package. The existing `version` and `repositories` attributes select which
+versions and hubs receive the annotation; both default to all.
+
+```starlark
+crate.annotation(
+    crate = "tauri",
+    repositories = ["crates"],
+    visibility = ["//apps:__subpackages__"],
+)
+```
+
+The setting covers generated libraries, procedural macros, binaries, and hub
+aliases, including versioned aliases. Labels resolve in the declaring module,
+including repository mappings for package groups. Unconfigured crates remain
+public. Generated crates in the same Cargo closure retain access to each other
+so transitive dependencies still build. Package metadata remains public for
+metadata collectors. Empty or private visibility prevents direct workspace use
+while retaining that internal dependency access.
 
 </details>
 
@@ -211,6 +442,8 @@ The Linux exec toolchains are GNU-flavored. When targeting musl, also include th
 ARM soft-float (`*eabi`) and hard-float (`*eabihf`) triples — and the `aarch64-unknown-none` / `aarch64-unknown-none-softfloat` pair — share the same CPU and OS constraints, so they are disambiguated by an explicit float-ABI constraint. Bare ARM platforms default to **hard-float** (`@rules_rs//rs/platforms/constraints:hardfloat`), the conventional Linux ARM ABI (armhf) and bare-metal default. To target a soft-float triple from a custom platform, add `@rules_rs//rs/platforms/constraints:softfloat` to its `constraint_values`. The `rules_rs`-published platforms (e.g. `@rules_rs//rs/platforms:arm-unknown-linux-musleabi`) already carry the correct value.
 
 Similarly, `wasm32-wasip1` and `wasm32-wasip1-threads` are disambiguated by a WebAssembly threads constraint that defaults to threads-off (`@rules_rs//rs/platforms/constraints:wasm_threads_off`); the threaded variant opts in with `@rules_rs//rs/platforms/constraints:wasm_threads_on`.
+
+The QNX 7.1 (`*-nto-qnx710`) and 8.0 (`*-nto-qnx800`) targets are disambiguated by `@rules_rs//rs/platforms/constraints:qnx_version`. Custom QNX platforms default to 7.1; add `@rules_rs//rs/platforms/constraints:qnx800` to target 8.0. The published triple platforms already include the appropriate constraint. These target names are supported by Rust 1.89; building for QNX also requires a compatible Rust toolchain and QNX SDK.
 
 </details>
 
@@ -363,7 +596,7 @@ The script rewrites common `@rules_rust` Rust loads to `@rules_rs//rs:*` wrapper
 
 ## Public API
 
-See https://registry.bazel.build/docs/rules_rs
+See https://registry.bazel.build/modules/rules_rs/latest/docs
 
 ## Users
 
@@ -381,4 +614,4 @@ See https://registry.bazel.build/docs/rules_rs
 - [Etsy](https://www.etsy.com/)
 - [Aya](https://github.com/aya-rs/aya) and [bpf-linker](https://github.com/aya-rs/bpf-linker)
 - [Xybrid](https://github.com/xybrid-ai/xybrid)
-
+- [Drake](https://github.com/RobotLocomotion/drake)

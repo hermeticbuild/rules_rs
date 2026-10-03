@@ -25,6 +25,10 @@ jobs:
       release_files: rules_rs-*.tar.gz
       prerelease: false
       tag_name: ${{ inputs.tag_name || github.ref_name }}
+      # .bazelrc uses BuildBuddy without a release-job API key. The edit also
+      # applies to the Bazel commands in release_prep.sh, which archives the tag.
+      bazel_test_command: >-
+        sed -i '/^common --remote_cache=/d; /^common --experimental_remote_downloader=/d' .bazelrc && bazel test //...
   publish:
     needs: release
     uses: ./.github/workflows/publish.yaml

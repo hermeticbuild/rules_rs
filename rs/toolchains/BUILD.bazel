@@ -1,4 +1,5 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
+load(":toolchain_config_test.bzl", "toolchain_config_tests")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -46,6 +47,7 @@ bzl_library(
         "//rs/private:bpf_linker_repository",
         "@rules_rust//rust:bzl_lib",
         "@rules_rust//rust/platform:bzl_lib",
+        "@rust_toolchain_labels//:defs.bzl",
     ],
 )
 
@@ -76,13 +78,14 @@ bzl_library(
     name = "module_extension",
     srcs = ["module_extension.bzl"],
     deps = [
+        ":toolchain_config",
         ":toolchain_utils",
         "//rs/experimental/miri/private:miri_repository",
         "//rs/platforms:triples",
         "//rs/private:bpf_linker_repository",
         "//rs/private:cargo_repository",
         "//rs/private:clippy_repository",
-        "//rs/private:host_tools_repository",
+        "//rs/private:host_cargo_repository",
         "//rs/private:rust_analyzer_repository",
         "//rs/private:rust_repository_utils",
         "//rs/private:rust_src_repository",
@@ -90,8 +93,10 @@ bzl_library(
         "//rs/private:rustc_src_repository",
         "//rs/private:rustfmt_repository",
         "//rs/private:stdlib_repository",
+        "//rs/private:toolchain_labels_repository",
         "//rs/private:toolchains_repository",
         "@bazel_features//:features",
+        "@bazel_lib//lib:repo_utils",
         "@rules_rust//rust/platform:bzl_lib",
     ],
 )
@@ -100,3 +105,20 @@ bzl_library(
     name = "toolchain_utils",
     srcs = ["toolchain_utils.bzl"],
 )
+
+bzl_library(
+    name = "toolchain_config",
+    srcs = ["toolchain_config.bzl"],
+)
+
+bzl_library(
+    name = "toolchain_config_test",
+    testonly = True,
+    srcs = ["toolchain_config_test.bzl"],
+    deps = [
+        ":toolchain_config",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+toolchain_config_tests(name = "toolchain_config_tests")

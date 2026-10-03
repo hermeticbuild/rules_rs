@@ -2,6 +2,7 @@ load("@bazel_lib//:bzl_library.bzl", "bzl_library")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_setting")
 load("@rules_rust//rust:rust_stdlib_filegroup.bzl", "rust_stdlib_filegroup")
 load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
+load(":annotations_test.bzl", "annotations_tests")
 load(":bindgen_test.bzl", "bindgen_tests")
 load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
 load(":cargo_toml_utils_test.bzl", "cargo_toml_utils_tests")
@@ -11,10 +12,17 @@ load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
 load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
 load(":semver_test.bzl", "semver_select_tests")
+load(":visibility_test.bzl", "visibility_tests")
 
 bool_setting(
     name = "source_stdlib_building",
     build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "source_stdlib_building_enabled",
+    flag_values = {":source_stdlib_building": "true"},
     visibility = ["//visibility:public"],
 )
 
@@ -25,6 +33,8 @@ rust_stdlib_filegroup(
 )
 
 all_crate_deps_tests()
+
+annotations_tests()
 
 bindgen_tests()
 
@@ -43,6 +53,15 @@ registry_utils_tests()
 rust_repository_utils_tests()
 
 semver_select_tests()
+
+visibility_tests()
+
+# package_metadata.bzl does not provide a bzl_library for Stardoc.
+filegroup(
+    name = "rust_crate",
+    srcs = ["rust_crate.bzl"],
+    visibility = ["//visibility:public"],
+)
 
 bzl_library(
     name = "all_crate_deps",
@@ -306,6 +325,12 @@ bzl_library(
 )
 
 bzl_library(
+    name = "toolchain_labels_repository",
+    srcs = ["toolchain_labels_repository.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
     name = "toolchains_repository",
     srcs = ["toolchains_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
@@ -354,6 +379,16 @@ bzl_library(
     name = "annotations",
     srcs = ["annotations.bzl"],
     visibility = ["//rs:__subpackages__"],
+    deps = ["@bazel_skylib//lib:structs"],
+)
+
+bzl_library(
+    name = "annotations_test",
+    srcs = ["annotations_test.bzl"],
+    deps = [
+        ":annotations",
+        "@bazel_skylib//lib:unittest",
+    ],
 )
 
 bzl_library(
@@ -363,8 +398,8 @@ bzl_library(
 )
 
 bzl_library(
-    name = "host_tools_repository",
-    srcs = ["host_tools_repository.bzl"],
+    name = "host_cargo_repository",
+    srcs = ["host_cargo_repository.bzl"],
     visibility = ["//rs:__subpackages__"],
 )
 
@@ -384,4 +419,19 @@ bzl_library(
     name = "semver",
     srcs = ["semver.bzl"],
     visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "visibility",
+    srcs = ["visibility.bzl"],
+    visibility = ["//rs:__subpackages__"],
+)
+
+bzl_library(
+    name = "visibility_test",
+    srcs = ["visibility_test.bzl"],
+    deps = [
+        ":visibility",
+        "@bazel_skylib//lib:unittest",
+    ],
 )

@@ -1,6 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
-load(":repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields")
+load(":repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields", "package_version")
 load(":toml2json.bzl", "run_toml2json")
 
 def _render_label_list(labels):
@@ -28,7 +28,7 @@ def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, wo
     )
 
     rctx.file(dest, """\
-load("@rules_rs//rs:rust_crate.bzl", "rust_crate")
+load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("{crate_bzl}", "crate")
 
@@ -46,7 +46,7 @@ crate(
     ],
 )
 {additive_build_file_content}{package_metadata_bazel_additive_build_file_content}""".format(
-        crate_bzl = "@%s//:crate.bzl" % _spoke_repo(rctx.attr.hub_name, package["name"], package["version"]),
+        crate_bzl = "@%s//:crate.bzl" % _spoke_repo(rctx.attr.hub_name, package["name"], package_version(package)),
         crate_name = cargo.values["crate_name"],
         crate_root = cargo.values["crate_root"],
         edition = cargo.values["edition"],
