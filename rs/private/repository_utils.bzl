@@ -76,6 +76,12 @@ def inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml):
 
     return cargo_toml
 
+def package_version(package):
+    """Returns the `[package]` version of a decoded Cargo.toml, or Cargo's default `0.0.0`."""
+
+    # https://doc.rust-lang.org/cargo/reference/manifest.html#the-version-field
+    return package.get("version", "0.0.0")
+
 def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", gen_build_script = None):
     package_dir = rctx.path(package_path or ".")
     package = cargo_toml["package"]
@@ -83,7 +89,7 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
         gen_build_script = rctx.attr.gen_build_script
 
     name = package["name"]
-    version = package["version"]
+    version = package_version(package)
     parsed_version = parse_full_version(version)
 
     readme = package.get("readme", "")
