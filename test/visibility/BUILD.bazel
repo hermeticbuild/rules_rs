@@ -10,6 +10,7 @@ package_group(
 filegroup(
     name = "metadata",
     srcs = [
+        "@visibility_hub__itoa-1.0.18//:itoa_package_metadata",
         "@visibility_lib//:sample_package_metadata",
         "@visibility_macro//:sample_package_metadata",
     ],

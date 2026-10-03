@@ -128,6 +128,7 @@ def _crate_attr(
         crate_features = crate_features,
         crate_features_select = crate_features_select,
         crate_tags = [],
+        crate_visibility = ["//visibility:public"],
         data = [],
         deps = deps,
         deps_select = deps_select,

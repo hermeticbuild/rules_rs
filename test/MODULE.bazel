@@ -456,6 +456,7 @@ crate.annotation(
 )
 crate.annotation(
     crate = "itoa",
+    extra_aliased_targets = {"itoa_metadata": "itoa_package_metadata"},
     repositories = ["visibility_hub"],
     version = "1.0.18",
     visibility = ["@allowed_packages//:consumers"],
