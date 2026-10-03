@@ -52,6 +52,14 @@ def _render_ordered_string_list(items):
     """Like _render_string_list but preserves insertion order."""
     return ",\n        ".join([repr(item) for item in items])
 
+def _render_alias(name, actual, visibility):
+    return """
+alias(
+    name = %r,
+    actual = %r,
+    visibility = %r,
+)""" % (name, actual, visibility)
+
 def _render_cargo_lints_target(name, lint_flags):
     return """
 cargo_lints(
@@ -308,7 +316,7 @@ def _generate_hub_and_spokes(
     # Generated crates must remain able to depend on each other even when their
     # use from the consuming workspace is restricted. Include the real Git
     # checkout repositories, not just their metadata spokes.
-    internal_packages = {"@%s//:__pkg__" % hub_name: True}
+    internal_packages = set(["@%s//:__pkg__" % hub_name])
     for package in packages:
         source = package["source"]
         if source.startswith("git+"):
@@ -316,9 +324,8 @@ def _generate_hub_and_spokes(
             repo_name = _external_repo_for_git_source(hub_name, remote, commit)
         else:
             repo_name = _spoke_repo(hub_name, package["name"], package["version"])
-        label = "@%s//:__subpackages__" % repo_name
-        internal_packages[label] = True
-    internal_packages = internal_packages.keys()
+        internal_packages.add("@%s//:__subpackages__" % repo_name)
+    internal_packages = list(internal_packages)
 
     for package in packages:
         crate_name = package["name"]
@@ -501,78 +508,46 @@ crate.annotation(
 
     hub_contents = []
     for name, versions in versions_by_name.items():
+        workspace_versions = workspace_dep_versions_by_name.get(name)
+        default_fq = sorted(workspace_versions)[-1] if workspace_versions else None
         for version in versions:
+            fq = _fq_crate(name, version)
             annotation = annotation_for(annotations, name, version, hub_name)
             crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages)
-            package = package_by_fq[_fq_crate(name, version)]
+            package = package_by_fq[fq]
             target_repo_name = package["target_repo_name"]
             target_package_path = package["target_package_path"]
 
-            hub_contents.append("""
-alias(
-    name = "{name}-{version}",
-    actual = "{actual}",
-    visibility = {visibility},
-)""".format(visibility = crate_visibility, name = name, version = version, actual = _target_label(target_repo_name, target_package_path, name)))
-
+            hub_contents.append(_render_alias(
+                fq,
+                _target_label(target_repo_name, target_package_path, name),
+                crate_visibility,
+            ))
             for binary in annotation.gen_binaries:
-                hub_contents.append("""
-alias(
-    name = "{name}-{version}__{binary}",
-    actual = "{actual}",
-    visibility = {visibility},
-)""".format(visibility = crate_visibility, name = name, version = version, binary = binary, actual = _target_label(target_repo_name, target_package_path, binary + "__bin")))
+                hub_contents.append(_render_alias(
+                    "%s__%s" % (fq, binary),
+                    _target_label(target_repo_name, target_package_path, binary + "__bin"),
+                    crate_visibility,
+                ))
 
             for alias_name, target in sorted(annotation.extra_aliased_targets.items()):
-                hub_contents.append("""
-alias(
-    name = "{alias_name}-{version}",
-    actual = "{actual}",
-    visibility = {visibility},
-)""".format(
-                    visibility = crate_visibility,
-                    alias_name = alias_name,
-                    version = version,
-                    actual = _target_label(target_repo_name, target_package_path, target),
+                versioned_alias = "%s-%s" % (alias_name, version)
+                hub_contents.append(_render_alias(
+                    versioned_alias,
+                    _target_label(target_repo_name, target_package_path, target),
+                    crate_visibility,
                 ))
+                if len(versions) == 1:
+                    hub_contents.append(_render_alias(alias_name, ":" + versioned_alias, crate_visibility))
 
-        workspace_versions = workspace_dep_versions_by_name.get(name)
-        if workspace_versions:
-            fq = sorted(workspace_versions)[-1]
-            default_version = fq[len(name) + 1:]
-            annotation = annotation_for(annotations, name, default_version, hub_name)
-            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages)
-
-            hub_contents.append("""
-alias(
-    name = "{name}",
-    actual = ":{fq}",
-    visibility = {visibility},
-)""".format(visibility = crate_visibility, name = name, fq = fq))
-
-            for binary in annotation.gen_binaries:
-                hub_contents.append("""
-alias(
-    name = "{name}__{binary}",
-    actual = ":{fq}__{binary}",
-    visibility = {visibility},
-)""".format(visibility = crate_visibility, name = name, fq = fq, binary = binary))
-
-        if len(versions) == 1:
-            version = versions[0]
-            annotation = annotation_for(annotations, name, version, hub_name)
-            crate_visibility = visibility_with_internal_access(annotation.visibility, internal_packages)
-            for alias_name in sorted(annotation.extra_aliased_targets.keys()):
-                hub_contents.append("""
-alias(
-    name = "{alias_name}",
-    actual = ":{alias_name}-{version}",
-    visibility = {visibility},
-)""".format(
-                    visibility = crate_visibility,
-                    alias_name = alias_name,
-                    version = version,
-                ))
+            if fq == default_fq:
+                hub_contents.append(_render_alias(name, ":" + fq, crate_visibility))
+                for binary in annotation.gen_binaries:
+                    hub_contents.append(_render_alias(
+                        "%s__%s" % (name, binary),
+                        ":%s__%s" % (fq, binary),
+                        crate_visibility,
+                    ))
 
     for package in cargo_metadata["packages"]:
         package_dir = _manifest_package_dir(package["manifest_path"], repo_root)
@@ -583,14 +558,10 @@ alias(
             # at the bazel workspace root, there's no path component to
             # derive a name from.
             continue
-        hub_contents.append("""
-alias(
-    name = "{name}-{version}",
-    actual = "@@//{bazel_package}",
-)""".format(
-            name = package["name"],
-            version = package["version"],
-            bazel_package = bazel_package,
+        hub_contents.append(_render_alias(
+            _fq_crate(package["name"], package["version"]),
+            "@@//" + bazel_package,
+            ["//visibility:public"],
         ))
 
     workspace_deps, conditional_workspace_deps = render_select(

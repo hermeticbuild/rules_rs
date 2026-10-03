@@ -21,6 +21,8 @@ build_test(
         "@visibility_dependent//:dependent",
         "@visibility_hub//:itoa",
         "@visibility_hub//:itoa-1.0.18",
+        "@visibility_hub//:itoa_metadata",
+        "@visibility_hub//:itoa_metadata-1.0.18",
         ":sample",
         ":probe",
         ":macro",
