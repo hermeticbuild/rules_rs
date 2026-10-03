@@ -29,8 +29,16 @@ def _parse_github_url(url):
 def _github_source_to_raw_content_base_url(url):
     return "https://raw.githubusercontent.com/%s/%s/" % _parse_github_url(url)
 
-def _sanitize_path_fragment(path):
-    return path.replace("/", "_").replace(":", "_").replace("?", "_")
+def git_source_path(path):
+    """Encode a source URL in bounded, filesystem-safe path components."""
+
+    # Escape percent first so a literal escape never aliases an encoded character.
+    encoded = path.replace("%", "%25")
+    for character, escape in [("/", "%2F"), (":", "%3A"), ("?", "%3F"), ("\\", "%5C"), ("*", "%2A"), ("<", "%3C"), (">", "%3E"), ("|", "%7C"), ('"', "%22")]:
+        encoded = encoded.replace(character, escape)
+
+    # A fixed leaf avoids file/directory collisions for prefix-related URLs.
+    return "/".join(["git-metadata"] + ["part_" + encoded[i:i + 60] for i in range(0, len(encoded), 60)] + ["Cargo.toml"])
 
 def new_downloader_state():
     return struct(
@@ -66,7 +74,7 @@ def start_github_downloads(
             in_flight_fetch = struct(
                 download_token = mctx.download(
                     url,
-                    _sanitize_path_fragment(url),
+                    git_source_path(url),
                     allow_fail = True,
                     block = False,
                 ),
@@ -190,7 +198,7 @@ def _workspace_member_by_package_name_from_github(mctx, workspace_cargo_toml_url
             continue
 
         member_cargo_toml_url = workspace_cargo_toml_url.replace("Cargo.toml", member + "/Cargo.toml")
-        member_cargo_toml_path = _sanitize_path_fragment(member_cargo_toml_url)
+        member_cargo_toml_path = git_source_path(member_cargo_toml_url)
         in_flight_fetches.append(struct(
             member = member,
             path = member_cargo_toml_path,
@@ -274,7 +282,7 @@ def download_metadata_for_git_crates(
         state,
         annotations_by_hub_name):
     for url, fetch_state in state.in_flight_git_crate_fetches_by_url.items():
-        cargo_toml_path = _sanitize_path_fragment(url)
+        cargo_toml_path = git_source_path(url)
         _ensure_cargo_toml_exists(mctx.path(cargo_toml_path), fetch_state)
 
         cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
@@ -303,7 +311,7 @@ def download_metadata_for_git_crates(
                 package["strip_prefix"] = strip_prefix
                 child_url = url.replace("Cargo.toml", strip_prefix + "/Cargo.toml")
 
-                child_cargo_toml_path = _sanitize_path_fragment(child_url)
+                child_cargo_toml_path = git_source_path(child_url)
                 package["member_crate_cargo_toml_info"] = struct(
                     token = mctx.download(child_url, child_cargo_toml_path, block = False),
                     path = child_cargo_toml_path,
@@ -315,8 +323,8 @@ def download_metadata_for_git_crates(
                 if cargo_toml_json.get("workspace"):
                     package["workspace_cargo_toml_json"] = cargo_toml_json
 
-    for source, clone_state in state.pending_git_clones_by_source.items():
-        clone_dir = mctx.path(_sanitize_path_fragment(source))
+    for index, (_source, clone_state) in enumerate(state.pending_git_clones_by_source.items()):
+        clone_dir = mctx.path("git-sources/%d" % index)
         git_repo(clone_state.clone_config, clone_dir)
 
         # TODO(zbarsky): multiple crates?
