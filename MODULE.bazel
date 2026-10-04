@@ -5,6 +5,17 @@ module(
 
 ########### BECOME THE RULES_RUST FACADE ################
 rules_rust = use_extension("//rs:rules_rust.bzl", "rules_rust")
+
+# Fix cross-crate `DEP_<LINKS>_<KEY>` propagation: a `-sys` crate's build
+# script can expose an `OUT_DIR`-relative path (e.g. `cargo:include=$OUT_DIR/
+# include`) that a dependent's build script reads via `DEP_<LINKS>_INCLUDE`.
+# The runner was rewriting the producing crate's `OUT_DIR` to a `${out_dir}`
+# token that the dependent's build-script runner never resolves. See
+# https://github.com/hermeticbuild/rules_rs/issues/163.
+rules_rust.patch(
+    patches = ["//rs/private/rules_rust/patches:cross_crate_dep_env_out_dir.patch"],
+    strip = 1,
+)
 use_repo(rules_rust, "rules_rust")
 
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")

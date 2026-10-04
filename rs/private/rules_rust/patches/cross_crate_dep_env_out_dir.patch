@@ -1,0 +1,179 @@
+diff --git a/cargo/private/cargo_build_script_runner/lib.rs b/cargo/private/cargo_build_script_runner/lib.rs
+index 9c6dcb3..1bd4f91 100644
+--- a/cargo/private/cargo_build_script_runner/lib.rs
++++ b/cargo/private/cargo_build_script_runner/lib.rs
+@@ -265,6 +265,27 @@ impl BuildScriptOutput {
+         exec_root: &str,
+         out_dir: &str,
+     ) -> String {
++        // `out_dir` is intentionally NOT rewritten to the generic `${out_dir}`
++        // token here (unlike the rustc env file produced by `outputs_to_env`).
++        //
++        // A dep-env file is consumed by a *dependent* crate's build-script
++        // runner (`bin.rs`), which only substitutes `${pwd}` and has no notion
++        // of *this* crate's `out_dir`. A `${out_dir}` token would therefore
++        // survive unresolved in the dependent's environment (e.g. leaving
++        // `DEP_LZ4_INCLUDE=${pwd}/${out_dir}/include`), breaking C/C++ includes
++        // that consume `DEP_<LINKS>_INCLUDE` (issue #163).
++        //
++        // The producing crate's `out_dir` tree is provided to the dependent
++        // build-script action as an input at this same exec-root-relative path,
++        // so emitting the real path with only the exec root tokenized
++        // (`${pwd}/<out_dir>/…`) resolves correctly there. Build-script actions
++        // do not advertise `supports-path-mapping`, so `--experimental_output_paths=strip`
++        // never rewrites that path out from under the literal value.
++        //
++        // `out_dir` is kept in the signature (rather than dropped) so this fix
++        // stays a minimal patch: `bin.rs` and the existing call sites/tests are
++        // left untouched. It is discarded here on purpose.
++        let _ = out_dir;
+         let prefix = format!("DEP_{}_", crate_links.replace('-', "_").to_uppercase());
+         outputs
+             .iter()
+@@ -273,7 +294,7 @@ impl BuildScriptOutput {
+                     Some(format!(
+                         "{}{}",
+                         prefix,
+-                        Self::escape_for_serializing(Self::redact_paths(env, exec_root, out_dir))
++                        Self::escape_for_serializing(Self::redact_exec_root(env, exec_root))
+                     ))
+                 } else {
+                     None
+@@ -586,6 +607,55 @@ cargo::rustc-link-search=/abs/exec_root/other/path
+         );
+     }
+ 
++    /// A `links` crate's `cargo::metadata` (or legacy `cargo:<key>`) value that
++    /// points into its own `OUT_DIR` must be written to the cross-crate dep-env
++    /// file using the real exec-root-relative `out_dir` path, with only the
++    /// exec root tokenized as `${pwd}`. It must NOT be rewritten to the generic
++    /// `${out_dir}` token: the dep-env file is consumed by a *dependent*
++    /// crate's build-script runner, which only resolves `${pwd}` and would
++    /// otherwise leave `${out_dir}` unresolved — breaking, for example,
++    /// `DEP_LZ4_INCLUDE` for a crate like `librocksdb-sys` (issue #163).
++    #[test]
++    fn dep_env_out_dir_is_preserved_not_tokenized() {
++        let buff = Cursor::new(
++            "cargo::metadata=include=/abs/exec_root/bazel-out/cfg/bin/ext/lz4-sys_bs.out_dir/include\n",
++        );
++        let reader = BufReader::new(buff);
++        let result = BuildScriptOutput::outputs_from_reader(reader);
++        assert_eq!(
++            BuildScriptOutput::outputs_to_dep_env(
++                &result,
++                "lz4",
++                "/abs/exec_root",
++                "bazel-out/cfg/bin/ext/lz4-sys_bs.out_dir",
++            ),
++            "DEP_LZ4_INCLUDE=${pwd}/bazel-out/cfg/bin/ext/lz4-sys_bs.out_dir/include".to_owned()
++        );
++    }
++
++    /// Windows variant of [`dep_env_out_dir_is_preserved_not_tokenized`].
++    /// `redact_exec_root` rewrites a backslash-separated exec root to `${pwd}`
++    /// and preserves the rest of the (backslashed) out_dir-relative path
++    /// verbatim — no `${out_dir}` token (issue #163).
++    #[test]
++    fn dep_env_out_dir_is_preserved_not_tokenized_windows() {
++        let buff = Cursor::new(
++            "cargo::metadata=include=C:\\exec_root\\bazel-out\\x64_windows-fastbuild\\bin\\ext\\lz4-sys_bs.out_dir\\include\n",
++        );
++        let reader = BufReader::new(buff);
++        let result = BuildScriptOutput::outputs_from_reader(reader);
++        assert_eq!(
++            BuildScriptOutput::outputs_to_dep_env(
++                &result,
++                "lz4",
++                "C:\\exec_root",
++                "bazel-out\\x64_windows-fastbuild\\bin\\ext\\lz4-sys_bs.out_dir",
++            ),
++            "DEP_LZ4_INCLUDE=${pwd}\\bazel-out\\x64_windows-fastbuild\\bin\\ext\\lz4-sys_bs.out_dir\\include"
++                .to_owned()
++        );
++    }
++
+     #[test]
+     fn nonhermetic_absolute_paths_are_detected() {
+         let existing_path = std::env::current_dir().unwrap();
+diff --git a/test/cargo_build_script/metadata_dep_env/BUILD.bazel b/test/cargo_build_script/metadata_dep_env/BUILD.bazel
+index 340fd93..91ed4c1 100644
+--- a/test/cargo_build_script/metadata_dep_env/BUILD.bazel
++++ b/test/cargo_build_script/metadata_dep_env/BUILD.bazel
+@@ -35,3 +35,10 @@ rust_test(
+     edition = "2021",
+     deps = [":consumer_build_rs"],
+ )
++
++rust_test(
++    name = "metadata_dep_env_include_test",
++    srcs = ["include_test.rs"],
++    edition = "2021",
++    deps = [":consumer_build_rs"],
++)
+diff --git a/test/cargo_build_script/metadata_dep_env/consumer_build.rs b/test/cargo_build_script/metadata_dep_env/consumer_build.rs
+index 1db03cd..9b4ed19 100644
+--- a/test/cargo_build_script/metadata_dep_env/consumer_build.rs
++++ b/test/cargo_build_script/metadata_dep_env/consumer_build.rs
+@@ -13,6 +13,21 @@ fn main() {
+         "unexpected DEP_PRODUCER_LEGACY_VERSION_1_10_0 value"
+     );
+ 
++    // Regression check for issue #163. `DEP_PRODUCER_INCLUDE` points into the
++    // producer crate's `OUT_DIR`. Before the fix it reached this dependent
++    // build script with the producer's `OUT_DIR` rewritten to the literal,
++    // unresolved `${out_dir}` token (e.g. `<execroot>/${out_dir}/include`),
++    // so the directory did not exist. After the fix it is a fully resolved,
++    // existing path containing the header the producer wrote.
++    let include = std::env::var("DEP_PRODUCER_INCLUDE")
++        .expect("DEP_PRODUCER_INCLUDE should be set by producer build script");
++    let resolved =
++        !include.contains("${out_dir}") && std::path::Path::new(&include).join("marker.h").is_file();
++    println!(
++        "cargo:rustc-env=METADATA_INCLUDE_RESOLVED={}",
++        if resolved { "1" } else { "0" }
++    );
++
+     println!("cargo:rustc-env=METADATA_MODERN_VALUE={modern}");
+     println!("cargo:rustc-env=METADATA_LEGACY_VALUE={legacy}");
+ }
+diff --git a/test/cargo_build_script/metadata_dep_env/include_test.rs b/test/cargo_build_script/metadata_dep_env/include_test.rs
+new file mode 100644
+index 0000000..1176c1b
+--- /dev/null
++++ b/test/cargo_build_script/metadata_dep_env/include_test.rs
+@@ -0,0 +1,11 @@
++/// Regression test for issue #163.
++///
++/// A `DEP_<LINKS>_INCLUDE` value that points into the producing crate's
++/// `OUT_DIR` must reach the dependent's build script as a fully resolved,
++/// existing path. Previously the producing crate's `OUT_DIR` was rewritten to
++/// the literal `${out_dir}` token, which the dependent build-script runner
++/// never resolves, so C/C++ includes such as `lz4.h` could not be found.
++#[test]
++fn include_path_dep_env_is_resolved() {
++    assert_eq!(env!("METADATA_INCLUDE_RESOLVED"), "1");
++}
+diff --git a/test/cargo_build_script/metadata_dep_env/producer_build.rs b/test/cargo_build_script/metadata_dep_env/producer_build.rs
+index 8207a07..6c545b7 100644
+--- a/test/cargo_build_script/metadata_dep_env/producer_build.rs
++++ b/test/cargo_build_script/metadata_dep_env/producer_build.rs
+@@ -1,5 +1,19 @@
++use std::fs;
++use std::path::PathBuf;
++
+ fn main() {
+     println!("cargo::metadata=modern_version_1_10_0=1");
+     // Legacy (pre-1.77-compatible) syntax where unknown cargo:KEY is treated as metadata.
+     println!("cargo:legacy_version_1_10_0=2");
++
++    // Regression coverage for issue #163: expose an `OUT_DIR`-relative include
++    // directory through the `links`/metadata convention, exactly as a `-sys`
++    // crate does with `cargo:include=$OUT_DIR/include`. The dependent build
++    // script must receive this through `DEP_PRODUCER_INCLUDE` as a fully
++    // resolved path that actually exists — not a literal `${out_dir}` token.
++    let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR set by rules_rust"));
++    let include = out_dir.join("include");
++    fs::create_dir_all(&include).expect("create include dir");
++    fs::write(include.join("marker.h"), "/* marker */\n").expect("write marker header");
++    println!("cargo:include={}", include.display());
+ }
