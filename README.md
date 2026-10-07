@@ -111,6 +111,30 @@ Use `cargo_config_toml` to configure custom Cargo registries such as Artifactory
 
 A closure that supplies `crate.from_cargo(cargo_config = ...)` uses its own configuration file instead. Only the root module's `crate.config` applies globally; `crate.config` tags in dependency modules are ignored.
 
+### Git dependencies
+
+A crate from a GitHub repository is downloaded as a source archive through the Bazel downloader, so it honors `--downloader_config` and retries failed requests. A crate from another git remote, or from a repository with submodules, is fetched with `git`.
+
+- Set `allow_git = "false"` to never run `git` as a fallback, that's the most hermetic approach, but the stricter also as a crate that needs `git` then fails the build.
+- Set `allow_git = "true"` to always try to run `git` as a fallback.
+
+```bzl
+crate.from_cargo(
+    name = "crates",
+    cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
+    allow_git = "false",
+)
+```
+
+When unspecified, the default, `allow_git = "auto"`, reads the `RULES_RS_ALLOW_GIT` environment variable and allows `git` when it is not set. This lets you disallow `git` in some environments only, such as CI:
+
+```bazelrc
+common:ci --repo_env=RULES_RS_ALLOW_GIT=false
+```
+
+`RULES_RS_ALLOW_GIT` must be `true` or `false`. An explicit `allow_git = "true"` or `allow_git = "false"` ignores it.
+
 ### `.bazelrc`
 
 Linux hosts work with Bazel's default host platform. If you also build on Windows,

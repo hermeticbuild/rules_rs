@@ -698,6 +698,16 @@ RESOLVED_PLATFORMS = select({{
 
     return facts
 
+_ALLOW_GIT_ENV = "RULES_RS_ALLOW_GIT"
+
+def _allow_git(mctx, cfg):
+    value = cfg.allow_git
+    if value == "auto":
+        value = mctx.getenv(_ALLOW_GIT_ENV, "true")
+        if value not in ("true", "false"):
+            fail("%s must be \"true\" or \"false\", got \"%s\"" % (_ALLOW_GIT_ENV, value))
+    return value == "true"
+
 def _crate_impl(mctx):
     # TODO(zbarsky): Kick off `cargo` fetch early to mitigate https://github.com/bazelbuild/bazel/issues/26995
     cargo_path = mctx.path(RS_HOST_CARGO_LABEL)
@@ -728,6 +738,7 @@ def _crate_impl(mctx):
     parsed_cargo_configs = {}
     cargo_credentials_by_hub_name = {}
     annotations_by_hub_name = {}
+    allow_git_by_hub_name = {}
 
     for mod in mctx.modules:
         if not mod.tags.from_cargo:
@@ -764,6 +775,19 @@ def _crate_impl(mctx):
                 if source:
                     package["source"] = source
             packages_by_hub_name[cfg.name] = parsed_packages
+            allow_git_by_hub_name[cfg.name] = _allow_git(mctx, cfg)
+
+            # Only a GitHub source can skip `git`. Check here, because a cached fact can skip the clone below.
+            if not allow_git_by_hub_name[cfg.name]:
+                for package in parsed_packages:
+                    source = package.get("source", "")
+                    if source.startswith("git+") and not source.startswith("git+https://github.com/"):
+                        fail("The crate %s %s of the hub `%s` comes from %s, which needs git, and `allow_git` is false." % (
+                            package["name"],
+                            package["version"],
+                            cfg.name,
+                            source,
+                        ))
 
             # Process git downloads first because they may require a followup download if the repo is a workspace,
             # so we want to enqueue them early so they don't get delayed by 1-shot registry downloads.
@@ -846,6 +870,7 @@ def _crate_impl(mctx):
                 git_repo = git_repos.get(repo_name)
                 if not git_repo:
                     git_repo = {
+                        "allow_git": allow_git_by_hub_name[cfg.name],
                         "build_files": {},
                         "gen_binaries": {},
                         "commit": commit,
@@ -893,6 +918,7 @@ def _crate_impl(mctx):
 
         git_cargo_workspace_repository(
             name = repo_name,
+            allow_git = git_repo["allow_git"],
             build_files = git_repo["build_files"],
             commit = git_repo["commit"],
             hub_name = git_repo["hub_name"],
@@ -942,6 +968,12 @@ _from_cargo = tag_class(
         ),
         "cargo_lock": attr.label(),
         "cargo_config": attr.label(),
+        "allow_git": attr.string(
+            doc = "If \"false\", never run `git`. Fail when a crate from git needs it: a remote not on github.com, or a repository with a submodule. " +
+                  "\"auto\" reads `--repo_env=%s=true|false`, and is \"true\" when the variable is not set." % _ALLOW_GIT_ENV,
+            values = ["auto", "true", "false"],
+            default = "auto",
+        ),
         "generate_lint_config": attr.bool(
             doc = "If true, generate per-package Cargo lint configuration by reading workspace member manifests.",
             default = False,
