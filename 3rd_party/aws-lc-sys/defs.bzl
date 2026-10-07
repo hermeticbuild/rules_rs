@@ -63,6 +63,9 @@ def aws_lc_sys(name, crypto, ssl):
             "--rust-target=1.70",
         ] + select({
             "@platforms//os:macos": ["--prefix-link-name=_aws_lc_bazel_"],
+            "@platforms//os:ios": ["--prefix-link-name=_aws_lc_bazel_"],
+            "@platforms//os:watchos": ["--prefix-link-name=_aws_lc_bazel_"],
+            "@platforms//os:tvos": ["--prefix-link-name=_aws_lc_bazel_"],
             "//conditions:default": ["--prefix-link-name=aws_lc_bazel_"],
         }),
         cc_lib = wrapper,
