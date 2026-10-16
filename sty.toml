@@ -1,3 +1,14 @@
 [type-interfaces]
 "rs/private/all_crate_deps.bzl" = "rs/private/all_crate_deps.bzli"
 "rs/private/select_utils.bzl" = "rs/private/select_utils.bzli"
+
+[rules]
+missing-parameter-annotation = "error"
+missing-return-annotation = "error"
+missing-type-argument = "error"
+unsound-assignment = "error"
+# The empty default select branch currently introduces Unknown into the result.
+unsound-return-statement = "ignore"
+explicit-any = "error"
+# Collection membership and empty-container inference remain gradual.
+non-static-type = "ignore"
