@@ -1,0 +1,28 @@
+name: Starlark types
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sty:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: tamird/sty@1f2f963a22c9d77363171b4c4c70ff3b0a1454f6
+        continue-on-error: true
+        with:
+          files: |
+            rs/private/select_utils.bzl
+            rs/private/all_crate_deps.bzl
