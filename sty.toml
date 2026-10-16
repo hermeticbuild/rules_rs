@@ -7,8 +7,7 @@ missing-parameter-annotation = "error"
 missing-return-annotation = "error"
 missing-type-argument = "error"
 unsound-assignment = "error"
-# The empty default select branch currently introduces Unknown into the result.
-unsound-return-statement = "ignore"
+unsound-return-statement = "error"
 explicit-any = "error"
 # Collection membership and empty-container inference remain gradual.
 non-static-type = "ignore"
