@@ -1,0 +1,6 @@
+"""Shared and platform-specific dependency collections."""
+
+def compute_select(
+        non_platform_items: Collection[str],
+        platform_items: Mapping[str, Collection[str]],
+) -> tuple[Collection[str], dict[str, list[str]]]: ...
