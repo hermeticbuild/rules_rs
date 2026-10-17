@@ -1,3 +1,6 @@
+[analysis]
+strict-generic-narrowing = true
+
 [type-interfaces]
 "rs/private/all_crate_deps.bzl" = "rs/private/all_crate_deps.bzli"
 "rs/private/select_utils.bzl" = "rs/private/select_utils.bzli"
