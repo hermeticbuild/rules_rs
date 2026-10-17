@@ -14,6 +14,11 @@ load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
 load(":semver_test.bzl", "semver_select_tests")
 load(":visibility_test.bzl", "visibility_tests")
 
+exports_files([
+    "all_crate_deps.bzli",
+    "select_utils.bzli",
+])
+
 bool_setting(
     name = "source_stdlib_building",
     build_setting_default = False,
