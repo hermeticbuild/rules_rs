@@ -25,4 +25,5 @@ jobs:
         with:
           files: |
             rs/private/select_utils.bzl
+            rs/private/select_render.bzl
             rs/private/all_crate_deps.bzl

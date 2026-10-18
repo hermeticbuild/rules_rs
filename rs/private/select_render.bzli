@@ -1,0 +1,15 @@
+"""Serialized selectors for generated BUILD files."""
+
+def _platform(triple: str, use_legacy_rules_rust_platforms: bool) -> str: ...
+def _format_branches(branches: Iterable[tuple[str, str]]) -> str: ...
+
+def render_select(
+        non_platform_items: Iterable[object],
+        platform_items: Mapping[str, Iterable[object]],
+        use_legacy_rules_rust_platforms: bool,
+) -> tuple[list[str], str]: ...
+
+def render_select_build_script_env(
+        platform_items: Mapping[str, str],
+        use_legacy_rules_rust_platforms: bool,
+) -> str: ...

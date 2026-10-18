@@ -4,6 +4,7 @@ strict-generic-narrowing = true
 [type-interfaces]
 "rs/private/all_crate_deps.bzl" = "rs/private/all_crate_deps.bzli"
 "rs/private/select_utils.bzl" = "rs/private/select_utils.bzli"
+"rs/private/select_render.bzl" = "rs/private/select_render.bzli"
 
 [rules]
 missing-parameter-annotation = "error"

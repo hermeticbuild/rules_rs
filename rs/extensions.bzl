@@ -25,7 +25,7 @@ load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repos
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
-load("//rs/private:repository_utils.bzl", "render_select")
+load("//rs/private:select_render.bzl", "render_select")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 load("//rs/private:visibility.bzl", "visibility_with_internal_access")
 
