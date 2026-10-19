@@ -53,6 +53,7 @@ def _parse_version_pattern(v):
         if comp in ("*", "x", "X"):
             wildcard_pos = i
             specified = i
+
             # Cargo supports wildcard only in the trailing position.
             if pre or i != len(comps) - 1:
                 return None
@@ -84,7 +85,7 @@ def _cmp_core(a, b):
 
 def _cmp(a, b):
     # First compare major/minor/patch.
-    core_cmp = _cmp_core(a, b)
+    core_cmp = _cmp_core(a[:3], b[:3])
     if core_cmp != 0:
         return core_cmp
 
@@ -185,11 +186,16 @@ def _split_req_operator(req):
 
 def _satisfies_comparator(op, rhs_tuple, ver_tuple):
     c = _cmp(ver_tuple, rhs_tuple)
-    if op == "<":  return c < 0
-    if op == "<=": return c <= 0
-    if op == ">":  return c > 0
-    if op == ">=": return c >= 0
-    if op == "=": return c == 0
+    if op == "<":
+        return c < 0
+    if op == "<=":
+        return c <= 0
+    if op == ">":
+        return c > 0
+    if op == ">=":
+        return c >= 0
+    if op == "=":
+        return c == 0
     return False
 
 def _normalize_req_to_comparators(req):

@@ -1,0 +1,12 @@
+"""Library fields consulted when detecting procedural macro crates."""
+
+type CargoLibrary = dict[{
+    "path": NotRequired[str],
+    "name": NotRequired[str],
+    "proc-macro": NotRequired[bool],
+    "proc_macro": NotRequired[bool],
+    "crate-type": NotRequired[list[str]],
+    "crate_type": NotRequired[list[str]],
+}, ...]
+
+def cargo_toml_is_proc_macro(cargo_toml_json: dict[{"lib": NotRequired[CargoLibrary]}, ...]) -> bool: ...

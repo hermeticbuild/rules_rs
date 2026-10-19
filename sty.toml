@@ -5,6 +5,8 @@ strict-generic-narrowing = true
 "rs/private/all_crate_deps.bzl" = "rs/private/all_crate_deps.bzli"
 "rs/private/select_utils.bzl" = "rs/private/select_utils.bzli"
 "rs/private/select_render.bzl" = "rs/private/select_render.bzli"
+"rs/private/cargo_toml_utils.bzl" = "rs/private/cargo_toml_utils.bzli"
+"rs/private/semver.bzl" = "rs/private/semver.bzli"
 
 [rules]
 missing-parameter-annotation = "error"
