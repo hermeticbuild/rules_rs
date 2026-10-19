@@ -16,9 +16,9 @@ _INHERITABLE_PACKAGE_FIELDS = [
     "homepage",
     "repository",
     "license",
-    # TODO(zbarsky): Do we need to fixup the path for readme and license_file?
-    "license_file",
-    "rust_version",
+    # TODO(zbarsky): Do we need to fixup the path for readme and license-file?
+    "license-file",
+    "rust-version",
     "readme",
 ]
 
@@ -75,7 +75,7 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
         "CARGO_PKG_HOMEPAGE": package.get("homepage", ""),
         "CARGO_PKG_REPOSITORY": package.get("repository", ""),
         "CARGO_PKG_LICENSE": package.get("license", ""),
-        "CARGO_PKG_LICENSE_FILE": package.get("license_file", ""),
+        "CARGO_PKG_LICENSE_FILE": package.get("license-file", ""),
         "CARGO_PKG_RUST_VERSION": package.get("rust-version", ""),
         "CARGO_PKG_README": readme,
     }
