@@ -68,6 +68,19 @@ def _package_metadata_test_impl(ctx):
         _, variables = _cargo_values(inherited["package"])
         asserts.equals(env, expected_license, variables["CARGO_PKG_LICENSE_FILE"])
         asserts.equals(env, expected_rust_version, variables["CARGO_PKG_RUST_VERSION"])
+
+    workspace = {"workspace": {"package": {"authors": ["Ada", "Grace"]}}}
+    for package, workspace_manifest, expected in [
+        ({}, workspace, ""),
+        ({"authors": ["Linus"]}, {}, "Linus"),
+        ({"authors": ["Linus"]}, workspace, "Linus"),
+        ({"authors": []}, workspace, ""),
+        ({"authors": {"workspace": True}}, workspace, "Ada:Grace"),
+    ]:
+        manifest = {"package": package}
+        inherited = inherit_workspace_package_fields(manifest, workspace_manifest)
+        _, variables = _cargo_values(inherited["package"])
+        asserts.equals(env, expected, variables["CARGO_PKG_AUTHORS"])
     return unittest.end(env)
 
 _build_script_test = unittest.make(_build_script_test_impl)

@@ -11,6 +11,7 @@ def _exclude_deps_from_features(features):
 
 _INHERITABLE_PACKAGE_FIELDS = [
     "version",
+    "authors",
     "edition",
     "description",
     "homepage",
