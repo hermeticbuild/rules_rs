@@ -38,6 +38,17 @@ def _build_script_test_impl(ctx):
     asserts.equals(env, "None", values["build_script"])
     return unittest.end(env)
 
+def _build_script_override_test_impl(ctx):
+    env = unittest.begin(ctx)
+    rctx = struct(
+        path = lambda _path: struct(get_child = lambda _name: struct(exists = False)),
+        file = lambda _path, _content: None,
+    )
+    manifest = {"package": {"name": "sample", "build": True}}
+    result = cargo_build_file_values(rctx, manifest, [], gen_build_script = "off")
+    asserts.equals(env, "None", result.values["build_script"])
+    return unittest.end(env)
+
 def _readme_test_impl(ctx):
     env = unittest.begin(ctx)
     for package, files, expected in [
@@ -84,14 +95,16 @@ def _package_metadata_test_impl(ctx):
     return unittest.end(env)
 
 _build_script_test = unittest.make(_build_script_test_impl)
+_build_script_override_test = unittest.make(_build_script_override_test_impl)
 _readme_test = unittest.make(_readme_test_impl)
 _package_metadata_test = unittest.make(_package_metadata_test_impl)
 
 def repository_utils_tests():
     _build_script_test(name = "repository_build_script_test")
+    _build_script_override_test(name = "repository_build_script_override_test")
     _readme_test(name = "repository_readme_test")
     _package_metadata_test(name = "repository_package_metadata_test")
     native.test_suite(
         name = "repository_utils_tests",
-        tests = [":repository_build_script_test", ":repository_readme_test", ":repository_package_metadata_test"],
+        tests = [":repository_build_script_test", ":repository_build_script_override_test", ":repository_readme_test", ":repository_package_metadata_test"],
     )

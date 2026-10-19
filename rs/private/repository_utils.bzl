@@ -47,7 +47,9 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
     package = cargo_toml["package"]
     if gen_build_script == None:
         gen_build_script = rctx.attr.gen_build_script
+    return _cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_dir, package, gen_build_script)
 
+def _cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_dir, package, gen_build_script):
     name = package["name"]
     version = package_version(package)
     parsed_version = parse_full_version(version)
