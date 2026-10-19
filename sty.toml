@@ -7,6 +7,8 @@ strict-generic-narrowing = true
 "rs/private/select_render.bzl" = "rs/private/select_render.bzli"
 "rs/private/cargo_toml_utils.bzl" = "rs/private/cargo_toml_utils.bzli"
 "rs/private/semver.bzl" = "rs/private/semver.bzli"
+"rs/private/repository_utils.bzl" = "rs/private/repository_utils.bzli"
+"rs/private/git_crate_metadata_repository.bzl" = "rs/private/git_crate_metadata_repository.bzli"
 
 [rules]
 missing-parameter-annotation = "error"

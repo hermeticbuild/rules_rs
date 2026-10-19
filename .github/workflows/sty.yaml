@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - uses: tamird/sty@ec7c566c6abed0c87bc1bd5c82d327371df7fa81
+      - uses: tamird/sty@9deeeefaa5ee2679744e43d5158faceb767dbb9c
         with:
           audit-loads: true
           files: |
@@ -29,3 +29,5 @@ jobs:
             rs/private/all_crate_deps.bzl
             rs/private/cargo_toml_utils.bzl
             rs/private/semver.bzl
+            rs/private/repository_utils.bzl
+            rs/private/git_crate_metadata_repository.bzl
