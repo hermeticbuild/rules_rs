@@ -1,5 +1,6 @@
 [analysis]
 strict-generic-narrowing = true
+require-valid-suppressions = true
 
 [type-interfaces]
 "rs/private/all_crate_deps.bzl" = "rs/private/all_crate_deps.bzli"
