@@ -32,3 +32,6 @@ jobs:
             rs/private/repository_utils.bzl
             rs/private/git_crate_metadata_repository.bzl
             rs/private/visibility.bzl
+            rs/rules_rust_prost.bzl
+            rs/rules_rust_pyo3.bzl
+            rs/rules_rust_wasm_bindgen.bzl
