@@ -214,6 +214,14 @@ def _triple_normalization_test_impl(ctx):
         "target_os": "none",
         "target_abi": "eabihf",
     })
+    _assert_attrs(env, "armv7-rtems-eabihf", {
+        "target_arch": "arm",
+        "target_os": "rtems",
+        "target_abi": "eabihf",
+        "target_env": "newlib",
+        "target_family": "unix",
+        "unix": True,
+    })
 
     # Apple spells 64-bit Arm arm64/arm64e; rustc reports aarch64.
     _assert_attrs(env, "arm64e-apple-ios", {
@@ -224,7 +232,15 @@ def _triple_normalization_test_impl(ctx):
     _assert_attrs(env, "arm64_32-apple-watchos", {
         "target_arch": "aarch64",
         "target_pointer_width": "32",
+        "target_family": "unix",
+        "unix": True,
     })
+    for os in ["tvos", "visionos"]:
+        _assert_attrs(env, "aarch64-apple-" + os, {
+            "target_os": os,
+            "target_family": "unix",
+            "unix": True,
+        })
 
     # ARM64EC is a distinct Windows architecture, not an Apple spelling of
     # AArch64.
@@ -239,13 +255,14 @@ def _triple_normalization_test_impl(ctx):
         "target_arch": "x86",
         "target_pointer_width": "32",
     })
-    _assert_attrs(env, "bpfel-unknown-none", {"target_arch": "bpf"})
+    _assert_attrs(env, "bpfel-unknown-none", {"target_arch": "bpf", "target_pointer_width": "64"})
 
     # Endianness is read from the RAW arch, which is where the byte order is
     # spelled — normalizing first would make these two indistinguishable.
     _assert_attrs(env, "bpfeb-unknown-none", {
         "target_arch": "bpf",
         "target_endian": "big",
+        "target_pointer_width": "64",
     })
     _assert_attrs(env, "powerpc64le-unknown-linux-gnu", {
         "target_arch": "powerpc64",
@@ -257,10 +274,17 @@ def _triple_normalization_test_impl(ctx):
     })
 
     # "eabi" is a substring of "eabihf"; the longer ABI must win.
-    _assert_attrs(env, "armv7-unknown-linux-gnueabihf", {
-        "target_arch": "arm",
-        "target_abi": "eabihf",
-    })
+    for triple, target_env, target_abi in [
+        ("armv7-unknown-linux-gnueabihf", "gnu", "eabihf"),
+        ("armeb-unknown-linux-gnueabi", "gnu", "eabi"),
+        ("armv7-unknown-linux-musleabihf", "musl", "eabihf"),
+        ("arm-unknown-linux-musleabi", "musl", "eabi"),
+    ]:
+        _assert_attrs(env, triple, {
+            "target_arch": "arm",
+            "target_env": target_env,
+            "target_abi": target_abi,
+        })
 
     # Unchanged: 4-part triples stay positional.
     _assert_attrs(env, "x86_64-unknown-linux-gnu", {

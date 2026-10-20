@@ -173,6 +173,7 @@ def _normalize_arch(arch_raw):
         return "arm"
     if arch_raw in ["i386", "i486", "i586", "i686"]:
         return "x86"
+
     # RISC-V target triples encode the enabled ISA extensions in their first
     # component, while Rust's cfg(target_arch) exposes only the register width.
     if arch_raw.startswith("riscv32"):
@@ -190,7 +191,7 @@ def _normalize_arch(arch_raw):
 _BARE_ABIS = ["eabi", "eabihf"]
 
 def _split_triple(triple):
-    """Splits a triple into (arch, vendor, os, env, abi) the way rustc does.
+    """Splits a triple into (arch, vendor, os, env, abi) for cfg evaluation.
 
     A 4-part triple is positional. A 3-part triple is not: the third component
     may be an OS, an ABI, or an OS with the ABI glued onto it.
@@ -199,14 +200,14 @@ def _split_triple(triple):
         triple (str): A platform triple, e.g. `armv7-linux-androideabi`.
 
     Returns:
-        A 5-tuple of raw (unnormalized) components.
+        Raw architecture and OS spellings, plus cfg vendor, environment and ABI.
     """
     parts = triple.split("-")
     arch = _get(parts, 0, "")
     vendor = _get(parts, 1, "unknown")
     os_raw = _get(parts, 2, "none")
     env = "-".join(parts[3:])
-    abi = ""
+    abi = _abi_from_env(env)
 
     if vendor == "none":
         # <arch>-none[-<abi>]: these bare-metal triples omit the vendor. The
@@ -221,18 +222,25 @@ def _split_triple(triple):
         abi = os_raw
         os_raw = vendor
         vendor = "unknown"
-    elif os_raw == "androideabi":
-        # <arch>-linux-androideabi: the eabi ABI is glued onto the OS token,
-        # so a positional read yields target_os "androideabi" — which is
-        # neither "android" nor unix, and silently drops every cfg(unix) and
-        # cfg(target_os = "android") dependency for 32-bit Android.
-        abi = "eabi"
+    elif os_raw in ["android", "androideabi"]:
+        # Android triples use linux as the system, not the vendor.
+        if os_raw == "androideabi":
+            abi = "eabi"
         os_raw = "android"
         vendor = "unknown"
-    elif os_raw == "android":
-        # <arch>-linux-android: the middle component is the system, not a
-        # vendor; rustc reports target_vendor "unknown".
-        vendor = "unknown"
+
+    if os_raw == "nto":
+        env = {"qnx710": "nto71", "qnx800": "nto80"}.get(env, env)
+    elif os_raw == "rtems":
+        env = "newlib"
+    else:
+        # Rust cfg separates the C library from the ABI in these environments.
+        env = {
+            "gnueabi": "gnu",
+            "gnueabihf": "gnu",
+            "musleabi": "musl",
+            "musleabihf": "musl",
+        }.get(env, env)
 
     return arch, vendor, os_raw, env, abi
 
@@ -243,6 +251,9 @@ def _family_for_os(os_name):
         "linux",
         "macos",
         "ios",
+        "tvos",
+        "watchos",
+        "visionos",
         "freebsd",
         "netbsd",
         "openbsd",
@@ -254,6 +265,7 @@ def _family_for_os(os_name):
         "haiku",
         "hurd",
         "nto",
+        "rtems",
     ]:
         return "unix"
     return ""
@@ -264,29 +276,18 @@ def _family_for_arch_and_os(arch, os_name):
     return _family_for_os(os_name)
 
 def _pointer_width_for_arch(arch):
-    # Common targets
-    arch64 = ["s390x", "bpfel", "bpfeb"]
-    if "64" in arch or arch in arch64:
+    if "64" in arch:
         return "64"
 
     arch32 = [
-        "i686",
-        "i586",
-        "i386",
         "x86",
         "arm",
-        "armv7",
-        "thumbv7",
-        "thumbv6",
         "mips",
         "mipsel",
         "powerpc",
         "ppc",
         "sparc",
-        "riscv32",
-        "wasm32",
         "m68k",
-        "loongarch32",
     ]
     if "32" in arch or arch in arch32:
         return "32"
@@ -334,8 +335,6 @@ def triple_to_cfg_attrs(triple):
         `unix`, and the triple itself as `_triple`.
     """
     arch_raw, vendor_part, os_raw_part, env_part, abi_part = _split_triple(triple)
-    if os_raw_part == "nto":
-        env_part = {"qnx710": "nto71", "qnx800": "nto80"}.get(env_part, env_part)
 
     arch_norm = _normalize_arch(arch_raw)
     os_norm = _normalize_os(os_raw_part)
@@ -347,7 +346,6 @@ def triple_to_cfg_attrs(triple):
     # big, and bpfeb is big-endian while bpfel is little.
     width = "32" if arch_raw == "arm64_32" else _pointer_width_for_arch(arch_norm)
     endian = _endian_for_arch(arch_raw)
-    abi_guess = abi_part if abi_part else _abi_from_env(env_part)
 
     return {
         "_triple": triple,
@@ -358,7 +356,7 @@ def triple_to_cfg_attrs(triple):
         "target_family": fam,
         "target_endian": endian,
         "target_pointer_width": width,
-        "target_abi": abi_guess,
+        "target_abi": abi_part,
 
         # convenience booleans for bare predicates
         "true": True,
