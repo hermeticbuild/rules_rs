@@ -31,3 +31,4 @@ jobs:
             rs/private/semver.bzl
             rs/private/repository_utils.bzl
             rs/private/git_crate_metadata_repository.bzl
+            rs/private/visibility.bzl
