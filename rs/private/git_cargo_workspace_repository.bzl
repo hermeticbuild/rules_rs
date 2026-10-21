@@ -1,16 +1,10 @@
 load("@bazel_tools//tools/build_defs/repo:git_worker.bzl", "git_repo")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "patch")
-load(":repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields", "package_version")
+load(":repository_utils.bzl", "cargo_build_file_values", "inherit_workspace_package_fields", "package_version", _spoke_repo = "spoke_repo_name")
 load(":toml2json.bzl", "run_toml2json")
 
 def _render_label_list(labels):
     return ",\n        ".join(['"%s"' % label for label in sorted(labels)])
-
-def _spoke_repo(hub_name, name, version):
-    s = "%s__%s-%s" % (hub_name, name, version)
-    if "+" in s:
-        s = s.replace("+", "-")
-    return s
 
 def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, workspace_cargo_toml):
     package_path = rctx.path(dest).dirname

@@ -36,6 +36,14 @@ def inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml):
 
     return cargo_toml
 
+def spoke_repo_name(hub_name, name, version):
+    # type: (object, object, object) -> str
+    """Returns the repository name for a crate's hub spoke."""
+    s = "%s__%s-%s" % (hub_name, name, version)
+    if "+" in s:
+        s = s.replace("+", "-")
+    return s
+
 def package_version(package):
     """Returns the `[package]` version of a decoded Cargo.toml, or Cargo's default `0.0.0`."""
 
