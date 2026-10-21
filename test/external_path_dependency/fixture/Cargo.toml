@@ -1,0 +1,11 @@
+[package]
+name = "external-workspace-repro"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+vendored-dependency = { path = "vendor/dependency" }
+
+[workspace]
+exclude = ["vendor/dependency"]
+resolver = "2"

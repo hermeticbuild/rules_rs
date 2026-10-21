@@ -1,0 +1,10 @@
+version = 4
+
+[[package]]
+name = "external-workspace-repro"
+version = "0.1.0"
+dependencies = ["vendored-dependency"]
+
+[[package]]
+name = "vendored-dependency"
+version = "0.1.0"

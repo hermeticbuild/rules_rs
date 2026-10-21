@@ -1,0 +1,11 @@
+load("@rules_rs//rs:rust_test.bzl", "rust_test")
+
+exports_files(["source_repository.bzl"])
+
+rust_test(
+    name = "external_path_dependency_test",
+    size = "small",
+    srcs = ["external_path_dependency_test.rs"],
+    edition = "2021",
+    deps = ["@external_path_dependency//:vendored-dependency"],
+)

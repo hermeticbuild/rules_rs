@@ -237,9 +237,11 @@ def _generate_hub_and_spokes(
             # Path dependencies are local, and Cargo.toml can change features or
             # dependencies without changing Cargo.lock, causing stale resolution.
             # Do not return path dependency facts for storage in MODULE.bazel.lock.
-            # Watch Cargo.toml so Bazel re-runs the extension when Cargo.toml changes.
+            # Cached external repositories may live outside the workspace, where
+            # module extensions cannot watch paths. Their repository inputs track changes.
             cargo_toml_path = paths.join(package["local_path"], "Cargo.toml")
-            mctx.watch(mctx.path(cargo_toml_path))
+            if cargo_lock_path.repo_name == "":
+                mctx.watch(mctx.path(cargo_toml_path))
             annotation = annotation_for(annotations, name, package["version"], hub_name)
             cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
             fact = cargo_toml_fact(cargo_toml_json, {})
