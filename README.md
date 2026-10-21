@@ -15,7 +15,7 @@ It provides a redistribution of the core compilation rules from `rules_rust`, au
 Add `rules_rs` to `MODULE.bazel`:
 
 ```bzl
-bazel_dep(name = "rules_rs", version = "0.0.33")
+bazel_dep(name = "rules_rs", version = "0.1.3")
 ```
 
 ## Paved Path
@@ -25,8 +25,8 @@ This is the default setup for new users. It provisions the patched `rules_rust`,
 ### `MODULE.bazel`
 
 ```bzl
-bazel_dep(name = "rules_rs", version = "0.0.61")
-bazel_dep(name = "llvm", version = "0.7.7")
+bazel_dep(name = "rules_rs", version = "0.1.3")
+bazel_dep(name = "llvm", version = "0.8.25")
 bazel_dep(name = "platforms", version = "1.1.0")
 
 toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
@@ -485,8 +485,8 @@ use_repo(rules_rust, "rules_rust")
 If you need to replace the pinned repository completely, use `override_repo`:
 
 ```bzl
-bazel_dep(name = "rules_rs", version = "0.0.33")
-bazel_dep(name = "rules_rust", version = "0.68.1")
+bazel_dep(name = "rules_rs", version = "0.1.3")
+bazel_dep(name = "rules_rust", version = "0.74.0")
 
 archive_override(
     module_name = "rules_rust",
@@ -514,7 +514,7 @@ load("@rules_rust//extensions/prost:defs.bzl", "rust_prost_library")
 
 ```bzl
 bazel_dep(name = "rules_proto", version = "7.1.0")
-bazel_dep(name = "protobuf", version = "34.0.bcr.1")
+bazel_dep(name = "protobuf", version = "36.2")
 
 register_toolchains(
     "@rules_rust//extensions/prost:default_prost_toolchain",
