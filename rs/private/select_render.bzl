@@ -3,11 +3,13 @@
 load(":select_utils.bzl", "compute_select")
 
 def _platform(triple, use_legacy_rules_rust_platforms):
+    # type: (str, bool) -> str
     if use_legacy_rules_rust_platforms:
         return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
     return "@rules_rs//rs/platforms/config:" + triple
 
 def _format_branches(branches):
+    # type: (Iterable[tuple[str, str]]) -> str
     return """select({
         %s
     })""" % (
@@ -15,6 +17,7 @@ def _format_branches(branches):
     )
 
 def render_select(non_platform_items, platform_items, use_legacy_rules_rust_platforms):
+    # type: (Iterable[object], Mapping[str, Iterable[object]], bool) -> tuple[list[str], str]
     """Returns stringified common items and the remaining BUILD select expression.
 
     Args:
@@ -42,6 +45,7 @@ def render_select(non_platform_items, platform_items, use_legacy_rules_rust_plat
     return common_items, _format_branches(branches)
 
 def render_select_build_script_env(platform_items, use_legacy_rules_rust_platforms):
+    # type: (Mapping[str, str], bool) -> str
     """Renders serialized environment dictionaries as a BUILD select expression.
 
     Args:
