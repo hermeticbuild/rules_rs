@@ -66,6 +66,31 @@ def rustc_lib_build_file(target_triple):
 def rust_redist_manifest_url(version):
     return RUST_REDIST_RELEASE_URL_TEMPLATE.format(version) + "manifest.json"
 
+def rust_redist_manifest_request(mctx, version, refresh, required):
+    """Reuse a locked manifest or start an asynchronous manifest download.
+
+    Args:
+        mctx: Module context with the downloader and optional lockfile facts.
+        version: Stable Rust release version.
+        refresh: Whether to download the manifest even when it is locked.
+        required: Whether a failed download must fail module evaluation.
+
+    Returns:
+        A struct with cached archives or a download token and output path.
+    """
+    url = rust_redist_manifest_url(version)
+    facts = getattr(mctx, "facts", {}) or {}
+    archives = None if refresh else facts.get(url)
+    if archives != None:
+        return struct(archives = archives, token = None, path = None)
+
+    path = "rust_redist_{}_manifest.json".format(version.replace("/", "_").replace(":", "_"))
+    return struct(
+        archives = None,
+        token = mctx.download(url, path, allow_fail = not required, block = False),
+        path = path,
+    )
+
 def rust_redist_url_templates(version):
     return [RUST_REDIST_RELEASE_URL_TEMPLATE.format(version) + "{}.tar.zst"]
 

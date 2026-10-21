@@ -15,6 +15,7 @@ load(
     "check_version_valid",
     "produce_tool_suburl",
     "rust_archive_extension",
+    "rust_redist_manifest_request",
     "rust_redist_manifest_url",
     "rust_redist_url_templates",
 )
@@ -237,19 +238,14 @@ def _toolchains_impl(mctx):
         if locked_upstream and not locked_zstd and not refresh_rust_redist:
             continue
 
-        manifest_path = "rust_redist_{}_manifest.json".format(_sanitize_path_fragment(base_version))
-        pending_manifests[base_version] = struct(
-            token = mctx.download(
-                rust_redist_manifest_url(base_version),
-                manifest_path,
-                allow_fail = not locked_zstd,
-                block = False,
-            ),
-            path = manifest_path,
-        )
+        pending_manifests[base_version] = rust_redist_manifest_request(mctx, base_version, refresh_rust_redist, locked_zstd)
 
     rust_redist_archives = {}
     for version, request in pending_manifests.items():
+        if request.archives != None:
+            rust_redist_archives[version] = request.archives
+            continue
+
         result = request.token.wait()
         if not result.success:
             continue
@@ -278,7 +274,9 @@ def _toolchains_impl(mctx):
         ]
 
     pending_downloads = {}
-    new_facts = {}
+
+    # Preserve the full archive inventory, including tools not requested yet.
+    new_facts = {rust_redist_manifest_url(version): archives for version, archives in rust_redist_archives.items()}
 
     def _request_archive_sha(archive_path, suburl, version, iso_date):
         if archive_path in new_facts or archive_path in pending_downloads:
