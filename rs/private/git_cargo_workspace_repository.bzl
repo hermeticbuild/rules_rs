@@ -61,14 +61,17 @@ crate(
     ))
 
 def _git_cargo_workspace_repository_impl(rctx):
+    # Resolve label inputs before cloning so a repository restart does not repeat Git work.
+    additive_build_file_contents = {dest: rctx.read(source) for dest, source in rctx.attr.additive_build_files.items()}
     git_repo(rctx, rctx.path("."))
 
     patch(rctx)
     rctx.delete(rctx.path(".git"))
 
     workspace_cargo_toml = run_toml2json(rctx, rctx.attr.workspace_cargo_toml)
-    for dest, additive_build_file_content in rctx.attr.build_files.items():
-        _render_build_file(rctx, dest, additive_build_file_content, rctx.attr.gen_binaries.get(dest, []), workspace_cargo_toml)
+    for dest, inline_content in rctx.attr.build_files.items():
+        content = additive_build_file_contents.get(dest, "") + inline_content
+        _render_build_file(rctx, dest, content, rctx.attr.gen_binaries.get(dest, []), workspace_cargo_toml)
 
     return rctx.repo_metadata(reproducible = True)
 
@@ -80,6 +83,9 @@ git_cargo_workspace_repository = repository_rule(
         "hub_name": attr.string(mandatory = True),
         "shallow_since": attr.string(),
         "init_submodules": attr.bool(default = True),
+        "additive_build_files": attr.string_keyed_label_dict(
+            doc = "Files to append to each generated BUILD file, keyed by its repository-relative path.",
+        ),
         "build_files": attr.string_dict(mandatory = True),
         "gen_binaries": attr.string_list_dict(default = {}),
         "workspace_cargo_toml": attr.string(default = "Cargo.toml"),

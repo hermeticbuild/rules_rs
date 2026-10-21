@@ -164,6 +164,20 @@ TESTS = [
 
 [use_repo(crate, test) for test in TESTS]
 
+[
+    crate.annotation(
+        additive_build_file = "//:git_crates_aliased_deps/additive.BUILD.bazel",
+        additive_build_file_content = "filegroup(name = ADDITIVE_BUILD_TARGET, visibility = [\"//visibility:public\"])\n",
+        crate = name,
+        extra_aliased_targets = {name + "_additive": "additive_target"},
+        repositories = ["git_crates_aliased_deps"],
+    )
+    for name in [
+        "nucleo",
+        "nucleo-matcher",
+    ]
+]
+
 source_repository = use_repo_rule("//external_path_dependency:source_repository.bzl", "source_repository")
 
 source_repository(name = "external_workspace")

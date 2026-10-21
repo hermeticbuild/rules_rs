@@ -107,13 +107,6 @@ def _target_label(repo_name, package_path, target):
         return "@%s//%s:%s" % (repo_name, package_path, target)
     return "@%s//:%s" % (repo_name, target)
 
-def _additive_build_file_content(mctx, annotation):
-    content = ""
-    if annotation.additive_build_file:
-        content += mctx.read(annotation.additive_build_file)
-    content += annotation.additive_build_file_content
-    return content
-
 def _generate_hub_and_spokes(
         mctx,
         hub_name,
@@ -853,7 +846,7 @@ def _crate_impl(mctx):
                 git_repo = git_repos.get(repo_name)
                 if not git_repo:
                     git_repo = {
-                        "build_files": {},
+                        "build_annotations": {},
                         "gen_binaries": {},
                         "commit": commit,
                         "hub_name": cfg.name,
@@ -878,7 +871,7 @@ def _crate_impl(mctx):
                     strip_prefix = json.decode(facts[source + "_" + package["name"]])["strip_prefix"]
                 package_path = _git_crate_package_path(annotation, strip_prefix)
                 build_file_path = paths.join(package_path, "BUILD.bazel") if package_path else "BUILD.bazel"
-                git_repo["build_files"][build_file_path] = _additive_build_file_content(mctx, annotation)
+                git_repo["build_annotations"][build_file_path] = annotation
                 if annotation.gen_binaries:
                     git_repo["gen_binaries"][build_file_path] = annotation.gen_binaries
 
@@ -898,9 +891,15 @@ def _crate_impl(mctx):
         if git_repo["gen_binaries"]:
             kwargs["gen_binaries"] = git_repo["gen_binaries"]
 
+        build_annotations = git_repo["build_annotations"]
         git_cargo_workspace_repository(
             name = repo_name,
-            build_files = git_repo["build_files"],
+            additive_build_files = {
+                path: annotation.additive_build_file
+                for path, annotation in build_annotations.items()
+                if annotation.additive_build_file
+            },
+            build_files = {path: annotation.additive_build_file_content for path, annotation in build_annotations.items()},
             commit = git_repo["commit"],
             hub_name = git_repo["hub_name"],
             patch_args = git_repo["patch_args"],

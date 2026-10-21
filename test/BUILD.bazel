@@ -440,6 +440,8 @@ filegroup(
         "@binaries//:protoc-gen-prost__protoc-gen-prost",
         "@binary_only//:b3sum__b3sum",
         "@build_script_aliases//:workspace_cargo_lints",
+        "@git_crates_aliased_deps//:nucleo-matcher_additive",
+        "@git_crates_aliased_deps//:nucleo_additive",
         "@root_package//:_workspace_deps",
     ] + select({
         "@platforms//os:windows": [],
