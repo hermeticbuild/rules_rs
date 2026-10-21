@@ -10,6 +10,7 @@ require-valid-suppressions = true
 "rs/private/semver.bzl" = "rs/private/semver.bzli"
 "rs/private/repository_utils.bzl" = "rs/private/repository_utils.bzli"
 "rs/private/git_crate_metadata_repository.bzl" = "rs/private/git_crate_metadata_repository.bzli"
+"rs/toolchains/toolchain_config.bzl" = "rs/toolchains/toolchain_config.bzli"
 
 [rules]
 missing-parameter-annotation = "error"

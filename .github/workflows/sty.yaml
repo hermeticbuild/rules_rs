@@ -35,6 +35,7 @@ jobs:
             rs/private/toolchain_labels_repository.bzl
             rs/private/toolchains_repository.bzl
             rs/private/visibility.bzl
+            rs/toolchains/toolchain_config.bzl
             rs/rules_rust_prost.bzl
             rs/rules_rust_pyo3.bzl
             rs/rules_rust_wasm_bindgen.bzl
