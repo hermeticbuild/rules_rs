@@ -25,7 +25,7 @@ def _miri_sysroot_impl(ctx):
     if not srcs_by_path:
         fail("miri_sysroot requires at least one src or root")
 
-    target_triple = toolchain.target_triple
+    target_triple = toolchain.target_triple  # type: object
     if type(target_triple) != "string":
         fail("Miri sysroot toolchain must provide a string target_triple")
 
