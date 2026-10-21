@@ -8,6 +8,7 @@ load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
 load(":cargo_toml_utils_test.bzl", "cargo_toml_utils_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
+load(":downloader_test.bzl", "downloader_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
 load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
@@ -31,6 +32,8 @@ rust_stdlib_filegroup(
     srcs = [],
     visibility = ["//visibility:public"],
 )
+
+downloader_tests()
 
 all_crate_deps_tests()
 
@@ -432,6 +435,15 @@ bzl_library(
     srcs = ["visibility_test.bzl"],
     deps = [
         ":visibility",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "downloader_test",
+    srcs = ["downloader_test.bzl"],
+    deps = [
+        ":downloader",
         "@bazel_skylib//lib:unittest",
     ],
 )
