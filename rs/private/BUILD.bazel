@@ -10,6 +10,7 @@ load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
+load(":repository_utils_test.bzl", "repository_utils_tests")
 load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
 load(":semver_test.bzl", "semver_select_tests")
 load(":visibility_test.bzl", "visibility_tests")
@@ -49,6 +50,8 @@ cfg_parser_tests()
 lint_flags_tests()
 
 registry_utils_tests()
+
+repository_utils_tests()
 
 rust_repository_utils_tests()
 
@@ -207,6 +210,7 @@ bzl_library(
         ":cargo_toml_utils",
         ":select_utils",
         ":semver",
+        "@bazel_skylib//lib:paths",
     ],
 )
 
@@ -234,6 +238,7 @@ bzl_library(
     deps = [
         ":repository_utils",
         ":toml2json",
+        "@bazel_skylib//lib:paths",
         "@bazel_tools//tools/build_defs/repo:git_worker.bzl",
         "@bazel_tools//tools/build_defs/repo:utils.bzl",
     ],
@@ -432,6 +437,15 @@ bzl_library(
     srcs = ["visibility_test.bzl"],
     deps = [
         ":visibility",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "repository_utils_test",
+    srcs = ["repository_utils_test.bzl"],
+    deps = [
+        ":repository_utils",
         "@bazel_skylib//lib:unittest",
     ],
 )
