@@ -42,7 +42,8 @@ def declare_rustc_toolchains(
         rust_objcopy = None,
         rust_lld = None,
         bpf_linker = None,
-        rust_std = None):
+        rust_std = None,
+        external_libc_triples = []):
     """Declares generated or custom Rust compiler toolchains.
 
     Register the generated toolchain targets before default toolchains when
@@ -69,6 +70,9 @@ def declare_rustc_toolchains(
         (`@platforms//os:none`) and wasm targets.
       bpf_linker: Optional bpf-linker label or labels keyed by execution triple.
       rust_std: Optional standard-library label or labels keyed by target triple.
+      external_libc_triples: Target triples whose standard library should link
+        the platform's libc instead of the copy rustc bundles. Ignored for a
+        triple whose standard library is given explicitly in `rust_std`.
     """
     if not target_triples:
         fail("target_triples must not be empty")
@@ -94,6 +98,8 @@ def declare_rustc_toolchains(
         stdlib_repo = "rust_stdlib_%s_%s" % (target_key, version_key)
         if target_triple in SUPPORTED_TIER_3_TRIPLES:
             default_rust_std = "@rustc_src_" + version_key + "//src:rust_std"
+        elif target_triple in external_libc_triples:
+            default_rust_std = "@%s//:rust_std-%s-external-libc" % (stdlib_repo, target_triple)
         else:
             default_rust_std = "@%s//:rust_std-%s" % (stdlib_repo, target_triple)
         rust_std_select[config_label] = _component(rust_std, target_triple, default_rust_std)
