@@ -23,6 +23,7 @@ _BPF_LINKER_ARCHIVE_TRIPLES = {
 BPF_LINKER_SUPPORTED_EXEC_TRIPLES = sorted(_BPF_LINKER_ARCHIVE_TRIPLES.keys())
 
 def _bpf_linker_archive_triple(exec_triple):
+    # type: (Hashable) -> str | None
     return _BPF_LINKER_ARCHIVE_TRIPLES.get(exec_triple)
 
 def _repository_name_for_archive(archive_triple):
@@ -30,15 +31,18 @@ def _repository_name_for_archive(archive_triple):
     return "rs_bpf_linker_" + archive_triple.replace("-", "_")
 
 def bpf_linker_repository_name(exec_triple):
+    # type: (Hashable) -> str | None
     archive_triple = _bpf_linker_archive_triple(exec_triple)
     if not archive_triple:
         return None
     return _repository_name_for_archive(archive_triple)
 
 def bpf_linker_binary_name(exec_triple):
+    # type: (str) -> str
     return "bpf-linker.exe" if "-windows-" in exec_triple else "bpf-linker"
 
 def _bpf_linker_repository_impl(rctx):
+    # type: (...) -> repo_metadata
     archive_triple = rctx.attr.archive_triple
     rctx.download_and_extract(
         url = "https://github.com/aya-rs/bpf-linker/releases/download/v{version}/bpf-linker-{triple}.tar.zst".format(
@@ -65,6 +69,7 @@ _bpf_linker_repository = repository_rule(
 )
 
 def declare_bpf_linker_repository(exec_triple):
+    # type: (str) -> None
     """Declares the pinned bpf-linker repository for a supported execution triple."""
     archive_triple = _bpf_linker_archive_triple(exec_triple)
     if not archive_triple:

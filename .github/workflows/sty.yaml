@@ -30,6 +30,7 @@ jobs:
             rs/private/cargo_toml_utils.bzl
             rs/private/semver.bzl
             rs/private/repository_utils.bzl
+            rs/private/bpf_linker_repository.bzl
             rs/private/git_crate_metadata_repository.bzl
             rs/private/host_cargo_repository.bzl
             rs/private/toolchain_labels_repository.bzl
