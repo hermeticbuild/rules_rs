@@ -25,11 +25,15 @@ BPF_LINKER_SUPPORTED_EXEC_TRIPLES = sorted(_BPF_LINKER_ARCHIVE_TRIPLES.keys())
 def _bpf_linker_archive_triple(exec_triple):
     return _BPF_LINKER_ARCHIVE_TRIPLES.get(exec_triple)
 
+def _repository_name_for_archive(archive_triple):
+    # type: (str) -> str
+    return "rs_bpf_linker_" + archive_triple.replace("-", "_")
+
 def bpf_linker_repository_name(exec_triple):
     archive_triple = _bpf_linker_archive_triple(exec_triple)
     if not archive_triple:
         return None
-    return "rs_bpf_linker_" + archive_triple.replace("-", "_")
+    return _repository_name_for_archive(archive_triple)
 
 def bpf_linker_binary_name(exec_triple):
     return "bpf-linker.exe" if "-windows-" in exec_triple else "bpf-linker"
@@ -67,6 +71,6 @@ def declare_bpf_linker_repository(exec_triple):
         fail("bpf-linker is not available for execution triple {}".format(exec_triple))
 
     _bpf_linker_repository(
-        name = bpf_linker_repository_name(exec_triple),
+        name = _repository_name_for_archive(archive_triple),
         archive_triple = archive_triple,
     )
