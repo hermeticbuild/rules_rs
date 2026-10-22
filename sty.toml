@@ -8,6 +8,7 @@ require-valid-suppressions = true
 "rs/private/all_crate_deps.bzl" = "rs/private/all_crate_deps.bzli"
 "rs/private/cargo_toml_utils.bzl" = "rs/private/cargo_toml_utils.bzli"
 "rs/private/lint_flags.bzl" = "rs/private/lint_flags.bzli"
+"rs/private/registry_utils.bzl" = "rs/private/registry_utils.bzli"
 "rs/private/semver.bzl" = "rs/private/semver.bzli"
 "rs/private/repository_utils.bzl" = "rs/private/repository_utils.bzli"
 "rs/private/git_crate_metadata_repository.bzl" = "rs/private/git_crate_metadata_repository.bzli"

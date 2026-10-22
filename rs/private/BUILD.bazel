@@ -21,6 +21,7 @@ exports_files([
     "cargo_toml_utils.bzli",
     "git_crate_metadata_repository.bzli",
     "lint_flags.bzli",
+    "registry_utils.bzli",
     "repository_utils.bzli",
     "semver.bzli",
 ])

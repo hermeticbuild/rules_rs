@@ -34,6 +34,7 @@ jobs:
             rs/private/all_crate_deps.bzl
             rs/private/cargo_toml_utils.bzl
             rs/private/lint_flags.bzl
+            rs/private/registry_utils.bzl
             rs/private/semver.bzl
             rs/private/repository_utils.bzl
             rs/private/bpf_linker_repository.bzl
