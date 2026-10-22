@@ -22,7 +22,7 @@ jobs:
           persist-credentials: false
       - name: Use public Bazel downloads
         run: sed -i '/^common --remote_cache=/d; /^common --experimental_remote_downloader=/d' .bazelrc
-      - uses: tamird/sty@66ba37a5d8a0e9b35da9c7aa071c1285c3a88f93
+      - uses: tamird/sty@787f9f2b23fa716fe93b4360dbd2dd9205f918fa
         with:
           audit-loads: true
           files: |
@@ -33,6 +33,7 @@ jobs:
             rs/private/select_render.bzl
             rs/private/all_crate_deps.bzl
             rs/private/cargo_toml_utils.bzl
+            rs/private/lint_flags.bzl
             rs/private/semver.bzl
             rs/private/repository_utils.bzl
             rs/private/bpf_linker_repository.bzl

@@ -1,0 +1,24 @@
+"""Cargo lint settings and the flags derived from them."""
+
+type _LintSetting = str | dict[{
+    "level": str,
+    "priority": NotRequired[int],
+    "check-cfg": NotRequired[list[str]],
+}, ...]
+type _LintSettings = Mapping[str, _LintSetting]
+type _LintSections = dict[{
+    "rust": NotRequired[_LintSettings],
+    "clippy": NotRequired[_LintSettings],
+    "rustdoc": NotRequired[_LintSettings],
+}, ...]
+type _LintFlags = struct[{
+    "rustc_lint_flags": list[str],
+    "clippy_lint_flags": list[str],
+    "rustdoc_lint_flags": list[str],
+}]
+
+def _parse_lint(value: _LintSetting) -> tuple[str, int, list[str]]: ...
+def _format_flags(lints: _LintSettings, prefix: str) -> list[str]: ...
+def _lint_flags(lints: _LintSections) -> _LintFlags: ...
+def cargo_toml_lint_flags(cargo_toml_json: dict[{"lints": NotRequired[_LintSections]}, ...]) -> _LintFlags: ...
+def workspace_cargo_toml_lint_flags(cargo_toml_json: dict[{"workspace": NotRequired[dict[{"lints": NotRequired[_LintSections]}, ...]]}, ...]) -> _LintFlags: ...
