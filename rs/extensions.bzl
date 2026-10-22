@@ -24,7 +24,7 @@ load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_rep
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
-load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
+load("//rs/private:registry_utils.bzl", "CRATES_IO_LOCK_SOURCE", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_crates_io_source", "resolve_registry_source")
 load("//rs/private:repository_utils.bzl", _spoke_repo = "spoke_repo_name")
 load("//rs/private:select_render.bzl", "render_select")
 load("//rs/private:toml2json.bzl", "run_toml2json")
@@ -727,7 +727,7 @@ def _crate_impl(mctx):
     packages_by_hub_name = {}
     cargo_toml_by_hub_name = {}
     cargo_config_by_hub_name = {}
-    parsed_cargo_configs = {}
+    crates_io_sources = {}
     cargo_credentials_by_hub_name = {}
     annotations_by_hub_name = {}
 
@@ -748,21 +748,23 @@ def _crate_impl(mctx):
             effective_cargo_config = cfg.cargo_config or global_cargo_config
             cargo_config_by_hub_name[cfg.name] = effective_cargo_config
 
-            cargo_config = {}
+            crates_io_source = CRATES_IO_REGISTRY
             if effective_cargo_config:
-                cargo_config_key = str(effective_cargo_config)
-                cargo_config = parsed_cargo_configs.get(cargo_config_key)
-                if cargo_config == None:
+                if effective_cargo_config not in crates_io_sources:
                     mctx.watch(effective_cargo_config)
-                    cargo_config = run_toml2json(mctx, effective_cargo_config)
-                    parsed_cargo_configs[cargo_config_key] = cargo_config
+                    crates_io_sources[effective_cargo_config] = None
+                crates_io_source = crates_io_sources[effective_cargo_config]
 
             cargo_toml_by_hub_name[cfg.name] = run_toml2json(mctx, cfg.cargo_toml)
             cargo_lock = run_toml2json(mctx, cfg.cargo_lock)
             parsed_packages = cargo_lock.get("package", [])
             for package in parsed_packages:
                 package["hub_name"] = cfg.name
-                source = resolve_registry_source(package.get("source"), cargo_config)
+                source = package.get("source")
+                if source == CRATES_IO_LOCK_SOURCE and crates_io_source == None:
+                    crates_io_source = resolve_crates_io_source(run_toml2json(mctx, effective_cargo_config))
+                    crates_io_sources[effective_cargo_config] = crates_io_source
+                source = resolve_registry_source(source, crates_io_source or CRATES_IO_REGISTRY)
                 if source:
                     package["source"] = source
             packages_by_hub_name[cfg.name] = parsed_packages

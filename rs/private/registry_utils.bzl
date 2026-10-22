@@ -1,18 +1,43 @@
 CRATES_IO_REGISTRY = "sparse+https://index.crates.io/"
+CRATES_IO_LOCK_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
 
-def resolve_registry_source(source, cargo_config = {}):
-    """Resolves a Cargo.lock registry source using Cargo source replacements."""
+def resolve_registry_source(source, crates_io_source = CRATES_IO_REGISTRY):
+    """Normalizes a Cargo.lock source using the resolved crates.io registry."""
     if source == None:
         return None
 
     if source.startswith("registry+sparse+"):
         return source.removeprefix("registry+")
 
-    if source != "registry+https://github.com/rust-lang/crates.io-index":
+    if source != CRATES_IO_LOCK_SOURCE:
         return source
 
-    sources = cargo_config.get("source", {})
-    replacement = sources.get("crates-io", {}).get("replace-with")
+    return crates_io_source
+
+def _cargo_field(value, key, path, required = False):
+    if value == None and not required:
+        return None
+    if type(value) == "dict":
+        return value.get(key)
+    fail("Cargo configuration %s must be a table" % path)
+
+def _cargo_string(table, key, path):
+    value = _cargo_field(table, key, path)
+    if value == None:
+        return None
+    if type(value) == "string":
+        return value
+    fail("Cargo configuration %s.%s must be a string" % (path, key))
+
+def resolve_crates_io_source(cargo_config):
+    """Resolves the active crates.io replacement in a decoded Cargo config."""
+    sources = _cargo_field(cargo_config, "source", "root", required = True)
+    if sources == None:
+        return CRATES_IO_REGISTRY
+    if type(sources) != "dict":
+        fail("Cargo configuration source must be a table")
+    crates_io = _cargo_field(sources, "crates-io", "source")
+    replacement = _cargo_string(crates_io, "replace-with", "source.crates-io")
     if not replacement:
         return CRATES_IO_REGISTRY
 
@@ -22,13 +47,18 @@ def resolve_registry_source(source, cargo_config = {}):
             fail("Cargo registry source replacement cycle: %s" % " -> ".join(visited + [replacement]))
         visited.append(replacement)
 
-        replacement_source = sources.get(replacement, {})
-        next_replacement = replacement_source.get("replace-with")
+        replacement_source = _cargo_field(sources, replacement, "source")
+        replacement_path = "source.%s" % replacement
+        next_replacement = _cargo_string(replacement_source, "replace-with", replacement_path)
         if next_replacement:
             replacement = next_replacement
             continue
 
-        registry = replacement_source.get("registry") or cargo_config.get("registries", {}).get(replacement, {}).get("index")
+        registry = _cargo_string(replacement_source, "registry", replacement_path)
+        if not registry:
+            registries = _cargo_field(cargo_config, "registries", "root")
+            replacement_registry = _cargo_field(registries, replacement, "registries")
+            registry = _cargo_string(replacement_registry, "index", "registries.%s" % replacement)
         if not registry:
             fail("Cargo registry source replacement %s does not define a registry index" % replacement)
         if not registry.startswith("sparse+"):
@@ -38,15 +68,19 @@ def resolve_registry_source(source, cargo_config = {}):
     fail("Cargo registry source replacements could not be resolved")
 
 def registry_download_template(config):
-    """Returns the crate download template from a registry config.
+    """Returns the crate download template from a decoded registry config.
 
     Args:
-        config: Decoded registry config.json object.
+        config: Decoded registry config.json.
 
     Returns:
         A download URL template using Cargo's registry placeholders.
     """
-    dl = config["dl"]
+    if type(config) != "dict":
+        fail("Cargo registry config.json must be an object")
+    dl = config.get("dl")
+    if type(dl) != "string":
+        fail("Cargo registry config.json field dl must be a string")
     if not (
         "{crate}" in dl or
         "{version}" in dl or
