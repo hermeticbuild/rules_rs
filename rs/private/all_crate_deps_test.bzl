@@ -101,10 +101,24 @@ def _all_crate_deps_dedupes_across_selected_kinds_impl(ctx):
 
     return unittest.end(env)
 
+def _all_crate_deps_filters_before_select_impl(ctx):
+    env = unittest.begin(ctx)
+    deps = all_crate_deps(
+        {
+            "deps": ["@repo//:shared"],
+            "deps_by_platform": {"//cfg:linux": ["@other//:conditional"]},
+        },
+        platforms = ["//cfg:darwin", "//cfg:linux"],
+        filter_prefix = "@repo//:",
+    )
+    asserts.equals(env, ["@repo//:shared"], deps)
+    return unittest.end(env)
+
 merge_structured_dep_specs_dedupes_and_promotes_test = unittest.make(_merge_structured_dep_specs_dedupes_and_promotes_impl)
 merge_structured_dep_specs_applies_filter_prefix_test = unittest.make(_merge_structured_dep_specs_applies_filter_prefix_impl)
 all_crate_deps_defaults_to_normal_test = unittest.make(_all_crate_deps_defaults_to_normal_impl)
 all_crate_deps_dedupes_across_selected_kinds_test = unittest.make(_all_crate_deps_dedupes_across_selected_kinds_impl)
+all_crate_deps_filters_before_select_test = unittest.make(_all_crate_deps_filters_before_select_impl)
 
 def all_crate_deps_tests():
     return unittest.suite(
@@ -113,4 +127,5 @@ def all_crate_deps_tests():
         merge_structured_dep_specs_applies_filter_prefix_test,
         all_crate_deps_defaults_to_normal_test,
         all_crate_deps_dedupes_across_selected_kinds_test,
+        all_crate_deps_filters_before_select_test,
     )

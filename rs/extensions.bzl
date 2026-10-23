@@ -645,11 +645,18 @@ def all_crate_deps(
         normal_dev = False,
         build = False,
         package_name = None,
-        cargo_only = False):
+        cargo_only = False,
+        filter_prefix = None):
 
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return []
+
+    if cargo_only:
+        if filter_prefix == None or {this_repo}.startswith(filter_prefix):
+            filter_prefix = {this_repo}
+        elif not filter_prefix.startswith({this_repo}):
+            return []
 
     return _all_crate_deps(
         dep_data,
@@ -657,7 +664,7 @@ def all_crate_deps(
         normal = normal,
         normal_dev = normal_dev,
         build = build,
-        filter_prefix = {this_repo} if cargo_only else None,
+        filter_prefix = filter_prefix,
     )
 
 RESOLVED_PLATFORMS = select({{
