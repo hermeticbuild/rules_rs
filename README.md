@@ -175,6 +175,11 @@ rust_binary(
 )
 ```
 
+`all_crate_deps(filter_prefix = "@crates//:serde-")` selects dependency labels
+starting with that prefix, before platform-dependent `select()` values are
+constructed. Combining it with `cargo_only = True` also restricts the result to
+the generated Cargo repository.
+
 ### Cargo lint configuration
 
 Enable Cargo lint configuration for a dependency closure through its
