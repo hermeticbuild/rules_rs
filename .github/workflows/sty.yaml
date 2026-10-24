@@ -32,6 +32,7 @@ jobs:
             rs/private/select_utils.bzl
             rs/private/select_render.bzl
             rs/private/all_crate_deps.bzl
+            rs/private/cargo_lints.bzl
             rs/private/cargo_toml_utils.bzl
             rs/private/lint_flags.bzl
             rs/private/registry_utils.bzl
