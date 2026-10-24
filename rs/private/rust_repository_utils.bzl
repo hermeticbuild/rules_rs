@@ -45,6 +45,8 @@ def produce_tool_suburl(tool_name, target_triple, version, iso_date = None):
 
 def includes_rust_analyzer_proc_macro_srv(version, iso_date):
     if version == "nightly":
+        if iso_date == None:
+            fail("iso_date must be specified if version is 'nightly'")
         return iso_date >= "2022-09-21"
     if version == "beta":
         return False

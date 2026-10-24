@@ -53,9 +53,12 @@ def _rust_analyzer_proc_macro_srv_versions_test_impl(ctx):
     asserts.false(env, includes_rust_analyzer_proc_macro_srv("1.63.0", None))
     asserts.true(env, includes_rust_analyzer_proc_macro_srv("1.64.0", None))
     asserts.true(env, includes_rust_analyzer_proc_macro_srv("1.92.0-alpha+build", None))
+    asserts.false(env, includes_rust_analyzer_proc_macro_srv("beta", None))
     asserts.false(env, includes_rust_analyzer_proc_macro_srv("beta", "2026-04-20"))
+    asserts.false(env, includes_rust_analyzer_proc_macro_srv("nightly", ""))
     asserts.false(env, includes_rust_analyzer_proc_macro_srv("nightly", "2022-09-20"))
     asserts.true(env, includes_rust_analyzer_proc_macro_srv("nightly", "2022-09-21"))
+    asserts.true(env, includes_rust_analyzer_proc_macro_srv("nightly", "2022-09-22"))
 
     return unittest.end(env)
 
