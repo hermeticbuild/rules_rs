@@ -342,11 +342,15 @@ def _miri_host_compile_action(ctx, crate, toolchain, rust_toolchain, deps, proc_
         skip_expanding_rustc_env = True,
     )
 
+    transitive_inputs = [result.compile_inputs]
+    if crate.type == "proc-macro":
+        transitive_inputs.append(crate.data)
+
     return struct(
         crate_info = result.crate_info,
         dep_info = result.dep_info,
         output = result.crate_info.output,
-        transitive_inputs = depset([result.crate_info.output], transitive = [result.compile_inputs]),
+        transitive_inputs = depset([result.crate_info.output], transitive = transitive_inputs),
         transitive_outputs = depset([result.crate_info.output], transitive = [result.dep_info.transitive_crate_outputs]),
     )
 
@@ -381,11 +385,6 @@ def _miri_compile_aspect_impl(target, ctx):
     )
 
     if crate.type == "proc-macro":
-        host = struct(
-            output = host.output,
-            transitive_inputs = depset(transitive = [host.transitive_inputs, crate.data]),
-            transitive_outputs = host.transitive_outputs,
-        )
         return [MiriCrateInfo(
             crate_info = crate,
             host = host,

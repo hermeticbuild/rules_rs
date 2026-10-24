@@ -33,6 +33,7 @@ rust_library(
     srcs = ["miri_dep.rs"],
     crate_name = "miri_dep",
     edition = "2024",
+    proc_macro_deps = [":miri_proc_macro"],
     deps = [":miri_leaf"],
 )
 
@@ -48,6 +49,7 @@ miri_test(
 rust_proc_macro(
     name = "miri_proc_macro",
     srcs = ["miri_proc_macro.rs"],
+    data = ["proc_macro_value.txt"],
     edition = "2024",
 )
 
