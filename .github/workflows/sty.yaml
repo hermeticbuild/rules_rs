@@ -21,8 +21,8 @@ jobs:
         with:
           persist-credentials: false
       - name: Use public Bazel downloads
-        run: sed -i '/^common --remote_cache=/d; /^common --experimental_remote_downloader=/d' .bazelrc
-      - uses: tamird/sty@bdc6a2efff79da3dbdaabae5ddf0d5fae2c302b4
+        run: sed -i '/^common --remote_cache=/d; /^common --experimental_remote_downloader=/d; /^common --bes_backend=/d' .bazelrc test/.bazelrc
+      - uses: &sty tamird/sty@bdc6a2efff79da3dbdaabae5ddf0d5fae2c302b4
         with:
           audit-loads: true
           files: |
@@ -50,3 +50,13 @@ jobs:
             rs/rules_rust_prost.bzl
             rs/rules_rust_pyo3.bzl
             rs/rules_rust_wasm_bindgen.bzl
+            tools/rust_analyzer/defs.bzl
+      - name: Check test repository fixtures
+        uses: *sty
+        with:
+          working-directory: test
+          artifact-name: sty-test
+          audit-loads: true
+          files: |
+            external_path_dependency/source_repository.bzl
+            visibility/repos.bzl
