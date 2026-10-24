@@ -1,0 +1,6 @@
+"""Miri sysroot provider."""
+
+def MiriSysrootInfo(*, sysroot: File, target_triple: str) -> record[{
+    "sysroot": File,
+    "target_triple": str,
+}]: ...

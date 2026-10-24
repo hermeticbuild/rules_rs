@@ -1,0 +1,12 @@
+"""Contracts for generated visibility-test repositories."""
+
+load("@rules_rs//rs/private:repository_utils.bzli", "CrateAttributes")
+
+def _repo_impl(rctx: repository_ctx[Intersection[CrateAttributes, struct[{"macro": bool, "crate_name": str}, ...]]]) -> None:
+    ...
+
+def _groups_impl(rctx) -> None:
+    ...
+
+def _fixtures_impl(_mctx) -> None:
+    ...

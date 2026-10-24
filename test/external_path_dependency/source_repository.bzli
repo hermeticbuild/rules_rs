@@ -1,0 +1,4 @@
+"""Return contract for the local Cargo source fixture."""
+
+def _source_repository_impl(ctx) -> repo_metadata:
+    ...

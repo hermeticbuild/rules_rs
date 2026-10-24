@@ -10,9 +10,22 @@ load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
+load(":repository_utils_test.bzl", "repository_utils_tests")
 load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
+load(":select_render_test.bzl", "select_render_tests")
 load(":semver_test.bzl", "semver_select_tests")
 load(":visibility_test.bzl", "visibility_tests")
+
+exports_files([
+    "all_crate_deps.bzli",
+    "cargo_toml_utils.bzli",
+    "cfg_parser.bzli",
+    "git_crate_metadata_repository.bzli",
+    "lint_flags.bzli",
+    "registry_utils.bzli",
+    "repository_utils.bzli",
+    "semver.bzli",
+])
 
 bool_setting(
     name = "source_stdlib_building",
@@ -50,7 +63,11 @@ lint_flags_tests()
 
 registry_utils_tests()
 
+repository_utils_tests()
+
 rust_repository_utils_tests()
+
+select_render_tests()
 
 semver_select_tests()
 
@@ -205,6 +222,7 @@ bzl_library(
     visibility = ["//rs:__subpackages__"],
     deps = [
         ":cargo_toml_utils",
+        ":select_render",
         ":select_utils",
         ":semver",
     ],
@@ -432,6 +450,31 @@ bzl_library(
     srcs = ["visibility_test.bzl"],
     deps = [
         ":visibility",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "select_render",
+    srcs = ["select_render.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [":select_utils"],
+)
+
+bzl_library(
+    name = "select_render_test",
+    srcs = ["select_render_test.bzl"],
+    deps = [
+        ":select_render",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "repository_utils_test",
+    srcs = ["repository_utils_test.bzl"],
+    deps = [
+        ":repository_utils",
         "@bazel_skylib//lib:unittest",
     ],
 )

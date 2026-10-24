@@ -1,0 +1,27 @@
+"""Toolchain declarations resolved from the module graph."""
+
+# Input tags and normalized output records expose the same fields.
+class _ToolchainValues(Protocol):
+    name: Final[str]
+    version: Final[str]
+    rustfmt_version: Final[str]
+    rust_analyzer_version: Final[str]
+    edition: Final[str]
+    extra_rustc_flags: Final[dict[str, list[str]]]
+    extra_exec_rustc_flags: Final[dict[str, list[str]]]
+    use_rust_redist: Final[bool]
+
+class _ToolchainTags(Protocol):
+    toolchain: Final[Sequence[_ToolchainValues]]
+
+class _ToolchainModule(Protocol):
+    is_root: Final[bool]
+    tags: Final[_ToolchainTags]
+
+type _ResolvedToolchainConfig = Intersection[struct[object], _ToolchainValues]
+
+def _config(tag: _ToolchainValues) -> _ResolvedToolchainConfig: ...
+def _highest_version(a: str, b: str, repo_name: str, attribute: str) -> str: ...
+def _stable_version_key(version: str) -> tuple[int, ...]: ...
+def _merge_configs(a: _ResolvedToolchainConfig, b: _ResolvedToolchainConfig) -> _ResolvedToolchainConfig: ...
+def resolve_toolchain_configs(modules: Sequence[_ToolchainModule]) -> dict[str, _ResolvedToolchainConfig]: ...

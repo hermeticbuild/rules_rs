@@ -76,6 +76,7 @@ bzl_library(
         "//rs/private:registry_config_repository",
         "//rs/private:registry_utils",
         "//rs/private:repository_utils",
+        "//rs/private:select_render",
         "//rs/private:toml2json",
         "//rs/private:visibility",
         "@bazel_lib//lib:repo_utils",

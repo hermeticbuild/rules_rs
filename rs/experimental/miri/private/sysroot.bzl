@@ -25,8 +25,12 @@ def _miri_sysroot_impl(ctx):
     if not srcs_by_path:
         fail("miri_sysroot requires at least one src or root")
 
+    target_triple = toolchain.target_triple  # type: object
+    if type(target_triple) != "string":
+        fail("Miri sysroot toolchain must provide a string target_triple")
+
     sysroot = ctx.actions.declare_directory(ctx.label.name)
-    lib_dir = "lib/rustlib/{}/lib".format(toolchain.target_triple)
+    lib_dir = "lib/rustlib/{}/lib".format(target_triple)
     srcs = [srcs_by_path[path] for path in sorted(srcs_by_path.keys())]
     replace_prefixes = {}
     basenames = set()
@@ -51,7 +55,7 @@ def _miri_sysroot_impl(ctx):
     return [
         MiriSysrootInfo(
             sysroot = sysroot,
-            target_triple = toolchain.target_triple,
+            target_triple = target_triple,
         ),
         DefaultInfo(
             files = depset([sysroot]),

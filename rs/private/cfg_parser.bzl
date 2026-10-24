@@ -1,5 +1,7 @@
 """Parses Cargo `cfg(...)` expressions and evaluates them against target triples."""
 
+# Recursive token and AST types are declared in cfg_parser.bzli.
+
 def _get(xs, index, default):
     if index < len(xs):
         return xs[index]
@@ -19,9 +21,9 @@ def _emit_pending(frames, pending_ident, pending_eq_key):
 
 # Tokens: IDENT(name), STRING(value), LPAREN, RPAREN, COMMA, EQ
 def _cfg_tokenize(expr):
-    tokens = []
-    ident_buf = []
-    str_buf = []
+    tokens = []  # type: list[_Token]
+    ident_buf = []  # type: list[str]
+    str_buf = []  # type: list[str]
     in_string = False
     in_escape = False
 
@@ -77,7 +79,7 @@ def cfg_parse(expr):
         A tuple of the expression's AST and whether it tests a `feature`.
     """
     tokens = _cfg_tokenize(expr)
-    frames = [{"fn": "__ROOT__", "args": []}]
+    frames = [{"fn": "__ROOT__", "args": []}]  # type: list[_Frame]
     pending_ident = None
     pending_eq_key = None
     uses_feature_cfg = False
@@ -393,11 +395,12 @@ def _eval_eq(ctx, key, value, features):
     return False
 
 def _eval_pred(ctx, name):
-    return ctx.get(name, False)
+    # Only boolean entries represent bare configuration names.
+    return ctx.get(name) == True
 
 def _cfg_eval(ast, ctx, features = []):
-    todo = [{"op": "VISIT", "node": ast}]
-    results = []
+    todo = [{"op": "VISIT", "node": ast}]  # type: list[_Instruction]
+    results = []  # type: list[bool]
     for _ in range(200000):
         if not todo:
             break

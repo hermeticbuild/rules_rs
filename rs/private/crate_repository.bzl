@@ -18,13 +18,17 @@ def _generate_build_file(rctx, cargo_toml, purl_qualifiers = {}, package_path = 
     cargo = cargo_build_file_values(rctx, cargo_toml, rctx.attr.gen_binaries, package_path = package_path)
     package = cargo_toml["package"]
     version = package_version(package)
-    values = dict(cargo.values)
-    values.update({
-        "name": repr(package["name"]),
-        "purl": repr(_cargo_purl(package["name"], version, purl_qualifiers)),
-        "version": repr(version),
-    })
-    return render_build_file_content(rctx, rctx.attr, values, bazel_metadata = cargo.bazel_metadata)
+    return render_build_file_content(
+        rctx,
+        rctx.attr,
+        dict(
+            cargo.values,
+            name = repr(package["name"]),
+            purl = repr(_cargo_purl(package["name"], version, purl_qualifiers)),
+            version = repr(version),
+        ),
+        bazel_metadata = cargo.bazel_metadata,
+    )
 
 def _crate_repository_impl(rctx):
     # TODO(zbarsky): Is there a better way than fetching this in every crate repository?
