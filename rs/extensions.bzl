@@ -945,8 +945,9 @@ _from_cargo = tag_class(
     } | {
         "cargo_toml": attr.label(
             doc = "The workspace-level Cargo.toml. There can be multiple crates in the workspace.",
+            mandatory = True,
         ),
-        "cargo_lock": attr.label(),
+        "cargo_lock": attr.label(mandatory = True),
         "cargo_config": attr.label(),
         "generate_lint_config": attr.bool(
             doc = "If true, generate per-package Cargo lint configuration by reading workspace member manifests.",
