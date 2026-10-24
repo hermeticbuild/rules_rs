@@ -19,6 +19,8 @@ def triple_to_rust_constraint_set(target_triple):
         else:
             constraints.append("@rules_rs//rs/platforms/constraints:glibc")
     elif t.system == "windows":
+        if t.abi == None:
+            fail("Windows platform triple {} must specify an ABI".format(target_triple))
         constraints.append("@llvm//constraints/windows/abi:" + t.abi)
 
         # Rust links MSVCRT for both GNU Windows target specs:
