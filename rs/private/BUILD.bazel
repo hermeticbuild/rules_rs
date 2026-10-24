@@ -19,6 +19,7 @@ load(":visibility_test.bzl", "visibility_tests")
 exports_files([
     "all_crate_deps.bzli",
     "cargo_toml_utils.bzli",
+    "cfg_parser.bzli",
     "git_crate_metadata_repository.bzli",
     "lint_flags.bzli",
     "registry_utils.bzli",
