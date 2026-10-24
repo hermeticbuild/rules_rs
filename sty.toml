@@ -2,27 +2,5 @@
 strict-generic-narrowing = true
 require-valid-suppressions = true
 
-[type-interfaces]
-"rs/experimental/miri/private/providers.bzl" = "rs/experimental/miri/private/providers.bzli"
-"rs/experimental/miri/private/toolchain.bzl" = "rs/experimental/miri/private/toolchain.bzli"
-"rs/private/all_crate_deps.bzl" = "rs/private/all_crate_deps.bzli"
-"rs/private/cargo_toml_utils.bzl" = "rs/private/cargo_toml_utils.bzli"
-"rs/private/lint_flags.bzl" = "rs/private/lint_flags.bzli"
-"rs/private/registry_utils.bzl" = "rs/private/registry_utils.bzli"
-"rs/private/semver.bzl" = "rs/private/semver.bzli"
-"rs/private/repository_utils.bzl" = "rs/private/repository_utils.bzli"
-"rs/private/git_crate_metadata_repository.bzl" = "rs/private/git_crate_metadata_repository.bzli"
-"rs/toolchains/toolchain_config.bzl" = "rs/toolchains/toolchain_config.bzli"
-
 [rules]
-missing-parameter-annotation = "error"
-missing-return-annotation = "error"
-missing-type-argument = "error"
-unsound-assignment = "error"
-unsound-return-statement = "error"
-explicit-any = "error"
-non-static-type = "error"
-blanket-ignore-comment = "error"
-possibly-unresolved-reference = "error"
-possibly-missing-attribute = "error"
-division-by-zero = "error"
+strict = "error"

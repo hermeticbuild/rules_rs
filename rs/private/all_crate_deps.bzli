@@ -11,7 +11,7 @@ type _DependencyData = dict[{
 
 type _DependencySpec = tuple[list[str], dict[str, list[str]]]
 
-def _filter_by_prefix(deps: Iterable[str], prefix: str) -> list[str]: ...
+def _filter_by_prefix(deps: Collection[str], prefix: str) -> list[str]: ...
 
 def _kind_dep_spec(
         dep_data: _DependencyData,
@@ -19,14 +19,14 @@ def _kind_dep_spec(
 ) -> _DependencySpec: ...
 
 def merge_structured_dep_specs(
-        specs: Iterable[tuple[Collection[str], Mapping[str, Collection[str]]]],
-        platforms: Iterable[str],
+        specs: Collection[tuple[Collection[str], Mapping[str, Collection[str]]]],
+        platforms: Collection[str],
         filter_prefix: str | None,
 ) -> tuple[list[str], dict[str, list[str]]]: ...
 
 def all_crate_deps(
         dep_data: _DependencyData,
-        platforms: Iterable[str],
+        platforms: Collection[str],
         normal: bool = ...,
         normal_dev: bool = ...,
         build: bool = ...,

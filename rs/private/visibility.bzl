@@ -1,7 +1,7 @@
 """Visibility for generated Cargo targets."""
 
 def visibility_with_internal_access(visibility, internal_packages):
-    # type: (Iterable[str | Label], list[str]) -> list[str]
+    # type: (Collection[str | Label], list[str]) -> list[str]
     """Retain generated dependency access alongside consumer visibility.
 
     Args:
