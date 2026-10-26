@@ -107,6 +107,11 @@ rust_binary(
     ],
 )
 
+rust_test(
+    name = "setup_test",
+    crate = ":setup",
+)
+
 rust_binary(
     name = "validate",
     srcs = ["@rules_rust//tools/rust_analyzer:bin/validate.rs"],
