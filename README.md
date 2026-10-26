@@ -271,8 +271,8 @@ label can instead be combined with `exec_triples`. Use `target_triples` to limit
 supported target platforms. Omit `rustc` to use the generated compiler while
 overriding another component.
 
-Register the custom package instead of the generated Rust compiler toolchains in
-`MODULE.bazel`:
+Register the custom package in `MODULE.bazel` to select both Rust and Cargo
+for the declared execution and target triples.
 
 ```bzl
 register_toolchains(
@@ -287,6 +287,8 @@ Keep `@default_rust_toolchains` available through `use_repo` for the Rustfmt and
 rust-analyzer registrations above.
 Override `rustc_lib`, `rust_doc`, `cargo`, `clippy_driver`, `cargo_clippy`,
 `rust_objcopy`, `rust_lld`, `bpf_linker`, or `rust_std` when necessary.
+A `genrule` that runs `$(CARGO)` can list
+`@rules_rust//cargo:current_cargo_toolchain` in both `toolchains` and `tools`.
 
 </details>
 

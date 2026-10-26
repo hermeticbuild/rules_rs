@@ -1,5 +1,6 @@
 """Definitions for declaring Rust compiler toolchains."""
 
+load("@rules_rust//cargo:cargo_toolchain.bzl", "cargo_toolchain")
 load("@rules_rust//rust:rust_toolchain.bzl", "rust_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("@rust_toolchain_labels//:defs.bzl", "rust_toolchain_component_label")
@@ -43,7 +44,7 @@ def declare_rustc_toolchains(
         rust_lld = None,
         bpf_linker = None,
         rust_std = None):
-    """Declares generated or custom Rust compiler toolchains.
+    """Declares Rust compiler and Cargo toolchains from the same release.
 
     Register the generated toolchain targets before default toolchains when
     these toolchains should take precedence for their supported target triples.
@@ -81,6 +82,7 @@ def declare_rustc_toolchains(
 
     version_key = sanitize_version(version)
     channel = _channel(version)
+    base_version, _, iso_date = version.partition("/")
 
     rust_std_label = name + "_rust_std"
     rust_std_select = {}
@@ -139,14 +141,44 @@ def declare_rustc_toolchains(
         clippy_repo_label = "@clippy_{}_{}//:".format(triple_suffix, version_key)
         lld_label = _component(rust_lld, triple, rustc_repo_label + "rust-lld")
 
-        rust_toolchain_name = name + "_" + triple_suffix + "_" + version_key + "_rust_toolchain"
+        toolchain_prefix = name + "_" + triple_suffix + "_" + version_key
+        rust_toolchain_name = toolchain_prefix + "_rust_toolchain"
+        exec_compatible_with = [
+            "@platforms//os:" + exec_triple.system,
+            "@platforms//cpu:" + exec_triple.arch,
+        ]
+        target_settings = [target_triples_label, "@rules_rust//rust/toolchain/channel:" + channel]
+
+        cargo_toolchain(
+            name = toolchain_prefix + "_cargo_toolchain",
+            cargo = _component(cargo, triple, cargo_repo_label + "cargo"),
+            channel = channel,
+            iso_date = iso_date,
+            tags = ["manual", "rust_version=" + version],
+            version = base_version,
+            visibility = ["//visibility:public"],
+        )
+        native.toolchain(
+            name = toolchain_prefix + "_cargo",
+            exec_compatible_with = exec_compatible_with,
+            target_settings = target_settings,
+            toolchain = toolchain_prefix + "_cargo_toolchain",
+            toolchain_type = "@rules_rust//cargo:toolchain_type",
+            visibility = ["//visibility:public"],
+        )
 
         rust_toolchain_kwargs = dict(
             rust_doc = _component(rust_doc, triple, rustc_repo_label + "rustdoc"),
             rustc = _component(rustc, triple, rustc_repo_label + "rustc"),
-            cargo = _component(cargo, triple, cargo_repo_label + "cargo"),
+            channel = channel,
+            iso_date = iso_date,
+            version = base_version,
             clippy_driver = _component(clippy_driver, triple, clippy_repo_label + "clippy_driver_bin"),
             cargo_clippy = _component(cargo_clippy, triple, clippy_repo_label + "cargo_clippy_bin"),
+            dlltool = select({
+                "@llvm//constraints/windows/abi:gnu": "@llvm//tools:llvm-dlltool",
+                "//conditions:default": None,
+            }),
             llvm_cov = "@llvm//tools:llvm-cov",
             llvm_profdata = "@llvm//tools:llvm-profdata",
             linker = select({
@@ -268,15 +300,10 @@ def declare_rustc_toolchains(
                     version_key,
                     bootstrap_suffix,
                 ),
-                exec_compatible_with = [
-                    "@platforms//os:" + exec_triple.system,
-                    "@platforms//cpu:" + exec_triple.arch,
-                ],
-                target_settings = [
-                    target_triples_label,
+                exec_compatible_with = exec_compatible_with,
+                target_settings = target_settings + [
                     "@rules_rs//rs/toolchains:bpf_targets" if is_bpf else "@rules_rs//rs/toolchains:non_bpf_targets",
                     bootstrap_setting,
-                    "@rules_rust//rust/toolchain/channel:" + channel,
                 ],
                 toolchain = rust_toolchain_name + toolchain_suffix,
                 toolchain_type = "@rules_rust//rust:toolchain_type",

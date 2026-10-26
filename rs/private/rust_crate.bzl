@@ -219,6 +219,7 @@ def rust_crate(
     for binary, crate_root in binaries.items():
         rust_binary(
             name = binary + "__bin",
+            cargo_bin_name = binary,
             compile_data = compile_data,
             aliases = aliases,
             deps = binary_lib_dep + deps,
