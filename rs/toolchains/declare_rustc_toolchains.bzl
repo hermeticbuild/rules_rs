@@ -143,6 +143,19 @@ def declare_rustc_toolchains(
 
         toolchain_prefix = name + "_" + triple_suffix + "_" + version_key
         rust_toolchain_name = toolchain_prefix + "_rust_toolchain"
+
+        # This name is also the sysroot directory: `rust_toolchain` symlinks every
+        # stdlib file to bazel-out/<config>/bin/<package>/<this name>/lib/rustlib/
+        # <target triple>/lib/. On Windows that prefix is already ~180 characters,
+        # and link.exe resolves its input paths against MAX_PATH (260), so a
+        # descriptive name puts the stdlib rlibs out of its reach and every Rust
+        # link fails with LNK1181 - the first being the process_wrapper bootstrap,
+        # before any user code compiles. rules_rust compacts the equivalent
+        # repository name for the same reason; see `compact_windows_names` in
+        # rust/private/repositories.bzl.
+        if exec_triple.system == "windows":
+            rust_toolchain_name = "rt-{}".format(abs(hash(rust_toolchain_name)))
+
         exec_compatible_with = [
             "@platforms//os:" + exec_triple.system,
             "@platforms//cpu:" + exec_triple.arch,
