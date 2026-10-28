@@ -214,6 +214,7 @@ crate.from_cargo(
     ],
 )
 use_repo(crate, "root_package")
+
 crate.annotation(
     crate = "rustls",
     # Test for https://github.com/bazelbuild/rules_rust/issues/3626
@@ -309,12 +310,6 @@ crate.annotation(
     repositories = ["many_workspace_deps"],
 )
 crate.annotation(
-    crate = "objc-sys",
-    patch_args = ["-p1"],
-    patches = ["//:objc-sys.patch"],
-    version = "0.3.5",
-)
-crate.annotation(
     crate = "wasmtime-internal-component-macro",
     patch_args = ["-p1"],
     patches = ["//:wasmtime-internal-component-macro.patch"],
@@ -335,34 +330,22 @@ crate.annotation(
 
 ### Fix -sys crates
 include("//:3rd_party/aws-lc-sys/include.MODULE.bazel")
-
 include("//:3rd_party/bzip2-sys/include.MODULE.bazel")
-
 include("//:3rd_party/curl-sys/include.MODULE.bazel")
-
 include("//:3rd_party/glib-sys/include.MODULE.bazel")
-
 include("//:3rd_party/libbpf-sys/include.MODULE.bazel")
-
 include("//:3rd_party/libnghttp2-sys/include.MODULE.bazel")
-
 include("//:3rd_party/libssh2-sys/include.MODULE.bazel")
-
 include("//:3rd_party/libusb1-sys/include.MODULE.bazel")
-
 include("//:3rd_party/lzma-sys/include.MODULE.bazel")
-
 include("//:3rd_party/lz4-sys/include.MODULE.bazel")
-
 include("//:3rd_party/libudev-sys/include.MODULE.bazel")
-
 include("//:3rd_party/apriltag-sys/include.MODULE.bazel")
-
+include("//:3rd_party/objc-sys/include.MODULE.bazel")
 include("//:3rd_party/zstd-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): alsa-sys is not currently tested, fix it
 include("//:3rd_party/alsa-sys/include.MODULE.bazel")
-
 include("//:3rd_party/openssl-sys/include.MODULE.bazel")
 
 single_version_override(
@@ -407,9 +390,7 @@ crate.annotation(
 )
 
 include("//:3rd_party/gdk-pixbuf-sys/include.MODULE.bazel")
-
 include("//:3rd_party/cairo-sys-rs/include.MODULE.bazel")
-
 include("//:3rd_party/atk-sys/include.MODULE.bazel")
 
 crate.annotation(
@@ -434,9 +415,7 @@ clang++: error: no such file or directory: 'bcrypt.lib'
 #)
 
 include("//:3rd_party/libz-sys/include.MODULE.bazel")
-
 include("//:3rd_party/libgit2-sys/include.MODULE.bazel")
-
 include("//:3rd_party/coreaudio-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): fix this for realz
