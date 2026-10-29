@@ -149,6 +149,14 @@ _miri_toolchains_repository = repository_rule(
     },
 )
 
+def _empty_toolchains_repository_impl(rctx):
+    rctx.file("BUILD.bazel", "")
+    return rctx.repo_metadata(reproducible = True)
+
+_empty_toolchains_repository = repository_rule(
+    implementation = _empty_toolchains_repository_impl,
+)
+
 def _toolchains_impl(mctx):
     refresh_rust_redist = bool(mctx.getenv("RULES_RS_RUST_REDIST_REFRESH"))
 
@@ -543,6 +551,10 @@ def _toolchains_impl(mctx):
             target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES,
         )
 
+    # rules_rs registers the default repo, so it must exist even without toolchains.
+    if _DEFAULT_TOOLCHAIN_REPO_NAME not in repo_configs:
+        _empty_toolchains_repository(name = _DEFAULT_TOOLCHAIN_REPO_NAME)
+
     # Dependency tags do not describe the root module's direct dependencies.
     # is_dev_dependency requires the original tag, not a resolved configuration.
     for mod in mctx.modules:
@@ -561,7 +573,7 @@ def _toolchains_impl(mctx):
     direct_dev_deps = [name for name in direct_dev_deps if name not in direct_deps]
 
     for tag in miri_repo_tags:
-        if tag.name in repo_configs:
+        if tag.name in repo_configs or tag.name == _DEFAULT_TOOLCHAIN_REPO_NAME:
             fail("Miri toolchain repo {} conflicts with a Rust toolchain repo of the same name".format(tag.name))
 
         _miri_toolchains_repository(

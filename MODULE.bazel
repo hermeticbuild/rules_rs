@@ -29,13 +29,13 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 toolchains = use_extension("//rs/toolchains:module_extension.bzl", "toolchains")
 use_repo(
     toolchains,
+    "default_rust_toolchains",
     "host_cargo",
     "rust_toolchain_labels",
 )
 
-dev_toolchains = use_extension("//rs/toolchains:module_extension.bzl", "toolchains", dev_dependency = True)
-dev_toolchains.toolchain()
-use_repo(dev_toolchains, "default_rust_toolchains")
+rules_rust_bindgen = use_extension("//rs:rules_rust_bindgen.bzl", "rules_rust_bindgen")
+use_repo(rules_rust_bindgen, "rules_rust_bindgen")
 
 [
     http_file(
@@ -194,14 +194,14 @@ bazel_dep(name = "buildifier_prebuilt", version = "6.1.2", dev_dependency = True
 
 register_toolchains(
     "@default_rust_toolchains//...",
-    dev_dependency = True,
+    "@rules_rust//extensions/prost:default_prost_toolchain",
+    "@rules_rust//extensions/wasm_bindgen:default_wasm_bindgen_toolchain",
+    "@rules_rust_bindgen//:all",
 )
 
 register_toolchains(
-    "@rules_rust//extensions/prost:default_prost_toolchain",
     "@rules_rust//extensions/pyo3/toolchains:rust_toolchain",
     "@rules_rust//extensions/pyo3/toolchains:toolchain",
-    "@rules_rust//extensions/wasm_bindgen:default_wasm_bindgen_toolchain",
     dev_dependency = True,
 )
 

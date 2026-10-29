@@ -329,7 +329,8 @@ implicit default Rust toolchain and its downloads. Explicit `toolchains.toolchai
 and `toolchains.experimental_miri` declarations still provision their requested
 toolchains. Without `host_cargo`, the default behavior is unchanged.
 
-When the implicit default is disabled, `default_rust_toolchains` is not created.
+When the implicit default is disabled, `default_rust_toolchains` contains no
+toolchains.
 Supply all required compiler components when using `declare_rustc_toolchains`
 with fully custom toolchains.
 
