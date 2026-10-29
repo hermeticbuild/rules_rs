@@ -71,7 +71,7 @@ def _download_github_tarball(rctx):
     rctx.download_and_extract(
         url = "https://github.com/%s/archive/%s.tar.gz" % (repo_path, rctx.attr.commit),
         type = "tar.gz",
-        stripPrefix = "%s-%s" % (repo_path.split("/")[-1], rctx.attr.commit),
+        strip_components = 1,
         canonical_id = "%s@%s" % (rctx.attr.remote, rctx.attr.commit),
         # No checksum: GitHub does not promise a byte-stable archive. The commit pins the content.
     )
