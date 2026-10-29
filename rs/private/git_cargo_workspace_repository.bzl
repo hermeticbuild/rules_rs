@@ -12,11 +12,11 @@ def _spoke_repo(hub_name, name, version):
         s = s.replace("+", "-")
     return s
 
-def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, workspace_cargo_toml):
+def _render_build_file(rctx, dest, additive_build_file_content, gen_binaries, workspace_cargo_toml, workspace_dir):
     package_path = rctx.path(dest).dirname
     cargo_toml_path = package_path.get_child("Cargo.toml")
     cargo_toml = run_toml2json(rctx, cargo_toml_path)
-    cargo_toml = inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml)
+    cargo_toml = inherit_workspace_package_fields(rctx, cargo_toml, workspace_cargo_toml, workspace_dir, package_path)
     package = cargo_toml["package"]
 
     cargo = cargo_build_file_values(
@@ -95,10 +95,13 @@ def _git_cargo_workspace_repository_impl(rctx):
     patch(rctx)
     rctx.delete(rctx.path(".git"))
 
-    workspace_cargo_toml = run_toml2json(rctx, rctx.attr.workspace_cargo_toml)
+    workspace_manifests = {}
     for dest, inline_content in rctx.attr.build_files.items():
+        workspace_path = rctx.attr.workspace_cargo_tomls.get(dest, rctx.attr.workspace_cargo_toml)
+        if workspace_path not in workspace_manifests:
+            workspace_manifests[workspace_path] = run_toml2json(rctx, workspace_path)
         content = additive_build_file_contents.get(dest, "") + inline_content
-        _render_build_file(rctx, dest, content, rctx.attr.gen_binaries.get(dest, []), workspace_cargo_toml)
+        _render_build_file(rctx, dest, content, rctx.attr.gen_binaries.get(dest, []), workspace_manifests[workspace_path], rctx.path(workspace_path).dirname)
 
     return rctx.repo_metadata(reproducible = True)
 
@@ -120,6 +123,9 @@ git_cargo_workspace_repository = repository_rule(
         "build_files": attr.string_dict(mandatory = True),
         "gen_binaries": attr.string_list_dict(default = {}),
         "workspace_cargo_toml": attr.string(default = "Cargo.toml"),
+        "workspace_cargo_tomls": attr.string_dict(
+            doc = "Owning workspace manifests, keyed by destination BUILD file.",
+        ),
         "patch_args": attr.string_list(default = []),
         "patches": attr.label_list(default = []),
         "patch_strip": attr.int(default = 0),
