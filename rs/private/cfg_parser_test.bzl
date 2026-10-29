@@ -30,6 +30,7 @@ def _cfg_parser_smoke_test_impl(ctx):
     asserts.true(env, cfg_matches(_cfg("unix"), mac))
     asserts.true(env, cfg_matches(_cfg('target_os = "macos"'), mac))
     asserts.true(env, cfg_matches(_cfg('target_arch = "aarch64"'), mac))
+    asserts.equals(env, False, cfg_matches(_cfg("target_arch"), mac))
     asserts.true(env, cfg_matches(_cfg('target_family = "unix"'), mac))
     asserts.false(env, cfg_matches(_cfg("windows"), mac))
 

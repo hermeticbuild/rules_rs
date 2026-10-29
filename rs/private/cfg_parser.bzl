@@ -393,7 +393,8 @@ def _eval_eq(ctx, key, value, features):
     return False
 
 def _eval_pred(ctx, name):
-    return ctx.get(name, False)
+    # Only boolean entries represent bare configuration names.
+    return ctx.get(name) == True
 
 def _cfg_eval(ast, ctx, features = []):
     todo = [{"op": "VISIT", "node": ast}]
