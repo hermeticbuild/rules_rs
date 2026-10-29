@@ -1,34 +1,16 @@
-# External vendored path dependency regression test
+# External Cargo manifests
 
-Run from the `test/` workspace:
+Run both tests from the `test/` workspace.
 
 ```sh
-bazel --ignore_all_rc_files test --lockfile_mode=off //external_path_dependency:external_path_dependency_test
+bazel test //external_path_dependency:all
 ```
 
-The existing test workspace loads rules_rs from the surrounding checkout.
-The fixture uses only synthetic source files and public toolchain dependencies.
+`source_repository` copies the Cargo workspace into a reproducible external
+repository so Bazel can store it in the repository contents cache.
+`external_path_dependency_test` builds and calls the vendored crate.
 
-The Rust test depends on a generated vendored-crate target and calls that crate's
-function, checking that the dependency resolves, compiles, and links. On unmodified
-rules_rs main after #213, dependency resolution fails before the test runs:
-
-```text
-mctx.watch(mctx.path(cargo_toml_path))
-Error in watch: attempted to watch path outside workspace, but it's prohibited in the current context
-```
-
-The source repository copies five tiny checked-in Cargo/Rust files and declares
-itself reproducible, matching the cached repository behavior of `http_archive`
-without an archive download. Cargo excludes the vendored dependency from workspace
-membership, ensuring rules_rs processes it as a path dependency. Cargo reports
-its manifest under Bazel's repository contents cache, outside the workspace;
-`module_ctx.watch` rejects that path.
-
-Ignoring ambient bazelrc files and disabling module lockfile reuse prevents a
-previously cached successful extension evaluation from hiding the failure. The
-existing CI test matrix runs this target with the other integration tests.
-
-The resolver watches path dependency manifests only for local workspaces. External
-source repositories are tracked through their repository inputs. With this fix,
-the same Bazel target resolves, compiles, links, and passes its Rust assertion.
+`manifest_watch_test` edits the vendored crate's default features and queries
+the generated target on the same Bazel server. It then adds the crate to the
+workspace, edits its edition, and queries the edition from `@crates//:defs.bzl`.
+Both edits leave `Cargo.lock` unchanged.

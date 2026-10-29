@@ -497,7 +497,6 @@ def resolve_cargo_workspace_members(
         debug = False,
         dep_label_prefix = "//:",
         skip_internal_rustc_placeholder_crates = True,
-        watch_manifests = False,
         use_legacy_rules_rust_platforms = False):
     platform_cfg_attrs = [triple_to_cfg_attrs(triple) for triple in platform_triples]
     platform_cfg_attrs_by_triple = {}
@@ -560,9 +559,6 @@ def resolve_cargo_workspace_members(
     workspace_dep_labels_by_triple = {triple: set() for triple in platform_triples}
 
     for package in cargo_metadata["packages"]:
-        if watch_manifests:
-            ctx.watch(package["manifest_path"])
-
         package_feature_resolutions = feature_resolutions_by_fq_crate[fq_crate(package["name"], package["version"])]
         if "default" in package.get("features", {}):
             for triple in platform_triples:

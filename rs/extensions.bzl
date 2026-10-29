@@ -113,7 +113,7 @@ def _generate_hub_and_spokes(
         annotations,
         suggested_annotation_snippet_paths,
         cargo_path,
-        cargo_lock_path,
+        cargo_toml_label,
         workspace_cargo_toml_json,
         all_packages,
         platform_triples,
@@ -132,7 +132,7 @@ def _generate_hub_and_spokes(
         annotations (dict): Annotation tags to apply.
         suggested_annotation_snippet_paths (dict): Mapping crate -> snippet file path.
         cargo_path (path): Path to hermetic `cargo` binary.
-        cargo_lock_path (path): Cargo.lock path
+        cargo_toml_label (Label): Workspace Cargo.toml
         workspace_cargo_toml_json (dict): Parsed workspace Cargo.toml
         all_packages: list[package]: from cargo lock parsing
         platform_triples (list[string]): Triples to resolve for
@@ -146,14 +146,20 @@ def _generate_hub_and_spokes(
     _date(mctx, "start")
 
     mctx.report_progress("Reading workspace metadata")
+
+    # Keep metadata paths under external/<repo> so mctx.watch can track files
+    # even when the repository is symlinked into the repository contents cache.
+    manifest = mctx.path(cargo_toml_label)
     result = mctx.execute(
-        [cargo_path, "metadata", "--no-deps", "--locked", "--format-version=1", "--quiet"] +
+        [cargo_path, "metadata", "--manifest-path", manifest, "--no-deps", "--locked", "--format-version=1", "--quiet"] +
         (["--config", str(mctx.path(cargo_config))] if cargo_config else []),
-        working_directory = str(mctx.path(cargo_lock_path).dirname),
+        working_directory = str(manifest.dirname),
     )
     if result.return_code != 0:
         fail(result.stdout + "\n" + result.stderr)
     cargo_metadata = json.decode(result.stdout)
+    for member in cargo_metadata["packages"]:
+        mctx.watch(member["manifest_path"])
 
     _date(mctx, "parsed cargo metadata")
 
@@ -226,16 +232,10 @@ def _generate_hub_and_spokes(
                 if fact == None:
                     fail("Sparse registry %s has no metadata for %s %s" % (source, name, version))
         elif source.startswith("path+"):
-            # Always re-read a path dependency's Cargo.toml instead of using cached facts.
-            # Path dependencies are local, and Cargo.toml can change features or
-            # dependencies without changing Cargo.lock, causing stale resolution.
-            # Do not return path dependency facts for storage in MODULE.bazel.lock.
-            # Cached external repositories may live outside the workspace, where
-            # module extensions cannot watch paths. Their repository inputs track changes.
+            # Path dependencies can change without a Cargo.lock edit. Keep their
+            # facts out of MODULE.bazel.lock.
             cargo_toml_path = paths.join(package["local_path"], "Cargo.toml")
-            if cargo_lock_path.repo_name == "":
-                mctx.watch(mctx.path(cargo_toml_path))
-            annotation = annotation_for(annotations, name, package["version"], hub_name)
+            mctx.watch(cargo_toml_path)
             cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
             fact = cargo_toml_fact(cargo_toml_json, {})
 
@@ -278,9 +278,6 @@ def _generate_hub_and_spokes(
     feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate
     versions_by_name = resolved_facts.versions_by_name
 
-    # Only files in the current Bazel workspace can/should be watched, so check where our manifests are located.
-    watch_manifests = cargo_lock_path.repo_name == ""
-
     workspace_resolution = resolve_cargo_workspace_members(
         mctx,
         cargo_metadata = cargo_metadata,
@@ -294,7 +291,6 @@ def _generate_hub_and_spokes(
         validate_lockfile = validate_lockfile,
         debug = debug,
         dep_label_prefix = "@%s//:" % hub_name,
-        watch_manifests = watch_manifests,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
     )
     cfg_match_cache = workspace_resolution.cfg_match_cache
@@ -471,7 +467,7 @@ crate.annotation(
         for package in packages
     }
     repo_root = _normalize_path(cargo_metadata["workspace_root"])
-    workspace_package = _label_directory(cargo_lock_path)
+    workspace_package = _label_directory(cargo_toml_label)
 
     workspace_lints_present = generate_lint_config and "lints" in workspace_cargo_toml_json.get("workspace", {})
     workspace_manifest_path = paths.join(repo_root, "Cargo.toml")
@@ -827,9 +823,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_toml, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_toml, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms)
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
