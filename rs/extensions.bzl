@@ -879,7 +879,6 @@ def _crate_impl(mctx):
                         "patches": {},
                         "remote": remote,
                         "use_git": False,
-                        "workspace_cargo_toml": annotation.workspace_cargo_toml,
                     }
                     git_repos[repo_name] = git_repo
                 elif git_repo["remote"] != remote or git_repo["commit"] != commit:
@@ -966,7 +965,7 @@ def _crate_impl(mctx):
             patches = git_repo["patches"].values(),
             remote = git_repo["remote"],
             use_git = git_repo["use_git"],
-            workspace_cargo_toml = git_repo["workspace_cargo_toml"],
+            workspace_cargo_tomls = {path: annotation.workspace_cargo_toml for path, annotation in build_annotations.items()},
             **kwargs
         )
 
