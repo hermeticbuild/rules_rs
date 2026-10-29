@@ -5,6 +5,7 @@ load(":all_crate_deps_test.bzl", "all_crate_deps_tests")
 load(":annotations_test.bzl", "annotations_tests")
 load(":bindgen_test.bzl", "bindgen_tests")
 load(":bpf_linker_repository_test.bzl", "bpf_linker_repository_tests")
+load(":cargo_manifest_test.bzl", "cargo_manifest_tests")
 load(":cargo_toml_utils_test.bzl", "cargo_toml_utils_tests")
 load(":cargo_workspace_graph_test.bzl", "cargo_workspace_graph_tests")
 load(":cfg_parser_test.bzl", "cfg_parser_tests")
@@ -39,6 +40,8 @@ annotations_tests()
 bindgen_tests()
 
 bpf_linker_repository_tests()
+
+cargo_manifest_tests()
 
 cargo_toml_utils_tests()
 
@@ -432,6 +435,15 @@ bzl_library(
     srcs = ["visibility_test.bzl"],
     deps = [
         ":visibility",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "cargo_manifest_test",
+    srcs = ["cargo_manifest_test.bzl"],
+    deps = [
+        ":repository_utils",
         "@bazel_skylib//lib:unittest",
     ],
 )

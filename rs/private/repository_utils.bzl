@@ -92,9 +92,17 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
     version = package_version(package)
     parsed_version = parse_full_version(version)
 
-    readme = package.get("readme", "")
-    if (not readme or readme == True) and package_dir.get_child("README.md").exists:
+    readme = package.get("readme")
+    if readme == True:
         readme = "README.md"
+    elif readme == False:
+        readme = ""
+    elif readme == None:
+        readme = ""
+        for candidate in ["README.md", "README.txt", "README"]:
+            if package_dir.get_child(candidate).exists:
+                readme = candidate
+                break
 
     cargo_toml_env_vars = {
         "CARGO_PKG_VERSION": version,
@@ -125,7 +133,11 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
     else:
         # What does `gen_build_script="on"` do? Fail the build if we don't detect one?
         build_script = package.get("build")
-        if build_script:
+        if build_script == True:
+            build_script = "build.rs"
+        elif build_script == False:
+            build_script = None
+        elif build_script:
             build_script = build_script.removeprefix("./")
         elif package_dir.get_child("build.rs").exists:
             build_script = "build.rs"
