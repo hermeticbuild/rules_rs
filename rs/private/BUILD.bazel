@@ -207,6 +207,7 @@ bzl_library(
         ":cargo_toml_utils",
         ":select_utils",
         ":semver",
+        "@bazel_skylib//lib:paths",
     ],
 )
 

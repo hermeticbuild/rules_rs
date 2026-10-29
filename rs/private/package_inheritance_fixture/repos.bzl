@@ -76,7 +76,7 @@ publish.workspace = true
     if result.return_code:
         fail(result.stderr)
     rctx.file("commit", result.stdout)
-    rctx.file("BUILD.bazel", 'exports_files(["commit"])\n')
+    rctx.file("BUILD.bazel", 'exports_files(["commit", "a/LICENSE"])\n')
 
 inheritance_source = repository_rule(implementation = _source_impl)
 

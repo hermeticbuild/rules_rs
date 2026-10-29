@@ -5,6 +5,9 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 load("@rules_rs//rs:rust_test.bzl", "rust_test")
+
+# buildifier: disable=bzl-visibility
+load("@rules_rs//rs/private/license_fixture:tests.bzl", "license_test")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("@self_dev_dependency//:data.bzl", self_dev_dependency_dep_data = "DEP_DATA")
@@ -521,4 +524,42 @@ platform(
         "container-image": "docker://ubuntu:22.04",
         "OSFamily": "Linux",
     },
+)
+
+# Exercise actual crate loading and collection from generated target entry points.
+license_test(
+    name = "local_license_metadata_test",
+    expression = "MIT OR Apache-2.0",
+    original = "//vendored_crate_override:vendor/itoa/LICENSE-APACHE",
+    purl = "pkg:cargo/itoa@1.0.11",
+    target = "@workspace_path_dependency//:itoa",
+)
+
+license_test(
+    name = "vendored_license_metadata_test",
+    expression = "MIT OR Apache-2.0",
+    original = "//vendored_crate_override:vendor/itoa/LICENSE-APACHE",
+    purl = "pkg:cargo/itoa@1.0.11",
+    target = "@vendored_crate_override//:itoa",
+)
+
+license_test(
+    name = "file_only_license_metadata_test",
+    expression = "NOASSERTION",
+    original = "//vendored_workspace_dep:vendor/itoa/LICENSE-APACHE",
+    purl = "pkg:cargo/itoa@1.0.11",
+    target = "@vendored_workspace_dep//:itoa",
+)
+
+license_test(
+    name = "absent_license_metadata_test",
+    purl = "pkg:cargo/vendored-dependency@0.1.0",
+    target = "@external_path_dependency//:vendored-dependency",
+)
+
+license_test(
+    name = "binary_license_metadata_test",
+    expression = "CC0-1.0 OR Apache-2.0 OR Apache-2.0 WITH LLVM-exception",
+    purl = "pkg:cargo/b3sum@1.8.5",
+    target = "@binary_only//:b3sum__b3sum",
 )
