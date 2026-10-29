@@ -60,29 +60,24 @@ crate(
         package_metadata_bazel_additive_build_file_content = cargo.bazel_metadata.get("additive_build_file_content", ""),
     ))
 
-_GITHUB_PREFIX = "https://github.com/"
-
 def _git_cargo_workspace_repository_impl(rctx):
     # Resolve label inputs before cloning so a repository restart does not repeat Git work.
     additive_build_file_contents = {dest: rctx.read(source) for dest, source in rctx.attr.additive_build_files.items()}
     reason = None
     if rctx.attr.use_git:
         reason = "crate.annotation(use_git = True) requires a full Git checkout"
-    elif not rctx.attr.remote.startswith(_GITHUB_PREFIX):
+    elif not rctx.attr.archive_url:
         reason = "the remote is not on github.com"
+    elif not rctx.attr.archive_integrity:
+        reason = "GitHub archive download failed: " + rctx.attr.archive_url
     else:
-        repo_path = rctx.attr.remote.removeprefix(_GITHUB_PREFIX).removesuffix(".git")
-        url = "https://codeload.github.com/%s/tar.gz/%s" % (repo_path, rctx.attr.commit)
-        result = rctx.download_and_extract(
-            url = url,
+        rctx.download_and_extract(
+            url = rctx.attr.archive_url,
+            integrity = rctx.attr.archive_integrity,
             type = "tar.gz",
             strip_components = 1,
-            allow_fail = True,
-            # No checksum: GitHub does not promise a byte-stable archive.
         )
-        if not result.success:
-            reason = "GitHub archive download failed: " + url
-        elif rctx.path(".gitmodules").exists:
+        if rctx.path(".gitmodules").exists:
             reason = "the GitHub archive does not contain submodule contents"
 
     if reason:
@@ -111,6 +106,8 @@ git_cargo_workspace_repository = repository_rule(
     implementation = _git_cargo_workspace_repository_impl,
     attrs = {
         "allow_git_cli": attr.bool(default = True),
+        "archive_integrity": attr.string(),
+        "archive_url": attr.string(),
         "use_git": attr.bool(),
         "remote": attr.string(mandatory = True),
         "commit": attr.string(mandatory = True),

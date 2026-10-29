@@ -866,8 +866,14 @@ def _crate_impl(mctx):
                 repo_name = _external_repo_for_git_source(cfg.name, remote, commit)
                 git_repo = git_repos.get(repo_name)
                 if not git_repo:
+                    archive_url = ""
+                    if remote.startswith("https://github.com/"):
+                        repo_path = remote.removeprefix("https://github.com/").removesuffix(".git")
+                        archive_url = "https://codeload.github.com/%s/tar.gz/%s" % (repo_path, commit)
+
                     git_repo = {
                         "allow_git_cli": allow_git_cli_by_hub_name[cfg.name],
+                        "archive_url": archive_url,
                         "build_annotations": {},
                         "gen_binaries": {},
                         "commit": commit,
@@ -913,6 +919,33 @@ def _crate_impl(mctx):
                     for patch_file in annotation.patches:
                         git_repo["patches"][str(patch_file)] = patch_file
 
+    existing_facts = getattr(mctx, "facts", {}) or {}
+    archive_downloads = {}
+    for git_repo in git_repos.values():
+        url = git_repo["archive_url"]
+        if not url:
+            continue
+
+        key = "git_archive_integrity:" + url
+        if key in existing_facts:
+            # Preserve the pin even when this checkout temporarily uses use_git.
+            integrity = existing_facts[key]
+            if not integrity:
+                fail("MODULE.bazel.lock has an empty Git archive checksum for " + url)
+            facts[key] = integrity
+        elif not git_repo["use_git"] and key not in archive_downloads:
+            archive_downloads[key] = mctx.download(
+                url,
+                "git_archives/%s.tar.gz" % len(archive_downloads),
+                allow_fail = True,
+                block = False,
+            )
+
+    for key, token in archive_downloads.items():
+        result = token.wait()
+        if result.success:
+            facts[key] = result.integrity
+
     for repo_name, git_repo in git_repos.items():
         kwargs = {}
         if git_repo["gen_binaries"]:
@@ -927,6 +960,8 @@ def _crate_impl(mctx):
                 if annotation.additive_build_file
             },
             allow_git_cli = git_repo["allow_git_cli"],
+            archive_integrity = facts.get("git_archive_integrity:" + git_repo["archive_url"], ""),
+            archive_url = git_repo["archive_url"],
             build_files = {path: annotation.additive_build_file_content for path, annotation in build_annotations.items()},
             commit = git_repo["commit"],
             hub_name = git_repo["hub_name"],

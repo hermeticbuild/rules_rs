@@ -129,7 +129,9 @@ A closure that supplies `crate.from_cargo(cargo_config = ...)` uses its own conf
 
 ### Git dependencies
 
-A crate from a GitHub repository is downloaded from `codeload.github.com` through the Bazel downloader, so it honors `--downloader_config` and retries failed requests. If the archive download fails, the remote is not GitHub, or the repository has submodules, `rules_rs` falls back to `git` when allowed.
+A crate from a GitHub repository is downloaded from `codeload.github.com` through the Bazel downloader, so it honors `--downloader_config` and retries failed requests. On first resolution, rules_rs records each GitHub archive's checksum in `MODULE.bazel.lock`. Later fetches verify that checksum and reuse Bazel's download cache. Commit `MODULE.bazel.lock` to share the pins across machines.
+
+If the first archive download fails before a checksum is recorded, the remote is not GitHub, or the repository has submodules, rules_rs falls back to `git` when allowed. Once an archive is pinned, a download or checksum failure stops the build instead of silently switching to Git. Changing the Git revision creates a new pin; rules_rs does not silently update a saved checksum.
 
 `crate.from_cargo` allows the Git CLI by default. Set `allow_git_cli = False` to fail when Git is required:
 
