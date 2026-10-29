@@ -33,6 +33,7 @@ def _crate_annotation(
         patch_tool = None,
         patches = [],
         strip_prefix = None,
+        use_git = False,
         visibility = [Label("//visibility:public")],
         workspace_cargo_toml = "Cargo.toml"):
     return struct(
@@ -68,6 +69,7 @@ def _crate_annotation(
         patch_tool = patch_tool,
         patches = patches,
         strip_prefix = strip_prefix,
+        use_git = use_git,
         visibility = visibility,
         workspace_cargo_toml = workspace_cargo_toml,
     )

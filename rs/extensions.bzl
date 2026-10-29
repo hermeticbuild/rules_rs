@@ -701,15 +701,11 @@ RESOLVED_PLATFORMS = select({{
 
 _ALLOW_GIT_ENV = "RULES_RS_ALLOW_GIT"
 
-def _allow_git(mctx, cfg):
-    value = cfg.allow_git
-    if value == "auto":
-        value = mctx.getenv(_ALLOW_GIT_ENV, "true")
-        if value not in ("true", "false"):
-            fail("%s must be \"true\" or \"false\", got \"%s\"" % (_ALLOW_GIT_ENV, value))
-    return value == "true"
-
 def _crate_impl(mctx):
+    allow_git_override = mctx.getenv(_ALLOW_GIT_ENV)
+    if allow_git_override != None and allow_git_override not in ("true", "false"):
+        fail("%s must be \"true\" or \"false\", got \"%s\"" % (_ALLOW_GIT_ENV, allow_git_override))
+
     # TODO(zbarsky): Kick off `cargo` fetch early to mitigate https://github.com/bazelbuild/bazel/issues/26995
     cargo_path = mctx.path(RS_HOST_CARGO_LABEL)
 
@@ -739,7 +735,7 @@ def _crate_impl(mctx):
     parsed_cargo_configs = {}
     cargo_credentials_by_hub_name = {}
     annotations_by_hub_name = {}
-    allow_git_by_hub_name = {}
+    allow_git_cli_by_hub_name = {}
 
     for mod in mctx.modules:
         if not mod.tags.from_cargo:
@@ -776,14 +772,14 @@ def _crate_impl(mctx):
                 if source:
                     package["source"] = source
             packages_by_hub_name[cfg.name] = parsed_packages
-            allow_git_by_hub_name[cfg.name] = _allow_git(mctx, cfg)
+            allow_git_cli_by_hub_name[cfg.name] = cfg.allow_git_cli if allow_git_override == None else allow_git_override == "true"
 
             # Only a GitHub source can skip `git`. Check here, because a cached fact can skip the clone below.
-            if not allow_git_by_hub_name[cfg.name]:
+            if not allow_git_cli_by_hub_name[cfg.name]:
                 for package in parsed_packages:
                     source = package.get("source", "")
                     if source.startswith("git+") and not source.startswith("git+https://github.com/"):
-                        fail("The crate %s %s of the hub `%s` comes from %s, which needs git, and `allow_git` is false." % (
+                        fail("The crate %s %s of the hub `%s` comes from %s, which needs git, and `allow_git_cli` is false." % (
                             package["name"],
                             package["version"],
                             cfg.name,
@@ -871,7 +867,7 @@ def _crate_impl(mctx):
                 git_repo = git_repos.get(repo_name)
                 if not git_repo:
                     git_repo = {
-                        "allow_git": allow_git_by_hub_name[cfg.name],
+                        "allow_git_cli": allow_git_cli_by_hub_name[cfg.name],
                         "build_annotations": {},
                         "gen_binaries": {},
                         "commit": commit,
@@ -880,6 +876,7 @@ def _crate_impl(mctx):
                         "patch_tool": "",
                         "patches": {},
                         "remote": remote,
+                        "use_git": False,
                         "workspace_cargo_toml": annotation.workspace_cargo_toml,
                     }
                     git_repos[repo_name] = git_repo
@@ -891,6 +888,10 @@ def _crate_impl(mctx):
                         commit,
                         repo_name,
                     ))
+
+                # Git crates from the same commit share one checkout per hub.
+                if annotation.use_git:
+                    git_repo["use_git"] = True
 
                 strip_prefix = package.get("strip_prefix")
                 if strip_prefix == None:
@@ -925,7 +926,7 @@ def _crate_impl(mctx):
                 for path, annotation in build_annotations.items()
                 if annotation.additive_build_file
             },
-            allow_git = git_repo["allow_git"],
+            allow_git_cli = git_repo["allow_git_cli"],
             build_files = {path: annotation.additive_build_file_content for path, annotation in build_annotations.items()},
             commit = git_repo["commit"],
             hub_name = git_repo["hub_name"],
@@ -933,6 +934,7 @@ def _crate_impl(mctx):
             patch_tool = git_repo["patch_tool"],
             patches = git_repo["patches"].values(),
             remote = git_repo["remote"],
+            use_git = git_repo["use_git"],
             workspace_cargo_toml = git_repo["workspace_cargo_toml"],
             **kwargs
         )
@@ -976,11 +978,10 @@ _from_cargo = tag_class(
         ),
         "cargo_lock": attr.label(mandatory = True),
         "cargo_config": attr.label(),
-        "allow_git": attr.string(
-            doc = "If \"false\", never run `git`. Fail when a crate from git needs it: a remote not on github.com, or a repository with a submodule. " +
-                  "\"auto\" reads `--repo_env=%s=true|false`, and is \"true\" when the variable is not set." % _ALLOW_GIT_ENV,
-            values = ["auto", "true", "false"],
-            default = "auto",
+        "allow_git_cli": attr.bool(
+            doc = "If false, fail when a Git crate requires the Git CLI (for example, non-GitHub remotes or submodules). " +
+                  "`--repo_env=%s=true|false` overrides this setting when set." % _ALLOW_GIT_ENV,
+            default = True,
         ),
         "generate_lint_config": attr.bool(
             doc = "If true, generate per-package Cargo lint configuration by reading workspace member manifests.",
@@ -1156,6 +1157,10 @@ _annotation = tag_class(
         #     doc = "An optional timestamp used for crates originating from a git repository instead of a crate registry. This flag optimizes fetching the source code.",
         # ),
         "strip_prefix": attr.string(),
+        "use_git": attr.bool(
+            doc = "For a Git crate, fetch the complete Git checkout instead of a GitHub source archive. " +
+                  "Applies to all crates sharing this Git commit in the hub. Fails if allow_git_cli is false after any RULES_RS_ALLOW_GIT override.",
+        ),
         "visibility": attr.label_list(
             default = ["//visibility:public"],
             doc = "Visibility of generated libraries, procedural macros, binaries, and hub aliases. Labels resolve in the declaring module. Generated dependencies within the Cargo closure retain access; package metadata remains public.",

@@ -39,6 +39,7 @@ _ANNOTATION_DEFAULTS = {
     "strip_prefix": "",
     "tags": [],
     "target_compatible_with": [],
+    "use_git": False,
     "visibility": [Label("//visibility:public")],
     "workspace_cargo_toml": "Cargo.toml",
 }
@@ -74,6 +75,7 @@ def _exact_annotation_replaces_wildcard_and_composes_with_select_impl(ctx):
                     gen_build_script = "on",
                     link_deps = ["//:wildcard_link_dep"],
                     patches = ["//:wildcard.patch"],
+                    use_git = True,
                     workspace_cargo_toml = "crate/Cargo.toml",
                 ),
                 _annotation(
@@ -102,6 +104,7 @@ def _exact_annotation_replaces_wildcard_and_composes_with_select_impl(ctx):
     asserts.equals(env, ["//:exact_link_dep"], annotation.link_deps)
     asserts.equals(env, ["//:exact.patch"], annotation.patches)
     asserts.equals(env, "Cargo.toml", annotation.workspace_cargo_toml)
+    asserts.false(env, annotation.use_git)
     asserts.equals(env, {
         "aarch64-apple-darwin": [],
         "x86_64-unknown-linux-gnu": ["--cfg=exact"],

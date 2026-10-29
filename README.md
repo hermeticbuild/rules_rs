@@ -129,27 +129,37 @@ A closure that supplies `crate.from_cargo(cargo_config = ...)` uses its own conf
 
 ### Git dependencies
 
-A crate from a GitHub repository is downloaded as a source archive through the Bazel downloader, so it honors `--downloader_config` and retries failed requests. A crate from another git remote, or from a repository with submodules, is fetched with `git`.
+A crate from a GitHub repository is downloaded from `codeload.github.com` through the Bazel downloader, so it honors `--downloader_config` and retries failed requests. If the archive download fails, the remote is not GitHub, or the repository has submodules, `rules_rs` falls back to `git` when allowed.
 
-- Set `allow_git = "false"` to never run `git` as a fallback, that's the most hermetic approach, but the stricter also as a crate that needs `git` then fails the build.
-- Set `allow_git = "true"` to always try to run `git` as a fallback.
+`crate.from_cargo` allows the Git CLI by default. Set `allow_git_cli = False` to fail when Git is required:
 
 ```bzl
 crate.from_cargo(
     name = "crates",
     cargo_lock = "//:Cargo.lock",
     cargo_toml = "//:Cargo.toml",
-    allow_git = "false",
+    allow_git_cli = False,
 )
 ```
 
-When unspecified, the default, `allow_git = "auto"`, reads the `RULES_RS_ALLOW_GIT` environment variable and allows `git` when it is not set. This lets you disallow `git` in some environments only, such as CI:
+`RULES_RS_ALLOW_GIT`, when set, overrides `allow_git_cli` for all hubs. For example, to disallow Git in CI:
 
 ```bazelrc
 common:ci --repo_env=RULES_RS_ALLOW_GIT=false
 ```
 
-`RULES_RS_ALLOW_GIT` must be `true` or `false`. An explicit `allow_git = "true"` or `allow_git = "false"` ignores it.
+`RULES_RS_ALLOW_GIT` must be `true` or `false`. When it is unset, each hub uses its own `allow_git_cli` value.
+
+GitHub archives may omit files marked `export-ignore` or rewrite files marked `export-subst`. If a Git crate needs the complete checkout, use:
+
+```bzl
+crate.annotation(
+    crate = "example",
+    use_git = True,
+)
+```
+
+This skips the archive download for every crate at the same Git commit in that hub. If Git is disabled by `allow_git_cli` or its `RULES_RS_ALLOW_GIT` override, the fetch fails with an explanation.
 
 ### `.bazelrc`
 

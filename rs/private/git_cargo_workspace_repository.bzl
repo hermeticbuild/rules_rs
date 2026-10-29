@@ -62,39 +62,39 @@ crate(
 
 _GITHUB_PREFIX = "https://github.com/"
 
-def _download_github_tarball(rctx):
-    """Downloads the crate sources from the GitHub archive.
-
-    Returns `False` when the caller must fall back to `git`.
-    """
-    repo_path = rctx.attr.remote.removeprefix(_GITHUB_PREFIX).removesuffix(".git")
-    rctx.download_and_extract(
-        url = "https://github.com/%s/archive/%s.tar.gz" % (repo_path, rctx.attr.commit),
-        type = "tar.gz",
-        strip_components = 1,
-        canonical_id = "%s@%s" % (rctx.attr.remote, rctx.attr.commit),
-        # No checksum: GitHub does not promise a byte-stable archive. The commit pins the content.
-    )
-
-    # A GitHub archive holds no submodule.
-    if rctx.path(".gitmodules").exists:
-        return False
-
-    return True
-
 def _git_cargo_workspace_repository_impl(rctx):
     # Resolve label inputs before cloning so a repository restart does not repeat Git work.
     additive_build_file_contents = {dest: rctx.read(source) for dest, source in rctx.attr.additive_build_files.items()}
-    # The archive goes through the Bazel downloader. The downloader retries a failed request and it
-    # obeys `--downloader_config`. The `git` subprocess does neither. `git_repo` deletes the
-    # directory first, so it can still take over after the archive lands.
-    if not rctx.attr.remote.startswith(_GITHUB_PREFIX) or not _download_github_tarball(rctx):
-        if not rctx.attr.allow_git:
-            fail("%s at %s needs git: the remote is not on github.com, or it uses a submodule. `allow_git` is false for the hub `%s`." % (
+    reason = None
+    if rctx.attr.use_git:
+        reason = "crate.annotation(use_git = True) requires a full Git checkout"
+    elif not rctx.attr.remote.startswith(_GITHUB_PREFIX):
+        reason = "the remote is not on github.com"
+    else:
+        repo_path = rctx.attr.remote.removeprefix(_GITHUB_PREFIX).removesuffix(".git")
+        url = "https://codeload.github.com/%s/tar.gz/%s" % (repo_path, rctx.attr.commit)
+        result = rctx.download_and_extract(
+            url = url,
+            type = "tar.gz",
+            strip_components = 1,
+            allow_fail = True,
+            # No checksum: GitHub does not promise a byte-stable archive.
+        )
+        if not result.success:
+            reason = "GitHub archive download failed: " + url
+        elif rctx.path(".gitmodules").exists:
+            reason = "the GitHub archive does not contain submodule contents"
+
+    if reason:
+        if not rctx.attr.allow_git_cli:
+            fail("%s at %s needs git: %s. `allow_git_cli` is false for the hub `%s`." % (
                 rctx.attr.remote,
                 rctx.attr.commit,
+                reason,
                 rctx.attr.hub_name,
             ))
+
+        # git_repo deletes the directory, including any extracted archive, before checkout.
         git_repo(rctx, rctx.path("."))
 
     patch(rctx)
@@ -110,7 +110,8 @@ def _git_cargo_workspace_repository_impl(rctx):
 git_cargo_workspace_repository = repository_rule(
     implementation = _git_cargo_workspace_repository_impl,
     attrs = {
-        "allow_git": attr.bool(default = True),
+        "allow_git_cli": attr.bool(default = True),
+        "use_git": attr.bool(),
         "remote": attr.string(mandatory = True),
         "commit": attr.string(mandatory = True),
         "hub_name": attr.string(mandatory = True),
