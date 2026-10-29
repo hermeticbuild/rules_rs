@@ -1,4 +1,5 @@
 load("@rules_rs//rs:rust_test.bzl", "rust_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 exports_files(["source_repository.bzl"])
 
@@ -8,4 +9,19 @@ rust_test(
     srcs = ["external_path_dependency_test.rs"],
     edition = "2021",
     deps = ["@external_path_dependency//:vendored-dependency"],
+)
+
+sh_test(
+    name = "manifest_watch_test",
+    size = "medium",
+    srcs = ["manifest_watch_test.sh"],
+    data = [
+        "source_repository.bzl",
+        "@rules_rs//rs:extensions",
+    ] + glob(["fixture/**"]),
+    env_inherit = [
+        "PATH",
+        "USE_BAZEL_VERSION",
+    ],
+    local = True,
 )
