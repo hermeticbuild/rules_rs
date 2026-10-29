@@ -256,6 +256,17 @@ rust_library(
 The selection follows each member manifest for both virtual and non-virtual
 workspaces. Workspace lints are not applied to members that do not opt in.
 
+### Cargo license metadata
+
+Generated Rust libraries and binaries expose Cargo license metadata through their
+`package_metadata` attribute. The metadata preserves complete expressions such as
+`MIT OR Apache-2.0` and the contents of `license-file`. A file-only declaration uses
+`NOASSERTION`; a package with neither field has no license attribute.
+
+Registry, local, and Git crates use the same metadata generation. License files
+are copied beside the crate so collectors can read them across Bazel package
+boundaries. Local source symlinks are supported.
+
 ## rust-analyzer
 
 See the upstream `rules_rust` rust-analyzer docs for editor setup details:

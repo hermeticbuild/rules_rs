@@ -209,3 +209,13 @@ register_toolchains(
     "@llvm//toolchain:all",
     dev_dependency = True,
 )
+
+inheritance_source = use_repo_rule("//rs/private/package_inheritance_fixture:repos.bzl", "inheritance_source")
+
+inheritance_source(
+    name = "inheritance_source",
+    dev_dependency = True,
+)
+
+inheritance_fixtures = use_extension("//rs/private/package_inheritance_fixture:repos.bzl", "fixtures", dev_dependency = True)
+use_repo(inheritance_fixtures, "inheritance_checkout", "inheritance_invalid")

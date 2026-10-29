@@ -158,7 +158,7 @@ def _crate_name(package_name, values):
 
 def _cargo_build_values(rctx, bazel_package, workspace_cargo_toml, target_name):
     cargo_toml = run_toml2json(rctx, paths.join(bazel_package, "Cargo.toml"))
-    cargo_toml = inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml)
+    cargo_toml = inherit_workspace_package_fields(rctx, cargo_toml, workspace_cargo_toml, rctx.path(paths.join(_SOURCE_ROOT, "library")), rctx.path(bazel_package))
     package = cargo_toml["package"]
     cargo = cargo_build_file_values(
         rctx,

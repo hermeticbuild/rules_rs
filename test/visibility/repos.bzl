@@ -23,6 +23,8 @@ RESOLVED_PLATFORMS = []
         "has_lib": "True",
         "is_proc_macro": repr(rctx.attr.macro),
         "links": "None",
+        "license_expression": repr(""),
+        "license_file": "None",
     }))
 
 _repo = repository_rule(implementation = _repo_impl, attrs = rust_crate_attrs | {"macro": attr.bool(), "crate_name": attr.string(default = "sample")})

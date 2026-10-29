@@ -8,3 +8,5 @@ rust_binary(
     edition = "2024",
     deps = ["@vendored_crate_override//:itoa"],
 )
+
+exports_files(["vendor/itoa/LICENSE-APACHE"])

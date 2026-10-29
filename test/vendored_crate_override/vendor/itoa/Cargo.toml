@@ -29,6 +29,7 @@ categories = [
     "no-std::no-alloc",
 ]
 license = "MIT OR Apache-2.0"
+license-file = "LICENSE-APACHE"
 repository = "https://github.com/dtolnay/itoa"
 
 [package.metadata.docs.rs]
