@@ -1,6 +1,7 @@
 load(":repository_utils.bzl", "render_rust_crate_call", "rust_crate_attrs")
 
 def _git_crate_metadata_repository_implementation(rctx):
+    # type: (_MetadataContext) -> repo_metadata
     rctx.file("crate.bzl", """\
 load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
