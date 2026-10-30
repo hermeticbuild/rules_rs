@@ -1,4 +1,5 @@
 def _toolchains_repository_impl(rctx):
+    # type: (...) -> repo_metadata
     rctx.file(
         "rustc/BUILD.bazel",
         """\
