@@ -1,0 +1,14 @@
+[package]
+name = "consumer"
+version = "1.0.0"
+edition = "2021"
+[dependencies]
+helper = { path = "../helper", default-features = false, features = ["target"] }
+renamed = { package = "derive-package", path = "../derive-package", features = ["extra"] }
+[build-dependencies]
+builder = { path = "../builder" }
+[dev-dependencies]
+macro-test = { package = "dev-macro", path = "../dev-macro" }
+helper = { path = "../helper", features = ["dev"] }
+[target.'cfg(windows)'.dependencies]
+helper = { path = "../helper", default-features = false, features = ["windows"] }

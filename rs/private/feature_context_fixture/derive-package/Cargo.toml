@@ -1,0 +1,13 @@
+[package]
+name = "derive-package"
+version = "1.0.0"
+edition = "2021"
+[lib]
+name = "renamed_macro"
+proc-macro = true
+[dependencies]
+helper = { path = "../helper", default-features = false, features = ["macro"] }
+[dev-dependencies]
+dev-only = { path = "../dev-only" }
+[features]
+extra = ["helper/extra"]

@@ -18,6 +18,8 @@ load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
 load(":semver_test.bzl", "semver_select_tests")
 load(":workspace_dep_data_test.bzl", "workspace_dep_data_tests")
 
+exports_files(["inactive_cargo_context.rs"])
+
 bool_setting(
     name = "source_stdlib_building",
     build_setting_default = False,
@@ -204,12 +206,20 @@ bzl_library(
     srcs = ["cargo_workspace_graph.bzl"],
     visibility = ["//rs:__subpackages__"],
     deps = [
+        ":cargo_toml_utils",
         ":cfg_parser",
         ":resolver",
         ":select_utils",
         ":semver",
         "@bazel_skylib//lib:paths",
     ],
+)
+
+bzl_library(
+    name = "cargo_workspace_deps",
+    srcs = ["cargo_workspace_deps.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [":cargo_select"],
 )
 
 bzl_library(
@@ -494,6 +504,7 @@ bzl_library(
     deps = [
         ":select_utils",
         "//rs/platforms:triples",
+        "@bazel_skylib//lib:selects",
         "@rules_rust//rust/platform:bzl_lib",
     ],
 )

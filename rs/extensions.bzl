@@ -3,7 +3,7 @@ load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@rs_rust_host_tools//:defs.bzl", "RS_HOST_CARGO_LABEL")
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
 load("//rs/private:annotations.bzl", "annotation_for", "build_annotation_map", "well_known_annotation_snippet_paths")
-load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials")
+load("//rs/private:cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
     "cargo_toml_fact",
@@ -18,13 +18,12 @@ load(
 )
 load("//rs/private:crate_configurations.bzl", "prepare_crate_configurations")
 load("//rs/private:crate_repository.bzl", "crate_repository", "local_crate_repository")
-load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
+load("//rs/private:downloader.bzl", "download_metadata_for_git_crates", "git_crate_strip_prefix", "git_manifest_fact_key", "new_downloader_state", "parse_git_url", "start_crate_registry_downloads", "start_github_downloads")
 load("//rs/private:git_cargo_workspace_repository.bzl", "git_cargo_workspace_repository")
 load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repository")
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
-load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
-load("//rs/private:repository_utils.bzl", "render_select")
+load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "registry_download_url", "resolve_registry_source")
 load("//rs/private:select_utils.bzl", "platform_label")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 
@@ -121,6 +120,10 @@ def _generate_hub_and_spokes(
         debug,
         generate_lint_config,
         use_legacy_rules_rust_platforms,
+        root_packages = [],
+        root_features = {},
+        include_dev = True,
+        default_features = True,
         dry_run = False):
     """Generates repositories for the transitive closure of the Cargo workspace.
 
@@ -170,6 +173,7 @@ def _generate_hub_and_spokes(
     mctx.report_progress("Computing dependencies and features")
 
     facts_by_fq_crate = {}
+    registry_configs = {}
     for package in packages:
         name = package["name"]
         version = package["version"]
@@ -234,7 +238,7 @@ def _generate_hub_and_spokes(
             cargo_toml_json = run_toml2json(mctx, cargo_toml_path)
             fact = cargo_toml_fact(cargo_toml_json, {})
         elif source.startswith("git+"):
-            key = source + "_" + name
+            key = git_manifest_fact_key(source, name)
             fact = existing_facts.get(key)
             if fact:
                 facts[key] = fact
@@ -264,6 +268,30 @@ def _generate_hub_and_spokes(
         else:
             fail("Unknown source %s for crate %s" % (source, name))
 
+        # Sparse indexes omit the library kind and authored crate name. Read
+        # the checksum-verified manifest once, then retain these facts in the lockfile.
+        if source.startswith("sparse+") and "proc_macro" not in fact:
+            headers = registry_auth_headers(cargo_credentials, source)
+            registry_config = registry_configs.get(source)
+            if registry_config == None:
+                config_path = "registry_config_" + str(len(registry_configs)) + ".json"
+                mctx.download(source.removeprefix("sparse+") + "config.json", config_path, headers = headers)
+                registry_config = json.decode(mctx.read(config_path))
+                registry_configs[source] = registry_config
+            destination = "manifests/" + hub_name + "/" + name + "-" + version
+            mctx.download_and_extract(
+                url = registry_download_url(registry_config, name, version, package["checksum"]),
+                output = destination,
+                type = "tar.gz",
+                stripPrefix = name + "-" + version,
+                sha256 = package["checksum"],
+                headers = headers,
+            )
+            manifest = run_toml2json(mctx, destination + "/Cargo.toml")
+            manifest_fact = cargo_toml_fact(manifest)
+            fact["proc_macro"] = manifest_fact["proc_macro"]
+            fact["crate_name"] = manifest_fact["crate_name"]
+            facts[name + "_" + version] = json.encode(fact)
         facts_by_fq_crate[_fq_crate(name, version)] = fact
 
     resolved_facts = resolve_packages(packages, facts_by_fq_crate, platform_triples)
@@ -288,10 +316,15 @@ def _generate_hub_and_spokes(
         debug = debug,
         dep_label_prefix = "@%s//:" % hub_name,
         watch_manifests = watch_manifests,
+        root_packages = root_packages,
+        features = root_features,
+        include_dev = include_dev,
+        default_features = default_features,
     )
     cfg_match_cache = workspace_resolution.cfg_match_cache
     platform_cfg_attrs = workspace_resolution.platform_cfg_attrs
     workspace_dep_labels_by_triple = workspace_resolution.workspace_dep_labels_by_triple
+    workspace_exec_dep_labels = workspace_resolution.workspace_exec_dep_labels_by_cargo_target_triple
     workspace_dep_versions_by_name = workspace_resolution.workspace_dep_versions_by_name
 
     _date(mctx, "set up initial deps!")
@@ -577,26 +610,23 @@ alias(
             bazel_package = bazel_package,
         ))
 
-    workspace_deps, conditional_workspace_deps = render_select(
-        [],
-        workspace_dep_labels_by_triple,
-        use_legacy_rules_rust_platforms,
-    )
-
     hub_contents.append(
         """
+load("@rules_rs//rs/private:cargo_workspace_deps.bzl", "cargo_workspace_deps")
+
 package(
     default_visibility = ["//visibility:public"],
 )
 
-filegroup(
+cargo_workspace_deps(
     name = "_workspace_deps",
-    srcs = [
-        %s
-    ]%s,
+    target_deps = %r,
+    exec_deps = %r,
+    use_legacy_rules_rust_platforms = %r,
 )""" % (
-            ",\n        ".join(['"%s"' % dep for dep in sorted(workspace_deps)]),
-            " + " + conditional_workspace_deps if conditional_workspace_deps else "",
+            workspace_dep_labels_by_triple,
+            workspace_exec_dep_labels,
+            use_legacy_rules_rust_platforms,
         ),
     )
 
@@ -863,9 +893,9 @@ def _crate_impl(mctx):
 
             if cfg.debug:
                 for _ in range(25):
-                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms, dry_run = True)
+                    _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms, root_packages = cfg.packages, root_features = cfg.features, include_dev = cfg.include_dev, default_features = cfg.default_features, dry_run = True)
 
-            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms)
+            facts |= _generate_hub_and_spokes(mctx, cfg.name, annotations, suggested_annotation_snippet_paths, cargo_path, cfg.cargo_lock, cargo_toml_by_hub_name[cfg.name], hub_packages, cfg.platform_triples, cargo_credentials, effective_cargo_config, cfg.validate_lockfile, cfg.debug, cfg.generate_lint_config, cfg.use_legacy_rules_rust_platforms, root_packages = cfg.packages, root_features = cfg.features, include_dev = cfg.include_dev, default_features = cfg.default_features)
 
     # Lay down the git repos with generated per-crate BUILD overlays.
     git_repos = {}
@@ -903,9 +933,7 @@ def _crate_impl(mctx):
                         repo_name,
                     ))
 
-                strip_prefix = package.get("strip_prefix")
-                if strip_prefix == None:
-                    strip_prefix = json.decode(facts[source + "_" + package["name"]])["strip_prefix"]
+                strip_prefix = git_crate_strip_prefix(package, facts)
                 package_path = _git_crate_package_path(annotation, strip_prefix)
                 build_file_path = paths.join(package_path, "BUILD.bazel") if package_path else "BUILD.bazel"
                 git_repo["build_files"][build_file_path] = _additive_build_file_content(mctx, annotation)
@@ -978,6 +1006,10 @@ _from_cargo = tag_class(
             doc = "The workspace-level Cargo.toml. There can be multiple crates in the workspace.",
         ),
         "cargo_lock": attr.label(),
+        "packages": attr.string_list(doc = "Cargo workspace roots. Defaults to workspace default-members, or all members when absent."),
+        "features": attr.string_list_dict(doc = "Additional features keyed by selected workspace package name."),
+        "include_dev": attr.bool(default = True, doc = "Include development dependencies of selected workspace roots."),
+        "default_features": attr.bool(default = True, doc = "Enable default features of selected workspace roots."),
         "cargo_config": attr.label(),
         "generate_lint_config": attr.bool(
             doc = "If true, generate per-package Cargo lint configuration by reading workspace member manifests.",

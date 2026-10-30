@@ -186,7 +186,6 @@ rust_binary(
         "@many_workspace_deps//:reqwest",
         "@many_workspace_deps//:swc",
         "@many_workspace_deps//:tantivy",
-        "@many_workspace_deps//:tao",
         "@many_workspace_deps//:tonic",
         "@many_workspace_deps//:tower",
         "@many_workspace_deps//:walrus",
@@ -194,7 +193,10 @@ rust_binary(
         "@many_workspace_deps//:wasmtime",
         "@many_workspace_deps//:wgpu",
         "@many_workspace_deps//:yew",
-    ],
+    ] + select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["@many_workspace_deps//:tao"],
+    }),
 )
 
 rust_test(

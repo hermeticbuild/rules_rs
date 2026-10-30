@@ -73,8 +73,10 @@ jobs:
         run: |
           bazel \
             --bazelrc=.bazelrc \
+            --host_jvm_args=-Xmx8g \
             test \
             --config=remote \
+            --discard_analysis_cache \
             --remote_header=x-buildbuddy-api-key=$BUILDBUDDY_API_KEY \
             //...
 

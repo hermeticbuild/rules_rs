@@ -19,7 +19,7 @@ def crate_features(dep_data, hub_name = None, use_legacy_rules_rust_platforms = 
     return cargo_select({
         cargo_target_triple: configuration["crate_features_by_triple"]
         for cargo_target_triple, configuration in dep_data["configurations"].items()
-    }, hub_name, use_legacy_rules_rust_platforms)
+    }, hub_name, use_legacy_rules_rust_platforms, default = [], select_invariant = False)
 
 def crate_aliases(dep_data, normal = False, normal_dev = False, build = False, hub_name = None, use_legacy_rules_rust_platforms = False):
     """Return aliases for selected dependency kinds, defaulting to normal."""
@@ -39,7 +39,7 @@ def crate_aliases(dep_data, normal = False, normal_dev = False, build = False, h
             by_triple[platform_triple] = {dep: aliases[dep] for dep in sorted(aliases) if aliases[dep] != None}
             by_triple[platform_triple].update(build_aliases.get(platform_triple, {}))
         values[cargo_target_triple] = by_triple
-    return cargo_select(values, hub_name, use_legacy_rules_rust_platforms)
+    return cargo_select(values, hub_name, use_legacy_rules_rust_platforms, default = {}, select_invariant = False)
 
 def all_crate_deps(
         dep_data,
@@ -75,4 +75,4 @@ def all_crate_deps(
             deps.update(build_deps.get(platform_triple, []))
             by_triple[platform_triple] = sorted([dep for dep in deps if dep.startswith(filter_prefix)] if filter_prefix else deps)
         values[cargo_target_triple] = by_triple
-    return cargo_select(values, hub_name, use_legacy_rules_rust_platforms)
+    return cargo_select(values, hub_name, use_legacy_rules_rust_platforms, default = [], select_invariant = False)

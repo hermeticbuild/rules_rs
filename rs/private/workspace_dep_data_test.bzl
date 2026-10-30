@@ -1,7 +1,7 @@
 """Tests for first-party target and build dependency labels."""
 
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":all_crate_deps.bzl", "all_crate_deps", "crate_aliases")
+load(":all_crate_deps.bzl", "all_crate_deps", "crate_aliases", "crate_features")
 load(":cargo_workspace_graph.bzl", "workspace_dep_data")
 
 def _workspace_aliases_select_dependency_kind_impl(ctx):
@@ -146,6 +146,56 @@ def _workspace_configurations_preserve_local_labels_impl(ctx):
     asserts.equals(env, "@crates//:app_lints", data["lint_config"])
     return unittest.end(env)
 
+def _workspace_self_dev_dependency_preserves_features_impl(ctx):
+    env = unittest.begin(ctx)
+    linux = "x86_64-unknown-linux-gnu"
+    macos = "aarch64-apple-darwin"
+    own_label = "@crates//:app-1.0.0"
+    previous = "@crates//:app-0.9.0"
+    configurations = {
+        cargo_target: {
+            "crate_features_by_triple": {platform: ["test-utils"]},
+            "deps_by_triple": {platform: {own_label: "self_dev", previous: "previous"}},
+            "build_deps_by_triple": {},
+            "build_cargo_target_triple_required_on": [],
+        }
+        for cargo_target, platform in [("", linux), (linux, macos)]
+    }
+    data = workspace_dep_data(
+        cargo_metadata = {"packages": [{
+            "name": "app",
+            "version": "1.0.0",
+            "manifest_path": "/workspace/app/Cargo.toml",
+            "dependencies": [
+                {"name": "app", "rename": "self-dev", "kind": "dev", "path": "/workspace/app"},
+                {"name": "app", "rename": "previous", "kind": None, "bazel_target": previous},
+            ],
+        }]},
+        dep_label_prefix = "@crates//:",
+        platform_triples = [linux],
+        platform_cfg_attrs = [],
+        cfg_match_cache = {None: struct(matches = [linux], uses_feature_cfg = False)},
+        repo_root = "/workspace",
+        workspace_package = "fixtures",
+        use_legacy_rules_rust_platforms = False,
+        configurations_by_crate = {"app-1.0.0": struct(configurations = configurations)},
+    )["fixtures/app"]
+    for cargo_target, platform in [("", linux), (linux, macos)]:
+        selected = data["configurations"][cargo_target]
+        asserts.equals(env, {platform: {previous: "previous"}}, selected["deps_by_triple"])
+        asserts.equals(env, {platform: ["test-utils"]}, selected["crate_features_by_triple"])
+
+        # Rendering must not mutate the resolver's feature/edge records.
+        asserts.true(env, own_label in configurations[cargo_target]["deps_by_triple"][platform])
+    asserts.equals(env, [previous], all_crate_deps(data, hub_name = "crates"))
+    asserts.equals(env, {previous: "previous"}, crate_aliases(data, hub_name = "crates"))
+    asserts.equals(env, [], all_crate_deps(data, normal_dev = True, hub_name = "crates"))
+    asserts.equals(env, {}, crate_aliases(data, normal_dev = True, hub_name = "crates"))
+    asserts.equals(env, ["test-utils"], crate_features(data, hub_name = "crates"))
+    return unittest.end(env)
+
+workspace_self_dev_dependency_preserves_features_test = unittest.make(_workspace_self_dev_dependency_preserves_features_impl)
+
 workspace_aliases_select_dependency_kind_test = unittest.make(_workspace_aliases_select_dependency_kind_impl)
 workspace_configurations_preserve_local_labels_test = unittest.make(_workspace_configurations_preserve_local_labels_impl)
 
@@ -154,4 +204,5 @@ def workspace_dep_data_tests():
         "workspace_dep_data_tests",
         workspace_aliases_select_dependency_kind_test,
         workspace_configurations_preserve_local_labels_test,
+        workspace_self_dev_dependency_preserves_features_test,
     )

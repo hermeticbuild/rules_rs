@@ -19447,6 +19447,7 @@ dependencies = [
  "libssh2-sys",
  "libudev-sys",
  "meilisearch-sdk",
+ "openssl",
  "oxc",
  "polars",
  "redis",

@@ -1,0 +1,6 @@
+[package]
+name = "unused"
+version = "1.0.0"
+edition = "2021"
+[dependencies]
+helper = { path = "../helper", features = ["dev"] }
