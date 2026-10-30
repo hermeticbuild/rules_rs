@@ -1,11 +1,14 @@
 """Parses Cargo `cfg(...)` expressions and evaluates them against target triples."""
 
+# Recursive token and AST types are declared in cfg_parser.bzli.
+
 def _get(xs, index, default):
     if index < len(xs):
         return xs[index]
     return default
 
 def _emit_pending(frames, pending_ident, pending_eq_key):
+    # type: (list[_Frame], str | None, str | None) -> None
     # Moves any pending identifier into a predicate node in the current frame.
     # If an '=' was seen but no string yet, that's a syntax error.
     if pending_eq_key:
@@ -19,9 +22,10 @@ def _emit_pending(frames, pending_ident, pending_eq_key):
 
 # Tokens: IDENT(name), STRING(value), LPAREN, RPAREN, COMMA, EQ
 def _cfg_tokenize(expr):
-    tokens = []
-    ident_buf = []
-    str_buf = []
+    # type: (str) -> list[_Token]
+    tokens = []  # type: list[_Token]
+    ident_buf = []  # type: list[str]
+    str_buf = []  # type: list[str]
     in_string = False
     in_escape = False
 
@@ -68,6 +72,7 @@ def _cfg_tokenize(expr):
 ############################################
 
 def cfg_parse(expr):
+    # type: (str) -> tuple[_Node, bool]
     """Parses a Cargo `cfg(...)` expression.
 
     Args:
@@ -77,7 +82,7 @@ def cfg_parse(expr):
         A tuple of the expression's AST and whether it tests a `feature`.
     """
     tokens = _cfg_tokenize(expr)
-    frames = [{"fn": "__ROOT__", "args": []}]
+    frames = [{"fn": "__ROOT__", "args": []}]  # type: list[_Frame]
     pending_ident = None
     pending_eq_key = None
     uses_feature_cfg = False
@@ -155,6 +160,7 @@ def cfg_parse(expr):
 ############################################
 
 def _normalize_os(os_raw):
+    # type: (str) -> str
     if os_raw == "darwin":
         return "macos"
     return os_raw
@@ -162,6 +168,7 @@ def _normalize_os(os_raw):
 # Architecture tokens that rustc reports under a different `target_arch` than
 # the triple spells. Mirrors the `arch` field of rustc's target specs.
 def _normalize_arch(arch_raw):
+    # type: (str) -> str
     # Apple spells 64-bit Arm arm64/arm64e/arm64_32. Preserve other arm64*
     # architectures such as Windows ARM64EC; every remaining arm* and thumb*
     # variant is 32-bit Arm.
@@ -191,6 +198,7 @@ def _normalize_arch(arch_raw):
 _BARE_ABIS = ["eabi", "eabihf"]
 
 def _split_triple(triple):
+    # type: (str) -> tuple[str, str, str, str, str]
     """Splits a triple into (arch, vendor, os, env, abi) for cfg evaluation.
 
     A 4-part triple is positional. A 3-part triple is not: the third component
@@ -245,6 +253,7 @@ def _split_triple(triple):
     return arch, vendor, os_raw, env, abi
 
 def _family_for_os(os_name):
+    # type: (str) -> str
     if os_name == "windows":
         return "windows"
     if os_name in [
@@ -271,11 +280,13 @@ def _family_for_os(os_name):
     return ""
 
 def _family_for_arch_and_os(arch, os_name):
+    # type: (str, str) -> str
     if arch.startswith("wasm"):
         return "wasm"
     return _family_for_os(os_name)
 
 def _pointer_width_for_arch(arch):
+    # type: (str) -> str
     if "64" in arch:
         return "64"
 
@@ -295,6 +306,7 @@ def _pointer_width_for_arch(arch):
     return "64"
 
 def _endian_for_arch(arch):
+    # type: (str) -> str
     big_set = ["m68k", "s390x", "sparc", "sparc64", "powerpc", "powerpc64"]
     if arch.endswith("be") or arch.endswith("eb") or arch in big_set:
         return "big"
@@ -305,6 +317,7 @@ def _endian_for_arch(arch):
     return "little"
 
 def _abi_from_env(env):
+    # type: (str) -> str
     # Very rough: surface a few commonly referenced ABIs. Longest first, so
     # "gnueabihf" reports "eabihf" rather than matching "eabi" on the way past.
     abi_pieces = ["gnuabi64", "eabihf", "eabi", "elf"]
@@ -314,6 +327,7 @@ def _abi_from_env(env):
     return ""
 
 def _target_has_feature(ctx, feature):
+    # type: (_Cfg, str) -> bool
     # x86_64 baseline implies SSE2.
     if feature == "sse2":
         return ctx["target_arch"] == "x86_64"
@@ -325,6 +339,7 @@ def _target_has_feature(ctx, feature):
     return False
 
 def triple_to_cfg_attrs(triple):
+    # type: (str) -> _TripleAttrs
     """Derives the `cfg` attributes of a target triple.
 
     Args:
@@ -371,6 +386,7 @@ def triple_to_cfg_attrs(triple):
 ############################################
 
 def _eval_eq(ctx, key, value, features):
+    # type: (_Cfg, str, str, Collection[str]) -> bool
     if key == "feature":
         return value in features
     if key == "target_feature":
@@ -393,12 +409,14 @@ def _eval_eq(ctx, key, value, features):
     return False
 
 def _eval_pred(ctx, name):
+    # type: (_Cfg, str) -> bool
     # Only boolean entries represent bare configuration names.
     return ctx.get(name) == True
 
 def _cfg_eval(ast, ctx, features = []):
-    todo = [{"op": "VISIT", "node": ast}]
-    results = []
+    # type: (_Node, _Cfg, Collection[str]) -> bool
+    todo = [{"op": "VISIT", "node": ast}]  # type: list[_Instruction]
+    results = []  # type: list[bool]
     for _ in range(200000):
         if not todo:
             break
@@ -445,15 +463,18 @@ def _cfg_eval(ast, ctx, features = []):
     return results[0]
 
 def cfg_matches(expr, triple, features = []):
+    # type: (str, str, Collection[str]) -> bool
     ast, _ = cfg_parse(expr)
     ctx = triple_to_cfg_attrs(triple)
     return _cfg_eval(ast, ctx, features)
 
 def cfg_matches_expr_for_triples(expr, triples, features = []):
+    # type: (str, Collection[str], Collection[str]) -> _Matches
     cfg_attrs = [triple_to_cfg_attrs(triple) for triple in triples]
     return cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features)
 
 def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features = []):
+    # type: (str, Collection[CfgAttrs], Collection[str]) -> _Matches
     if expr.startswith("cfg("):
         ast, uses_feature_cfg = cfg_parse(expr)
         return struct(
@@ -468,4 +489,5 @@ def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features = []):
         )
 
 def cfg_matches_ast_for_triples(ast, cfg_attrs, features = []):
+    # type: (_Node, Collection[CfgAttrs], Collection[str]) -> list[str]
     return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if _cfg_eval(ast, cfg_attr, features)]

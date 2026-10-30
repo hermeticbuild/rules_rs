@@ -1,6 +1,7 @@
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs")
 
 def _count(feature_resolutions_by_fq_crate):
+    # type: (Mapping[str, _FeatureResolutions]) -> int
     n = 0
     for feature_resolutions in feature_resolutions_by_fq_crate.values():
         for features in feature_resolutions.features_enabled.values():
@@ -16,6 +17,7 @@ def _count(feature_resolutions_by_fq_crate):
     return n
 
 def _dep_target_matches_triple(dep, triple, package_feature_set, cfg_attrs_by_triple):
+    # type: (_ResolvedDependency, str, Collection[str], _CfgAttrsByTriple) -> bool
     remaining = dep["target"]
     if triple not in remaining:
         return False
@@ -31,6 +33,7 @@ def _dep_target_matches_triple(dep, triple, package_feature_set, cfg_attrs_by_tr
     ).matches)
 
 def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, debug):
+    # type: (Sequence[_Package], Collection[int], _CfgAttrsByTriple, bool) -> set[int]
     new_dirty_package_indices = set()
 
     for index in dirty_package_indices:
@@ -58,6 +61,8 @@ def _resolve_one_round(packages, dirty_package_indices, cfg_attrs_by_triple, deb
             bazel_target = dep.get("bazel_target")
             if not bazel_target:
                 continue
+            if "feature_resolutions" not in dep:
+                fail("Missing feature resolution metadata for dependency %s" % bazel_target)
 
             kind = dep.get("kind", "normal")
 
@@ -123,6 +128,7 @@ def _propagate_feature_enablement(
         feature_resolutions,
         cfg_attrs_by_triple,
         debug):
+    # type: (bool, set[int], _Package, Mapping[str, set[str]], _FeatureResolutions, _CfgAttrsByTriple, bool) -> bool
     possible_features = feature_resolutions.possible_features
 
     for triple, feature_set in features_enabled.items():
@@ -179,7 +185,10 @@ def _propagate_feature_enablement(
 
 _MAX_ROUNDS = 200
 
+# TODO(https://github.com/bazelbuild/bazel/issues/32020): Use a source annotation
+# when Bazel exposes this context type.
 def resolve(mctx, packages, feature_resolutions_by_fq_crate, cfg_attrs_by_triple, debug):
+    # type: (module_ctx | repository_ctx | None, Sequence[_Package], Mapping[str, _FeatureResolutions], _CfgAttrsByTriple, bool) -> None
     # Do some rounds of mutual resolution; bail when no more changes
     dirty_package_indices = range(len(packages))
 

@@ -16,6 +16,12 @@ load(":select_render_test.bzl", "select_render_tests")
 load(":semver_test.bzl", "semver_select_tests")
 load(":visibility_test.bzl", "visibility_tests")
 
+exports_files([
+    "cfg_parser.bzli",
+    "resolver.bzli",
+    "semver.bzli",
+])
+
 bool_setting(
     name = "source_stdlib_building",
     build_setting_default = False,
