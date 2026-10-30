@@ -1,6 +1,7 @@
 """Expose the selected host Cargo label."""
 
 def _host_cargo_repository_impl(rctx):
+    # type: (...) -> repo_metadata
     rctx.file("defs.bzl", 'RS_HOST_CARGO_LABEL = Label("%s")' % rctx.attr.cargo)
     rctx.file("BUILD.bazel", 'exports_files(["defs.bzl"])')
 

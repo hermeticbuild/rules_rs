@@ -19,6 +19,7 @@ _COMMON_ATTRS = {
 }
 
 def _all_files(ctx, direct = [], transitive = []):
+    # type: (_AllFilesContext, list[File], list[depset[File]]) -> depset[File]
     return depset(
         [ctx.file.miri] + direct,
         transitive = [
@@ -27,6 +28,7 @@ def _all_files(ctx, direct = [], transitive = []):
     )
 
 def _toolchain_info(ctx, all_files, extra = None):
+    # type: (_ToolchainContext, depset[File], Mapping[str, object] | None) -> ToolchainInfo
     fields = {
         "all_files": all_files,
         "exec_triple": ctx.attr.exec_triple,
@@ -38,6 +40,7 @@ def _toolchain_info(ctx, all_files, extra = None):
     return platform_common.ToolchainInfo(**fields)
 
 def _miri_toolchain_impl(ctx):
+    # type: (...) -> list[ToolchainInfo]
     source_sysroot = ctx.attr.source_sysroot[MiriSysrootInfo]
     if source_sysroot.target_triple != ctx.attr.target_triple:
         fail("source_sysroot target triple {} does not match toolchain target triple {}".format(
@@ -76,6 +79,7 @@ miri_toolchain = rule(
 )
 
 def _miri_sysroot_toolchain_impl(ctx):
+    # type: (...) -> list[ToolchainInfo]
     return [
         _toolchain_info(ctx, _all_files(ctx, transitive = [depset(ctx.files.rustc_srcs)]), {
             "rustc_srcs": ctx.files.rustc_srcs,

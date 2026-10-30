@@ -1,5 +1,12 @@
 load("@bazel_lib//:bzl_library.bzl", "bzl_library")
 
+exports_files(
+    [
+        "cargo_workspace_data.bzli.tmpl",
+    ],
+    visibility = ["//visibility:private"],
+)
+
 bzl_library(
     name = "rules_rust",
     srcs = ["rules_rust.bzl"],
@@ -76,6 +83,7 @@ bzl_library(
         "//rs/private:registry_config_repository",
         "//rs/private:registry_utils",
         "//rs/private:repository_utils",
+        "//rs/private:select_render",
         "//rs/private:toml2json",
         "//rs/private:visibility",
         "@bazel_lib//lib:repo_utils",

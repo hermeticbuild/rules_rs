@@ -1,0 +1,45 @@
+"""Cargo package and feature resolution state."""
+
+load(":cfg_parser.bzli", "CfgAttrs")
+
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
+# in source when Bazel supports typed dictionary keys.
+type _UnresolvedDependency = dict[{
+    "bazel_target": NotRequired[Literal[""] | None],
+    "feature_resolutions": NotRequired[Never],
+}, ...]
+
+class _DependencyFields(TypedDict):
+    name: ReadOnly[str]
+    bazel_target: str | None
+    feature_resolutions: ReadOnly[_FeatureResolutions]
+    target: ReadOnly[set[str]]
+    kind: NotRequired[ReadOnly[str]]
+    package: NotRequired[ReadOnly[str]]
+    optional: NotRequired[ReadOnly[bool]]
+    features: NotRequired[ReadOnly[Collection[str]]]
+    target_expr: NotRequired[ReadOnly[str]]
+
+class _FeatureInsensitiveDependency(_DependencyFields):
+    feature_sensitive: NotRequired[ReadOnly[Literal[False]]]
+
+class _FeatureSensitiveDependency(_DependencyFields):
+    feature_sensitive: ReadOnly[Literal[True]]
+    target_expr: ReadOnly[str]
+
+type _ResolvedDependency = _FeatureInsensitiveDependency | _FeatureSensitiveDependency
+type _FeatureResolutions = struct[{
+    "features_enabled": Mapping[str, set[str]],
+    "build_deps": Mapping[str, set[str]],
+    "deps": Mapping[str, set[str]],
+    "aliases": dict[str, str],
+    "package_index": int,
+    "possible_deps": Collection[_UnresolvedDependency | _ResolvedDependency],
+    "possible_features": Mapping[str, Collection[str]],
+}, ...]
+type _Package = dict[{
+    "name": ReadOnly[str],
+    "version": ReadOnly[str],
+    "feature_resolutions": ReadOnly[_FeatureResolutions],
+}, ...]
+type _CfgAttrsByTriple = Mapping[str, CfgAttrs]

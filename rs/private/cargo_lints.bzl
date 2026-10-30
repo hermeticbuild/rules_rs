@@ -3,14 +3,16 @@
 load("@rules_rust//rust/private:providers.bzl", "LintsInfo")
 
 def _cargo_lints_impl(ctx):
+    # type: (...) -> list[LintsInfo]
+    lint_files = []  # type: list[File]
     return [
         LintsInfo(
             rustc_lint_flags = ctx.attr.rustc_lint_flags,
-            rustc_lint_files = [],
+            rustc_lint_files = lint_files,
             clippy_lint_flags = ctx.attr.clippy_lint_flags,
-            clippy_lint_files = [],
+            clippy_lint_files = lint_files,
             rustdoc_lint_flags = ctx.attr.rustdoc_lint_flags,
-            rustdoc_lint_files = [],
+            rustdoc_lint_files = lint_files,
         ),
     ]
 

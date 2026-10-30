@@ -24,6 +24,7 @@ CLANG_PARAMETER_FLAGS = (
 )
 
 def normalize_msvc_compile_flags(compile_flags):
+    # type: (Collection[str]) -> list[str]
     """Converts clang-cl preprocessing flags to Clang driver flags.
 
     Args:

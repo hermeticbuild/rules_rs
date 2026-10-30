@@ -1,53 +1,13 @@
 load(":cargo_toml_utils.bzl", "cargo_toml_is_proc_macro")
+load(":select_render.bzl", "render_select", "render_select_build_script_env")
 load(":select_utils.bzl", "compute_select")
 load(":semver.bzl", "parse_full_version")
 
 # Bazel 8 does not define attr.label_list_dict.
 _label_list_dict = getattr(attr, "label_list_dict", attr.string_list_dict)
 
-def _platform(triple, use_legacy_rules_rust_platforms):
-    if use_legacy_rules_rust_platforms:
-        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
-    return "@rules_rs//rs/platforms/config:" + triple
-
-def _format_branches(branches):
-    return """select({
-        %s
-    })""" % (
-        ",\n        ".join(['"%s": %s' % branch for branch in branches])
-    )
-
-def render_select(non_platform_items, platform_items, use_legacy_rules_rust_platforms):
-    non_platform_items = [str(item) for item in non_platform_items]
-    platform_items = {
-        platform: [str(item) for item in items]
-        for platform, items in platform_items.items()
-    }
-    common_items, branches = compute_select(non_platform_items, platform_items)
-    common_items = list(common_items)
-
-    if not branches:
-        return common_items, ""
-
-    branches = [(_platform(k, use_legacy_rules_rust_platforms), repr(v)) for k, v in branches.items()]
-    branches.append(("//conditions:default", "[],"))
-
-    return common_items, _format_branches(branches)
-
-def render_select_build_script_env(platform_items, use_legacy_rules_rust_platforms):
-    branches = [
-        (_platform(triple, use_legacy_rules_rust_platforms), items)
-        for triple, items in platform_items.items()
-    ]
-
-    if not branches:
-        return ""
-
-    branches.append(("//conditions:default", "{},"))
-
-    return _format_branches(branches)
-
 def _exclude_deps_from_features(features):
+    # type: (Collection[str]) -> list[str]
     return [f for f in features if not f.startswith("dep:")]
 
 _INHERITABLE_PACKAGE_FIELDS = [
@@ -76,6 +36,14 @@ def inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml):
 
     return cargo_toml
 
+def spoke_repo_name(hub_name, name, version):
+    # type: (object, object, object) -> str
+    """Returns the repository name for a crate's hub spoke."""
+    s = "%s__%s-%s" % (hub_name, name, version)
+    if "+" in s:
+        s = s.replace("+", "-")
+    return s
+
 def package_version(package):
     """Returns the `[package]` version of a decoded Cargo.toml, or Cargo's default `0.0.0`."""
 
@@ -83,11 +51,15 @@ def package_version(package):
     return package.get("version", "0.0.0")
 
 def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", gen_build_script = None):
+    # type: (_CargoContext, CargoManifest, Collection[str], str | path, str | None) -> _CargoBuildValues
     package_dir = rctx.path(package_path or ".")
     package = cargo_toml["package"]
     if gen_build_script == None:
         gen_build_script = rctx.attr.gen_build_script
+    return cargo_build_file_values_for_package(rctx, cargo_toml, gen_binaries, package_dir, package, gen_build_script)
 
+def cargo_build_file_values_for_package(rctx, cargo_toml, gen_binaries, package_dir, package, gen_build_script):
+    # type: (_CargoFiles, CargoManifest, Collection[str], path, CargoPackage, str) -> _CargoBuildValues
     name = package["name"]
     version = package_version(package)
     parsed_version = parse_full_version(version)
@@ -229,6 +201,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 """
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
+    # type: (CrateAttributes, CrateValues, BazelMetadata, str, str, bool) -> str
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
     # See `rs/private/rust_crate.bzl` for details.
     crate_features, conditional_crate_features = compute_select(

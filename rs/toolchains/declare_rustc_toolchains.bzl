@@ -6,14 +6,7 @@ load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("@rust_toolchain_labels//:defs.bzl", "rust_toolchain_component_label")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES", "SUPPORTED_EXEC_TRIPLES", "SUPPORTED_TIER_3_TRIPLES")
 load("//rs/private:bpf_linker_repository.bzl", "bpf_linker_binary_name", "bpf_linker_repository_name")
-load("//rs/toolchains:toolchain_utils.bzl", "sanitize_triple", "sanitize_version")
-
-def _channel(version):
-    if version.startswith("nightly"):
-        return "nightly"
-    if version.startswith("beta"):
-        return "beta"
-    return "stable"
+load("//rs/toolchains:toolchain_utils.bzl", "rust_version_channel", "sanitize_triple", "sanitize_version")
 
 def _rustc_flags_to_select(rustc_flags_by_triple):
     return select(
@@ -81,7 +74,7 @@ def declare_rustc_toolchains(
         exec_triples = rustc.keys()
 
     version_key = sanitize_version(version)
-    channel = _channel(version)
+    channel = rust_version_channel(version)
     base_version, _, iso_date = version.partition("/")
 
     rust_std_label = name + "_rust_std"
