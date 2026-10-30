@@ -9,6 +9,7 @@ def _repo_impl(rctx):
     rctx.file("cargo_toml_env_vars.env", "")
     rctx.file("lib.rs", "extern crate proc_macro;\n" if rctx.attr.macro else "pub fn value() -> u8 { 1 }\n")
     rctx.file("main.rs", "fn main() {}\n")
+    binaries = {} if rctx.attr.macro else {"probe": "main.rs"}  # type: dict[str, str]
     rctx.file("BUILD.bazel", """load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 RESOLVED_PLATFORMS = []
 """ + render_rust_crate_call(rctx.attr, {
@@ -16,7 +17,7 @@ RESOLVED_PLATFORMS = []
         "crate_name": repr(crate_name),
         "purl": repr("pkg:cargo/sample@1.0.0"),
         "version": repr("1.0.0"),
-        "binaries": repr({} if rctx.attr.macro else {"probe": "main.rs"}),
+        "binaries": repr(binaries),
         "build_script": "None",
         "crate_root": repr("lib.rs"),
         "edition": repr("2021"),
@@ -28,6 +29,7 @@ RESOLVED_PLATFORMS = []
 _repo = repository_rule(implementation = _repo_impl, attrs = rust_crate_attrs | {"macro": attr.bool(), "crate_name": attr.string(default = "sample")})
 
 def _groups_impl(rctx):
+    # type: (...) -> None
     rctx.file("BUILD.bazel", "package_group(name = 'consumers', includes = %r)" % [str(rctx.attr.consumers)])
 
 _groups = repository_rule(
@@ -36,15 +38,17 @@ _groups = repository_rule(
 )
 
 def _fixtures_impl(_mctx):
+    # type: (...) -> None
     _groups(name = "visibility_groups", consumers = Label("//visibility:consumers"))
     internal = ["@visibility_dependent//:__pkg__"]
-    for name, visibility in [
+    visibility_cases = [
         ("visibility_lib", [Label("//visibility/allowed:__pkg__")]),
         ("visibility_macro", [Label("//visibility/allowed:__subpackages__")]),
         ("visibility_dependent", [Label("//visibility/allowed:__pkg__")]),
         ("visibility_private", [Label("//visibility:private")]),
         ("visibility_empty", []),
-    ]:
+    ]  # type: list[tuple[str, list[Label]]]
+    for name, visibility in visibility_cases:
         _repo(
             name = name,
             macro = name == "visibility_macro",
