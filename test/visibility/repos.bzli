@@ -1,0 +1,8 @@
+"""Contracts for generated visibility-test repositories."""
+
+load("@rules_rs//rs/private:repository_utils.bzli", "CrateAttributes")
+
+# TODO(https://github.com/bazelbuild/bazel/issues/32020): Use a source annotation
+# when Bazel exposes this context type.
+def _repo_impl(rctx: repository_ctx[Intersection[CrateAttributes, struct[{"macro": bool, "crate_name": str}, ...]]]) -> None:
+    ...

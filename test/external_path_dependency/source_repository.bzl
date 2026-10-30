@@ -1,6 +1,7 @@
 """Materialize a tiny external Cargo source tree without network downloads."""
 
 def _source_repository_impl(ctx):
+    # type: (...) -> repo_metadata
     for path in [
         "Cargo.toml",
         "Cargo.lock",

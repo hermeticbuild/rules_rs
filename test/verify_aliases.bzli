@@ -1,0 +1,18 @@
+"""Contracts for generated Cargo metadata assertions."""
+
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
+# in source when Bazel supports typed dictionary keys.
+type _Dependencies = dict[{
+    "deps": NotRequired[ReadOnly[Collection[str]]],
+    "deps_by_platform": NotRequired[ReadOnly[Mapping[str, Collection[str]]]],
+}, ...]
+
+type _DevDependencies = dict[{
+    "dev_deps": NotRequired[ReadOnly[Collection[str]]],
+    "dev_deps_by_platform": NotRequired[ReadOnly[Mapping[str, Collection[str]]]],
+}, ...]
+
+type _Features = dict[{
+    "crate_features": NotRequired[ReadOnly[Collection[str]]],
+    "crate_features_by_platform": NotRequired[ReadOnly[Mapping[str, Collection[str]]]],
+}, ...]

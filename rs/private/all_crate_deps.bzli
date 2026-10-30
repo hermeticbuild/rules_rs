@@ -1,0 +1,14 @@
+"""Dependency data consumed by generated crate repositories."""
+
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
+# in source when Bazel supports typed dictionary keys.
+type _DependencyData = dict[{
+    "deps": NotRequired[ReadOnly[list[str]]],
+    "deps_by_platform": NotRequired[ReadOnly[dict[str, list[str]]]],
+    "dev_deps": NotRequired[ReadOnly[list[str]]],
+    "dev_deps_by_platform": NotRequired[ReadOnly[dict[str, list[str]]]],
+    "build_deps": NotRequired[ReadOnly[list[str]]],
+    "build_deps_by_platform": NotRequired[ReadOnly[dict[str, list[str]]]],
+}, ...]
+
+type _DependencySpec = tuple[list[str], dict[str, list[str]]]
