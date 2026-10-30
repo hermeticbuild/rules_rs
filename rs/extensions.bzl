@@ -933,7 +933,8 @@ def _crate_impl(mctx):
             archive_downloads[key] = mctx.download(
                 url,
                 "git_archives/%s.tar.gz" % len(archive_downloads),
-                allow_fail = True,
+                # Without a fallback to git, a failed download must fail, so that Bazel reports the cause.
+                allow_fail = all([r["allow_git_cli"] for r in git_repos.values() if r["archive_url"] == url and not r["use_git"]]),
                 block = False,
             )
 
