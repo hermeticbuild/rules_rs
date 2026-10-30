@@ -68,7 +68,8 @@ To package the Rust standard library's copyright notices alongside a binary, add
 `@default_rust_toolchains//:library_notice` to the packaging rule's inputs.
 It supplies the selected Rust release's `COPYRIGHT-library.html` on every target
 platform. For a named toolchain, use that repository name instead. Rust releases
-before 1.86 did not ship this file.
+before 1.86 did not ship this file. They can still compile Rust code, but a
+packaging rule that requests the notice will fail.
 
 ### Toolchain declarations in dependencies
 

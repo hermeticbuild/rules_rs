@@ -87,8 +87,13 @@ toolchains.toolchain(
     edition = "2024",
     version = "1.96.1",
 )
+# Rust 1.85 predates the standard library's copyright document.
+toolchains.toolchain(
+    name = "rust_1_85_toolchains",
+    version = "1.85.0",
+)
 toolchains.experimental_miri(version = "nightly/2026-04-20")
-use_repo(toolchains, "default_rust_toolchains", "miri_toolchains")
+use_repo(toolchains, "default_rust_toolchains", "miri_toolchains", "rust_1_85_toolchains")
 
 register_toolchains("@default_rust_toolchains//...")
 
