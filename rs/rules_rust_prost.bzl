@@ -1,6 +1,7 @@
 """Module extension that provisions the rules_rust_prost repository."""
 
 def _rules_rust_prost_repo_impl(rctx):
+    # type: (...) -> repo_metadata
     rctx.file("BUILD.bazel", """\
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 
@@ -80,6 +81,7 @@ _rules_rust_prost_repo = repository_rule(
 )
 
 def _rules_rust_prost_impl(mctx):
+    # type: (...) -> extension_metadata
     _rules_rust_prost_repo(
         name = "rules_rust_prost",
     )

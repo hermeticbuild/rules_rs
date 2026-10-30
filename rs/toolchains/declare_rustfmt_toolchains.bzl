@@ -1,14 +1,7 @@
 load("@rules_rust//rust:rustfmt_toolchain.bzl", "rustfmt_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
-load("//rs/toolchains:toolchain_utils.bzl", "sanitize_version")
-
-def _channel(version):
-    if version.startswith("nightly"):
-        return "nightly"
-    if version.startswith("beta"):
-        return "beta"
-    return "stable"
+load("//rs/toolchains:toolchain_utils.bzl", "rust_version_channel", "sanitize_version")
 
 def declare_rustfmt_toolchains(
         *,
@@ -18,7 +11,7 @@ def declare_rustfmt_toolchains(
         execs = SUPPORTED_EXEC_TRIPLES):
     version_key = sanitize_version(version)
     rustfmt_version_key = sanitize_version(rustfmt_version)
-    channel = _channel(version)
+    channel = rust_version_channel(version)
 
     for triple in execs:
         exec_triple = _parse_triple(triple)

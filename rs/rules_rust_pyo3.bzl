@@ -1,6 +1,7 @@
 """Module extension that provisions the rules_rust_pyo3 repository."""
 
 def _rules_rust_pyo3_repo_impl(rctx):
+    # type: (...) -> repo_metadata
     rctx.file("BUILD.bazel", """\
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("@rules_rust//extensions/pyo3/private:pyo3_toolchain.bzl", "current_pyo3_toolchain")
@@ -111,6 +112,7 @@ _rules_rust_pyo3_repo = repository_rule(
 )
 
 def _rules_rust_pyo3_impl(mctx):
+    # type: (...) -> extension_metadata
     _rules_rust_pyo3_repo(
         name = "rules_rust_pyo3",
     )
