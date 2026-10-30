@@ -191,9 +191,16 @@ def cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json = None):
     return dependencies
 
 def cargo_toml_fact(cargo_toml_json, workspace_cargo_toml_json = None, strip_prefix = ""):
+    dependencies = cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json)
+    features = dict(cargo_toml_json.get("features", {}))
+    explicit = set([value for values in features.values() for value in values if value.startswith("dep:")])
+    for dependency in dependencies:
+        name = dependency["name"]
+        if dependency.get("optional") and "dep:" + name not in explicit:
+            features.setdefault(name, ["dep:" + name])
     return dict(
-        features = cargo_toml_json.get("features", {}),
-        dependencies = cargo_toml_dependencies(cargo_toml_json, workspace_cargo_toml_json),
+        features = features,
+        dependencies = dependencies,
         strip_prefix = strip_prefix,
     )
 
