@@ -605,6 +605,7 @@ _PLATFORMS = [
 ]
 
 def aliases(package_name = None):
+    # type: (str | None) -> dict[str, str]
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return {{}}
@@ -612,6 +613,7 @@ def aliases(package_name = None):
     return dep_data["aliases"]
 
 def crate_name(package_name = None):
+    # type: (str | None) -> str | None
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
@@ -619,6 +621,7 @@ def crate_name(package_name = None):
     return dep_data["crate_name"]
 
 def edition(package_name = None):
+    # type: (str | None) -> str | None
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
@@ -626,6 +629,7 @@ def edition(package_name = None):
     return dep_data["edition"]
 
 def lint_config(package_name = None):
+    # type: (str | None) -> str | None
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
@@ -638,6 +642,7 @@ def all_crate_deps(
         build = False,
         package_name = None,
         cargo_only = False):
+    # type: (bool, bool, bool, str | None, bool) -> list[str] | select[list[str], Literal['list']]
 
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
@@ -652,13 +657,11 @@ def all_crate_deps(
         filter_prefix = {this_repo} if cargo_only else None,
     )
 
-RESOLVED_PLATFORMS = select({{
-    {target_compatible_with},
-    "//conditions:default": ["@platforms//:incompatible"],
-}})
+_PLATFORM_COMPATIBILITY = {{platform: [] for platform in _PLATFORMS}}  # type: dict[str, list[str]]
+_PLATFORM_COMPATIBILITY["//conditions:default"] = ["@platforms//:incompatible"]
+RESOLVED_PLATFORMS = select(_PLATFORM_COMPATIBILITY)  # type: select[list[str], Literal["list"]]
 """.format(
             platforms = render_string_list(resolved_platforms),
-            target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_platforms]),
             this_repo = repr("@" + hub_name + "//:"),
         )
 
@@ -1222,6 +1225,7 @@ crate = module_extension(
 def _hub_repo_impl(rctx):
     for path, contents in rctx.attr.contents.items():
         rctx.file(path, contents)
+    rctx.template("data.bzli", Label("//rs:cargo_workspace_data.bzli.tmpl"), executable = False)
     rctx.file("REPO.bazel", "")
 
 _hub_repo = repository_rule(
