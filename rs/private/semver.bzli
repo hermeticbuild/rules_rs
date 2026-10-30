@@ -1,0 +1,8 @@
+"""Cargo version parsing, comparison, and requirement matching."""
+
+type Version = tuple[int, int, int, str]
+type VersionCore = tuple[int, int, int]
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
+# in source when Bazel supports typed dictionary keys.
+type ParsedVersion = dict[{"version": Version, "specified": int, "wildcard_pos": int | None}]
+type Comparator = tuple[str, Version]

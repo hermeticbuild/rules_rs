@@ -1,0 +1,49 @@
+"""Types for Cargo cfg parsing and target evaluation.
+
+Recursive aliases and dictionary fields require this companion on supported Bazel
+versions: https://github.com/bazelbuild/bazel/issues/32044 and
+https://github.com/bazelbuild/bazel/issues/31770.
+"""
+
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
+# in source when Bazel supports typed dictionary keys.
+type _Token = (
+    dict[{"t": Literal["IDENT", "STRING"], "v": str}]
+    | dict[{"t": Literal["LPAREN", "RPAREN", "COMMA", "EQ"]}]
+)
+type _Combinator = Literal["all", "any", "not"]
+type _Node = (
+    dict[{"kind": Literal["pred"], "name": str}]
+    | dict[{"kind": Literal["eq"], "key": str, "value": str}]
+    | dict[{"kind": _Combinator, "args": list[_Node]}]
+)
+type _Frame = dict[{"fn": str, "args": list[_Node]}]
+type _Instruction = (
+    dict[{"op": Literal["VISIT"], "node": _Node}]
+    | dict[{"op": Literal["REDUCE"], "name": _Combinator, "n": int}]
+)
+type _Cfg = Mapping[str, object]
+type _TripleAttrs = dict[{
+    "_triple": str,
+    "target_arch": str,
+    "target_vendor": str,
+    "target_os": str,
+    "target_env": str,
+    "target_family": str,
+    "target_endian": str,
+    "target_pointer_width": str,
+    "target_abi": str,
+    "true": bool,
+    "false": bool,
+    "unix": bool,
+    "windows": bool,
+    "wasm": bool,
+}]
+
+type CfgAttrs = dict[{"_triple": ReadOnly[str]}, ...]
+
+type _Matches = struct[{"matches": list[str], "uses_feature_cfg": bool}]
+
+# TODO(https://github.com/bazelbuild/starlark/pull/362): Move type parameters
+# into source when the supported Bazel versions can parse them.
+def _get[T, U](xs: Sequence[T], index: int, default: U) -> T | U: ...
