@@ -3,6 +3,7 @@
 _VALID_LEVELS = ["allow", "warn", "deny", "forbid"]
 
 def _parse_lint(value):
+    # type: (_LintSetting) -> tuple[str, int, list[str]]
     """Parses a lint value into (level, priority, check_cfg).
 
     A lint can be either a simple string ("allow") or a table
@@ -20,6 +21,7 @@ def _parse_lint(value):
     return level, priority, value.get("check-cfg", [])
 
 def _format_flags(lints, prefix):
+    # type: (_LintSettings, str) -> list[str]
     """Converts a dict of lint_name -> lint_value into sorted CLI flags.
 
     Lints are sorted by (priority, name) so that lower-priority lints come
@@ -46,6 +48,7 @@ def _format_flags(lints, prefix):
     return flags
 
 def _lint_flags(lints):
+    # type: (_LintSections) -> _LintFlags
     return struct(
         rustc_lint_flags = _format_flags(lints.get("rust", {}), ""),
         clippy_lint_flags = _format_flags(lints.get("clippy", {}), "clippy"),

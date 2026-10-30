@@ -1,0 +1,15 @@
+"""Cargo source replacement and registry download configuration."""
+
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
+# in source when Bazel supports typed dictionary keys.
+type _RegistryConfig = dict[{"dl": str}, ...]
+
+type _Source = dict[{
+    "replace-with": NotRequired[str],
+    "registry": NotRequired[str],
+}, ...]
+type _Registry = dict[{"index": NotRequired[str]}, ...]
+type _CargoConfig = dict[{
+    "source": NotRequired[dict[str, _Source]],
+    "registries": NotRequired[dict[str, _Registry]],
+}, ...]

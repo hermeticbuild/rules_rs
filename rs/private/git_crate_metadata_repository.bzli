@@ -1,0 +1,19 @@
+"""Context consumed by the generated Git crate wrapper repository."""
+
+load(":repository_utils.bzli", "CrateAttributes")
+
+type _Metadata = repo_metadata
+
+class _MetadataContext(Protocol):
+    @property
+    def attr(self) -> Intersection[CrateAttributes, struct[{
+        "hub_name": str,
+        "gen_build_script": str,
+        "package_name": str,
+        "purl": str,
+        "package_version": str,
+    }, ...]]: ...
+
+    def file(self, path: str, content: str) -> None: ...
+
+    def repo_metadata(self, *, reproducible: bool) -> _Metadata: ...
