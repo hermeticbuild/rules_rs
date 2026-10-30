@@ -60,6 +60,8 @@ def normalize_msvc_compile_flags(compile_flags):
     }
 
     result = []
+    msvc_include_positions = {}
+    no_stdlibinc = False
     copy_next_for = None
     for original_flag in compile_flags:
         flag = original_flag
@@ -74,6 +76,9 @@ def normalize_msvc_compile_flags(compile_flags):
         if lowercase_flag.startswith("/clang:"):
             flag = flag[len("/clang:"):]
             lowercase_flag = flag.lower()
+
+        if flag == "-nostdlibinc":
+            no_stdlibinc = True
 
         # A parameter may look like another option, for example /Users/include.
         if flag in CLANG_PARAMETER_FLAGS:
@@ -90,11 +95,15 @@ def normalize_msvc_compile_flags(compile_flags):
         normalized = False
         for prefix, replacement in prefixes:
             if lowercase_flag == prefix:
+                if prefix == "/imsvc":
+                    msvc_include_positions[len(result)] = True
                 result.append(replacement)
                 copy_next_for = replacement
                 normalized = True
                 break
             if lowercase_flag.startswith(prefix):
+                if prefix == "/imsvc":
+                    msvc_include_positions[len(result)] = True
                 result.extend([replacement, flag[len(prefix):]])
                 normalized = True
                 break
@@ -110,5 +119,22 @@ def normalize_msvc_compile_flags(compile_flags):
                 result.append("-fms-runtime-lib=" + runtime_libraries[lowercase_flag])
             else:
                 result.append(flag)
+
+    if no_stdlibinc:
+        # clang-cl searches its builtin resource headers before /imsvc roots.
+        # With automatic SDK discovery disabled, -idirafter preserves that
+        # order in Clang driver mode. Do not apply this to native discovery:
+        # its implicit SDK roots would then precede explicit /imsvc roots.
+        # Converted roots precede any caller-supplied -idirafter directories.
+        msvc_includes = []
+        other_flags = []
+        for index, flag in enumerate(result):
+            if index in msvc_include_positions:
+                msvc_includes.append("-idirafter")
+            elif index - 1 in msvc_include_positions:
+                msvc_includes.append(flag)
+            else:
+                other_flags.append(flag)
+        return msvc_includes + other_flags
 
     return result

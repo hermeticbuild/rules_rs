@@ -42,6 +42,40 @@ def _normalize_msvc_compile_flags_impl(ctx):
 def _normalize_msvc_runtime_libraries_impl(ctx):
     env = unittest.begin(ctx)
 
+    # Hermetic clang-cl searches builtin headers before its explicit SDK roots.
+    # These roots precede original -idirafter paths, regardless of argv order.
+    for no_stdlibinc in ["-nostdlibinc", "/clang:-nostdlibinc"]:
+        asserts.equals(
+            env,
+            [
+                "-idirafter",
+                "SDK/first",
+                "-idirafter",
+                "/Users/SDK/second",
+                "-idirafter",
+                "fallback",
+                "-isystem",
+                "external",
+                "-nostdlibinc",
+            ],
+            normalize_msvc_compile_flags([
+                "-idirafter",
+                "fallback",
+                "/imsvcSDK/first",
+                "/IMsvc",
+                "/Users/SDK/second",
+                "/external:Iexternal",
+                no_stdlibinc,
+            ]),
+        )
+
+    # Native discovery is unchanged; an option-looking path is not a flag.
+    asserts.equals(
+        env,
+        ["-isystem", "SDK", "-I", "-nostdlibinc"],
+        normalize_msvc_compile_flags(["/imsvcSDK", "/I", "-nostdlibinc"]),
+    )
+
     asserts.equals(
         env,
         [
