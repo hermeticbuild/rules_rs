@@ -64,6 +64,12 @@ use_repo(crate, "crates")
 
 `platform_triples` should include every exec and target triple that can participate in the build. For the common case, include the host triples you use locally and in CI plus the target triples you build for.
 
+To package the Rust standard library's copyright notices alongside a binary, add
+`@default_rust_toolchains//:library_notice` to the packaging rule's inputs.
+It supplies the selected Rust release's `COPYRIGHT-library.html` on every target
+platform. For a named toolchain, use that repository name instead. Rust releases
+before 1.86 did not ship this file.
+
 ### Toolchain declarations in dependencies
 
 When multiple modules declare `toolchains.toolchain` with the same `name`

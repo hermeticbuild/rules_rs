@@ -1,5 +1,17 @@
 def _toolchains_repository_impl(rctx):
     rctx.file(
+        "BUILD.bazel",
+        """\
+alias(
+    name = "library_notice",
+    actual = "{library_notice}",
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)
+""".format(library_notice = rctx.attr.library_notice),
+    )
+
+    rctx.file(
         "rustc/BUILD.bazel",
         """\
 load("@rules_rs//rs/toolchains:declare_rustc_toolchains.bzl", "declare_rustc_toolchains")
@@ -59,6 +71,7 @@ toolchains_repository = repository_rule(
     implementation = _toolchains_repository_impl,
     attrs = {
         "version": attr.string(mandatory = True),
+        "library_notice": attr.label(allow_single_file = True, mandatory = True),
         "rustfmt_version": attr.string(mandatory = True),
         "rust_analyzer_version": attr.string(mandatory = True),
         "edition": attr.string(mandatory = True),

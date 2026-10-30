@@ -542,6 +542,7 @@ def _toolchains_impl(mctx):
     for tag in version_tags:
         toolchains_repository(
             name = tag.name,
+            library_notice = "@%s//:share/doc/rust/COPYRIGHT-library.html" % host_rustc_repos[tag.version],
             version = tag.version,
             rustfmt_version = tag.rustfmt_version or tag.version,
             rust_analyzer_version = tag.rust_analyzer_version or tag.version,

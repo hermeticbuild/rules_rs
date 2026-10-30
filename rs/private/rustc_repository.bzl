@@ -3,6 +3,8 @@ load("@rules_rust//rust/platform:triple_mappings.bzl", "system_to_binary_ext")
 load(":rust_repository_utils.bzl", "RUST_REPOSITORY_COMMON_ATTR", "download_and_extract", "includes_rust_analyzer_proc_macro_srv", "rustc_lib_build_file")
 
 _build_file_tmpl = """\
+exports_files(["share/doc/rust/COPYRIGHT-library.html"])
+
 filegroup(
     name = "rustc",
     srcs = ["bin/rustc{binary_ext}"],
