@@ -6,9 +6,11 @@ load(":semver.bzl", "parse_full_version")
 _label_list_dict = getattr(attr, "label_list_dict", attr.string_list_dict)
 
 def spoke_repo_name(hub_name, name, version):
+    # type: (str, str, str) -> str
     return ("%s__%s-%s" % (hub_name, name, version)).replace("+", "-")
 
 def _format_branches(branches):
+    # type: (Collection[tuple[str, str]]) -> str
     return """select({
         %s
     })""" % (
@@ -16,6 +18,7 @@ def _format_branches(branches):
     )
 
 def render_select(non_platform_items, platform_items, use_legacy_rules_rust_platforms):
+    # type: (Collection[object], Mapping[str, Collection[object]], bool) -> tuple[list[str], str]
     non_platform_items = [str(item) for item in non_platform_items]
     platform_items = {
         platform: [str(item) for item in items]
@@ -33,6 +36,7 @@ def render_select(non_platform_items, platform_items, use_legacy_rules_rust_plat
     return common_items, _format_branches(branches)
 
 def render_select_build_script_env(platform_items, use_legacy_rules_rust_platforms):
+    # type: (Mapping[str, str], bool) -> str
     branches = [
         (platform_label(triple, use_legacy_rules_rust_platforms), items)
         for triple, items in platform_items.items()
