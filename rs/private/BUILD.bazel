@@ -12,6 +12,7 @@ load(":cfg_parser_test.bzl", "cfg_parser_tests")
 load(":lint_flags_test.bzl", "lint_flags_tests")
 load(":registry_utils_test.bzl", "registry_utils_tests")
 load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
+load(":select_render_test.bzl", "select_render_tests")
 load(":semver_test.bzl", "semver_select_tests")
 load(":visibility_test.bzl", "visibility_tests")
 
@@ -54,6 +55,8 @@ lint_flags_tests()
 registry_utils_tests()
 
 rust_repository_utils_tests()
+
+select_render_tests()
 
 semver_select_tests()
 
@@ -208,6 +211,7 @@ bzl_library(
     visibility = ["//rs:__subpackages__"],
     deps = [
         ":cargo_toml_utils",
+        ":select_render",
         ":select_utils",
         ":semver",
     ],
@@ -435,6 +439,22 @@ bzl_library(
     srcs = ["visibility_test.bzl"],
     deps = [
         ":visibility",
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "select_render",
+    srcs = ["select_render.bzl"],
+    visibility = ["//rs:__subpackages__"],
+    deps = [":select_utils"],
+)
+
+bzl_library(
+    name = "select_render_test",
+    srcs = ["select_render_test.bzl"],
+    deps = [
+        ":select_render",
         "@bazel_skylib//lib:unittest",
     ],
 )

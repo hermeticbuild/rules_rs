@@ -1,51 +1,10 @@
 load(":cargo_toml_utils.bzl", "cargo_toml_is_proc_macro")
+load(":select_render.bzl", "render_select", "render_select_build_script_env")
 load(":select_utils.bzl", "compute_select")
 load(":semver.bzl", "parse_full_version")
 
 # Bazel 8 does not define attr.label_list_dict.
 _label_list_dict = getattr(attr, "label_list_dict", attr.string_list_dict)
-
-def _platform(triple, use_legacy_rules_rust_platforms):
-    if use_legacy_rules_rust_platforms:
-        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
-    return "@rules_rs//rs/platforms/config:" + triple
-
-def _format_branches(branches):
-    return """select({
-        %s
-    })""" % (
-        ",\n        ".join(['"%s": %s' % branch for branch in branches])
-    )
-
-def render_select(non_platform_items, platform_items, use_legacy_rules_rust_platforms):
-    non_platform_items = [str(item) for item in non_platform_items]
-    platform_items = {
-        platform: [str(item) for item in items]
-        for platform, items in platform_items.items()
-    }
-    common_items, branches = compute_select(non_platform_items, platform_items)
-    common_items = list(common_items)
-
-    if not branches:
-        return common_items, ""
-
-    branches = [(_platform(k, use_legacy_rules_rust_platforms), repr(v)) for k, v in branches.items()]
-    branches.append(("//conditions:default", "[],"))
-
-    return common_items, _format_branches(branches)
-
-def render_select_build_script_env(platform_items, use_legacy_rules_rust_platforms):
-    branches = [
-        (_platform(triple, use_legacy_rules_rust_platforms), items)
-        for triple, items in platform_items.items()
-    ]
-
-    if not branches:
-        return ""
-
-    branches.append(("//conditions:default", "{},"))
-
-    return _format_branches(branches)
 
 def _exclude_deps_from_features(features):
     return [f for f in features if not f.startswith("dep:")]
