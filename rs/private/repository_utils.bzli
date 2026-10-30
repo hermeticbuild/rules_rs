@@ -1,0 +1,103 @@
+"""Cargo metadata and generated crate declarations."""
+
+load(":cargo_toml_utils.bzli", "CargoLibrary")
+
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
+# in source when Bazel supports typed dictionary keys.
+type BazelMetadata = dict[{
+    "deps": NotRequired[list[str]],
+    "additive_build_file_content": NotRequired[str],
+    "gen_build_script": NotRequired[bool],
+}, ...]
+type CargoPackage = dict[{
+    "name": str,
+    "version": NotRequired[str],
+    "authors": NotRequired[list[str]],
+    "description": NotRequired[str],
+    "homepage": NotRequired[str],
+    "repository": NotRequired[str],
+    "license": NotRequired[str],
+    "license_file": NotRequired[str],
+    "rust-version": NotRequired[str],
+    "readme": NotRequired[str | bool],
+    "build": NotRequired[str | bool],
+    "edition": NotRequired[str],
+    "links": NotRequired[str],
+    "metadata": NotRequired[dict[{"bazel": NotRequired[BazelMetadata]}, ...]],
+}, ...]
+type CargoManifest = dict[{
+    "package": CargoPackage,
+    "lib": NotRequired[CargoLibrary],
+    "bin": NotRequired[list[dict[{"name": str, "path": NotRequired[str]}, ...]]],
+}, ...]
+type _LabelList = list[str] | list[Label] | list[str | Label]
+type _LabelSelect = Mapping[str, Collection[str | Label]]
+type CrateAttributes = struct[{
+    "crate_features": list[str],
+    "crate_features_select": dict[str, list[str]],
+    "use_legacy_rules_rust_platforms": bool,
+    "build_script_deps": Collection[str | Label],
+    "build_script_deps_select": _LabelSelect,
+    "build_script_data": Collection[str | Label],
+    "build_script_data_select": _LabelSelect,
+    "build_script_tools": Collection[str | Label],
+    "build_script_tools_select": _LabelSelect,
+    "rustc_flags": list[str],
+    "rustc_flags_select": dict[str, list[str]],
+    "deps": _LabelList,
+    "deps_select": _LabelSelect,
+    "link_deps": NotRequired[Collection[str | Label]],
+    "link_deps_select": NotRequired[_LabelSelect],
+    "target_compatible_with": NotRequired[Collection[str | Label]],
+    "target_compatible_with_select": NotRequired[_LabelSelect],
+    "build_script_env_files": NotRequired[_LabelList],
+    "build_script_env_select": dict[str, str],
+    "extra_compile_data": NotRequired[list[str]],
+    "rustc_env": NotRequired[dict[str, str]],
+    "crate_visibility": Collection[str | Label],
+    "aliases": dict[str, str],
+    "data": Collection[str | Label],
+    "crate_tags": list[str],
+    "build_script_env": dict[str, str],
+    "allow_build_script_to_detect_nonhermetic_paths": bool,
+    "build_script_toolchains": Collection[str | Label],
+    "build_script_tags": list[str],
+}, ...]
+type _Path = path
+
+class _CargoFiles(Protocol):
+    def path(self, path: str | Label | _Path) -> _Path: ...
+    def file(self, path: str | Label | _Path, content: str = ..., executable: bool = ..., legacy_utf8: bool = ...) -> None: ...
+
+class _CargoContext(_CargoFiles, Protocol):
+    @property
+    def attr(self) -> struct[{"gen_build_script": str}, ...]: ...
+
+class _ReadContext(Protocol):
+    def read(self, path: str | Label | _Path, watch: str = ...) -> str: ...
+
+class CargoValues(TypedDict):
+    binaries: str
+    build_script: str
+    crate_name: str
+    crate_root: str
+    edition: str
+    has_lib: str
+    is_proc_macro: str
+    links: str
+
+class CrateValues(CargoValues):
+    name: str
+    purl: str
+    version: str
+
+type _CargoBuildValues = struct[{"bazel_metadata": BazelMetadata, "values": CargoValues}]
+
+# TODO(https://github.com/bazelbuild/starlark/pull/362): Move type parameters
+# into source when the supported Bazel versions can parse them.
+def inherit_workspace_package_fields[T: dict[{"package": dict[str, object]}, ...]](
+        cargo_toml: T,
+        workspace_cargo_toml: dict[{"workspace": NotRequired[dict[{"package": NotRequired[dict[str, object]]}, ...]]}, ...],
+) -> T: ...
+def package_version(package: dict[{"version": NotRequired[str]}, ...]) -> str: ...
+def render_build_file_content(rctx: _ReadContext, attr: Intersection[CrateAttributes, struct[{"hub_name": str, "additive_build_file": Label | None, "additive_build_file_content": str}, ...]], values: CrateValues, bazel_metadata: BazelMetadata = ...) -> str: ...

@@ -1,7 +1,13 @@
 """Tests for values written into generated Cargo repositories."""
 
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
-load(":repository_utils.bzl", "cargo_build_file_values", "render_select", "render_select_build_script_env")
+load(
+    ":repository_utils.bzl",
+    "cargo_build_file_values",
+    "cargo_build_file_values_for_package",
+    "render_select",
+    "render_select_build_script_env",
+)
 
 def _cargo_values(package, files = [], gen_build_script = "auto"):
     written = []
@@ -38,6 +44,17 @@ def _build_script_test_impl(ctx):
     asserts.equals(env, "None", values["build_script"])
     return unittest.end(env)
 
+def _build_script_override_test_impl(ctx):
+    env = unittest.begin(ctx)
+    rctx = struct(
+        path = lambda _path: struct(get_child = lambda _name: struct(exists = False)),
+        file = lambda _path, _content: None,
+    )
+    manifest = {"package": {"name": "sample", "build": True}}
+    result = cargo_build_file_values_for_package(rctx, manifest, [], rctx.path("."), manifest["package"], "off")
+    asserts.equals(env, "None", result.values["build_script"])
+    return unittest.end(env)
+
 def _readme_test_impl(ctx):
     env = unittest.begin(ctx)
     for package, files, expected in [
@@ -70,15 +87,21 @@ def _render_selects_test_impl(ctx):
     return unittest.end(env)
 
 _build_script_test = unittest.make(_build_script_test_impl)
+_build_script_override_test = unittest.make(_build_script_override_test_impl)
 _readme_test = unittest.make(_readme_test_impl)
-
 _render_selects_test = unittest.make(_render_selects_test_impl)
 
 def cargo_manifest_tests():
     _build_script_test(name = "repository_build_script_test")
+    _build_script_override_test(name = "repository_build_script_override_test")
     _readme_test(name = "repository_readme_test")
     _render_selects_test(name = "repository_render_selects_test")
     native.test_suite(
         name = "cargo_manifest_tests",
-        tests = [":repository_build_script_test", ":repository_readme_test", ":repository_render_selects_test"],
+        tests = [
+            ":repository_build_script_test",
+            ":repository_build_script_override_test",
+            ":repository_readme_test",
+            ":repository_render_selects_test",
+        ],
     )
