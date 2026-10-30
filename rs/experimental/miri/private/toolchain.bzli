@@ -1,0 +1,10 @@
+"""Miri toolchain rule implementations."""
+
+class _AllFilesContext(Protocol):
+    file: Final[struct[{"miri": File}, ...]]
+    files: Final[struct[{"rustc_lib": list[File]}, ...]]
+
+class _ToolchainContext(Protocol):
+    attr: Final[struct[{"exec_triple": str, "target_triple": str}, ...]]
+    file: Final[struct[{"miri": File}, ...]]
+    executable: Final[struct[{"process_wrapper": File}, ...]]

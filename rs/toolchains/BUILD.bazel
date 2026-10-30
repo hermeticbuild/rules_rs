@@ -3,6 +3,8 @@ load(":toolchain_config_test.bzl", "toolchain_config_tests")
 
 package(default_visibility = ["//visibility:public"])
 
+exports_files(["toolchain_config.bzli"])
+
 alias(
     name = "all_targets",
     actual = select({

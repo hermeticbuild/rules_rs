@@ -1,0 +1,27 @@
+"""Providers for Miri rules."""
+
+load("@rules_rust//rust/private:providers.bzl", "CrateInfo")
+
+type _CompiledCrate = struct[{
+    "output": File,
+    "transitive_inputs": depset[File],
+    "transitive_outputs": depset[File],
+}, ...]
+
+# TODO(https://github.com/bazelbuild/starlark/pull/362): Move type parameters
+# into source when the supported Bazel versions can parse them.
+def MiriCrateInfo[H: _CompiledCrate, T: _CompiledCrate](
+    *,
+    crate_info: CrateInfo,
+    host: H,
+    target: T,
+) -> record[{
+    "crate_info": CrateInfo,
+    "host": H,
+    "target": T,
+}]: ...
+
+def MiriSysrootInfo(*, sysroot: File, target_triple: str) -> record[{
+    "sysroot": File,
+    "target_triple": str,
+}]: ...
