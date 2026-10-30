@@ -182,6 +182,8 @@ def declare_rustc_toolchains(
             llvm_cov = "@llvm//tools:llvm-cov",
             llvm_profdata = "@llvm//tools:llvm-profdata",
             linker = select({
+                "@rules_rs//rs/platforms/config:aarch64-pc-windows-msvc": "@llvm//tools:lld-link",
+                "@rules_rs//rs/platforms/config:x86_64-pc-windows-msvc": "@llvm//tools:lld-link",
                 # Bare-metal targets link with the bundled rust-lld, as the Rust target specs do.
                 # The BPF toolchains below set their own linker.
                 "@platforms//os:none": lld_label,
