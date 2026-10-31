@@ -319,11 +319,12 @@ def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
     additive_build_file_content += bazel_metadata.get("additive_build_file_content", "")
 
     return """\
-load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
+{cc_library_load}load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
 
 {rust_crate_call}""".format(
+        cc_library_load = 'load("@rules_cc//cc:cc_library.bzl", "cc_library")\n' if "cc_library" in additive_build_file_content else "",
         hub_name = attr.hub_name,
         rust_crate_call = render_rust_crate_call(attr, values, bazel_metadata = bazel_metadata),
     ) + additive_build_file_content
