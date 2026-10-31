@@ -86,8 +86,12 @@ def _action_test(compiler):
 _clang_cl_test = _action_test("clang-cl")
 _clang_test = _action_test("clang")
 
-def bindgen_action_tests():
-    """Tests compiler-based selection independently of target/exec platform OS."""
+def bindgen_action_tests(name):
+    """Tests compiler-based selection independently of target/exec platform OS.
+
+    Args:
+      name: Test suite name.
+    """
     native.filegroup(name = "empty")
     for compiler in ["clang-cl", "clang"]:
         _config(name = compiler + "_config", compiler = compiler)
@@ -135,3 +139,4 @@ def bindgen_action_tests():
         expected = ["--target=aarch64-linux-gnu", "-isystem", "declared-sdk", "-isystem/validation-only", "-std=c++20", "-x", "c++", "-DFROM_CC_INFO=1"],
         unexpected = ["--driver-mode=cl", "/clang:", "/imsvc"],
     )
+    native.test_suite(name = name, tests = ["clang_cl_action_test", "clang_action_test"])

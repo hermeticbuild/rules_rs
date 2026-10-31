@@ -21,4 +21,4 @@ rust_bindgen(
     tags = ["manual"],
 )
 
-bindgen_action_tests()
+bindgen_action_tests(name = "bindgen_action_tests")
