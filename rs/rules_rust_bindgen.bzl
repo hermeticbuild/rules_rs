@@ -26,14 +26,17 @@ _BINDGEN_TOOLCHAIN_TYPE = Label("//rs:bindgen_toolchain_type")
 
 def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
     compilation_context = ctx.attr.cc_lib[CcInfo].compilation_context
-    clang_flags = normalize_msvc_compile_flags(ctx.attr.clang_flags)
+    is_clang_cl = cc_toolchain.compiler == "clang-cl"
     compile_variables = cc_common.create_compile_variables(
         cc_toolchain = cc_toolchain,
         feature_configuration = feature_configuration,
         include_directories = compilation_context.includes,
         quote_include_directories = compilation_context.quote_includes,
         system_include_directories = depset(
-            direct = cc_toolchain.built_in_include_directories,
+            # Builtin directories describe the compiler's implicit search paths
+            # for Bazel's header validation. Reinjecting them changes clang-cl's
+            # header order and can undo -nobuiltininc.
+            direct = [] if is_clang_cl else cc_toolchain.built_in_include_directories,
             transitive = [
                 compilation_context.system_includes,
                 compilation_context.external_includes,
@@ -46,6 +49,9 @@ def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
         action_name = C_COMPILE_ACTION_NAME,
         variables = compile_variables,
     )
+    if is_clang_cl:
+        return ["--driver-mode=cl"] + compile_flags + ["-D" + define for define in compilation_context.defines.to_list()]
+    clang_flags = normalize_msvc_compile_flags(ctx.attr.clang_flags)
     compile_flags = normalize_msvc_compile_flags(compile_flags)
 
     allowed_flag_prefixes = (
@@ -145,7 +151,7 @@ rust_bindgen = rule(
             providers = [CcInfo],
         ),
         "clang_flags": attr.string_list(
-            doc = "Additional Clang arguments used to parse the header.",
+            doc = "Additional Clang arguments used to parse the header. For clang-cl toolchains, use clang-cl argument syntax (including /clang: for GNU-only options).",
         ),
         "header": attr.label(
             doc = "Header to generate bindings for.",

@@ -1,0 +1,36 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//rs:rules_rust_bindgen.bzl", "rust_bindgen")
+load(":bindgen_action_test.bzl", "bindgen_action_tests")
+
+cc_library(
+    name = "header",
+    hdrs = ["header.h"],
+    defines = ["FROM_CC_INFO=1"],
+    includes = ["public"],
+)
+
+rust_bindgen(
+    name = "bindings_clang_cl",
+    cc_lib = "header",
+    clang_flags = [
+        "-x",
+        "c++",
+        "/std:c++20",
+    ],
+    header = "header.h",
+    tags = ["manual"],
+)
+
+rust_bindgen(
+    name = "bindings",
+    cc_lib = "header",
+    clang_flags = [
+        "-x",
+        "c++",
+        "-std=c++20",
+    ],
+    header = "header.h",
+    tags = ["manual"],
+)
+
+bindgen_action_tests(name = "bindgen_action_tests")
