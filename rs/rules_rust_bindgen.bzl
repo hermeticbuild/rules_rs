@@ -30,6 +30,7 @@ def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
     compile_variables = cc_common.create_compile_variables(
         cc_toolchain = cc_toolchain,
         feature_configuration = feature_configuration,
+        preprocessor_defines = compilation_context.defines,
         include_directories = compilation_context.includes,
         quote_include_directories = compilation_context.quote_includes,
         system_include_directories = depset(
@@ -50,7 +51,7 @@ def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
         variables = compile_variables,
     )
     if is_clang_cl:
-        return ["--driver-mode=cl"] + compile_flags + ["-D" + define for define in compilation_context.defines.to_list()]
+        return ["--driver-mode=cl"] + compile_flags
     clang_flags = normalize_msvc_compile_flags(ctx.attr.clang_flags)
     compile_flags = normalize_msvc_compile_flags(compile_flags)
 
@@ -93,9 +94,6 @@ def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
 
         result.append(flag)
         copy_next = flag in CLANG_PARAMETER_FLAGS
-
-    for define in compilation_context.defines.to_list():
-        result.append("-D" + define)
 
     return result
 

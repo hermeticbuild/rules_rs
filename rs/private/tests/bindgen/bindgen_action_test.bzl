@@ -8,7 +8,7 @@ load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/toolchains:cc_toolchain_config_info.bzl", "CcToolchainConfigInfo")
 
 def _config_impl(ctx):
-    is_cl = ctx.attr.compiler == "clang-cl"
+    is_cl = ctx.attr.compiler in ["clang-cl", "msvc-cl"]
     flags = [
         "--target=x86_64-pc-windows-msvc",
         "/imsvc",
@@ -49,6 +49,11 @@ def _config_impl(ctx):
                             flags = ["/external:I%{system_include_paths}" if is_cl else "-isystem%{system_include_paths}"],
                             iterate_over = "system_include_paths",
                         ),
+                        flag_group(
+                            expand_if_available = "preprocessor_defines",
+                            flags = ["/D%{preprocessor_defines}" if is_cl else "-D%{preprocessor_defines}"],
+                            iterate_over = "preprocessor_defines",
+                        ),
                         flag_group(flags = ["%{user_compile_flags}"], iterate_over = "user_compile_flags"),
                     ],
                 )],
@@ -70,15 +75,17 @@ def _action_test_impl(ctx):
     asserts.equals(env, "RustBindgen", action.mnemonic)
     argv = action.argv
     for flag in ctx.attr.expected:
-        asserts.true(env, flag in argv, "Missing {} in {}".format(flag, argv))
+        asserts.equals(env, 1, len([arg for arg in argv if arg == flag]), "Expected exactly one {} in {}".format(flag, argv))
     for flag in ctx.attr.unexpected:
         asserts.false(env, any([flag in arg for arg in argv]), "Unexpected {} in {}".format(flag, argv))
+    for before, after in ctx.attr.ordered_pairs.items():
+        asserts.true(env, before in argv and after in argv and argv.index(before) < argv.index(after), "Expected {} before {} in {}".format(before, after, argv))
     return analysistest.end(env)
 
 def _action_test(compiler):
     return analysistest.make(
         _action_test_impl,
-        attrs = {"expected": attr.string_list(), "unexpected": attr.string_list()},
+        attrs = {"expected": attr.string_list(), "unexpected": attr.string_list(), "ordered_pairs": attr.string_dict()},
         config_settings = {
             "//command_line_option:extra_toolchains": [str(Label("//rs/private/tests/bindgen:" + compiler))],
         },
@@ -86,6 +93,7 @@ def _action_test(compiler):
 
 _clang_cl_test = _action_test("clang-cl")
 _clang_test = _action_test("clang")
+_msvc_test = _action_test("msvc-cl")
 
 def bindgen_action_tests(name):
     """Tests compiler-based selection independently of target/exec platform OS.
@@ -94,7 +102,7 @@ def bindgen_action_tests(name):
       name: Test suite name.
     """
     native.filegroup(name = "empty")
-    for compiler in ["clang-cl", "clang"]:
+    for compiler in ["clang-cl", "clang", "msvc-cl"]:
         _config(name = compiler + "_config", compiler = compiler)
         cc_toolchain(
             name = compiler + "_impl",
@@ -131,14 +139,28 @@ def bindgen_action_tests(name):
             "/clang:declared-overlay.json",
             "-x",
             "c++",
-            "-DFROM_CC_INFO=1",
+            "/DFROM_CC_INFO=1",
+            "/DTRANSITIVE=1",
+            "/DOVERRIDE=1",
+            "/DOVERRIDE=2",
+            "/DREMOVE_ME=1",
+            "/UREMOVE_ME",
         ],
-        unexpected = ["/validation-only", "-idirafter", "-isystem"],
+        unexpected = ["/validation-only", "-idirafter", "-isystem", "-DFROM_CC_INFO", "PRIVATE"],
+        ordered_pairs = {"/DOVERRIDE=1": "/DOVERRIDE=2", "/DREMOVE_ME=1": "/UREMOVE_ME"},
     )
     _clang_test(
         name = "clang_action_test",
         target_under_test = "bindings",
-        expected = ["--target=aarch64-linux-gnu", "-isystem", "declared-sdk", "-isystem/validation-only", "-std=c++20", "-x", "c++", "-DFROM_CC_INFO=1"],
-        unexpected = ["--driver-mode=cl", "/clang:", "/imsvc"],
+        expected = ["--target=aarch64-linux-gnu", "-isystem", "declared-sdk", "-isystem/validation-only", "-std=c++20", "-x", "c++", "-DFROM_CC_INFO=1", "-DTRANSITIVE=1", "-DOVERRIDE=1", "-DOVERRIDE=2", "-DREMOVE_ME=1", "-UREMOVE_ME"],
+        unexpected = ["--driver-mode=cl", "/clang:", "/imsvc", "PRIVATE"],
+        ordered_pairs = {"-DOVERRIDE=1": "-DOVERRIDE=2", "-DREMOVE_ME=1": "-UREMOVE_ME"},
     )
-    native.test_suite(name = name, tests = ["clang_cl_action_test", "clang_action_test"])
+    _msvc_test(
+        name = "msvc_action_test",
+        target_under_test = "bindings_clang_cl",
+        expected = ["--target=x86_64-pc-windows-msvc", "-std=c++20", "FROM_CC_INFO=1", "TRANSITIVE=1", "OVERRIDE=1", "OVERRIDE=2", "REMOVE_ME=1", "REMOVE_ME"],
+        unexpected = ["--driver-mode=cl", "/D", "/U", "-DFROM_CC_INFO", "PRIVATE"],
+        ordered_pairs = {"OVERRIDE=1": "OVERRIDE=2", "REMOVE_ME=1": "REMOVE_ME"},
+    )
+    native.test_suite(name = name, tests = ["clang_cl_action_test", "clang_action_test", "msvc_action_test"])
