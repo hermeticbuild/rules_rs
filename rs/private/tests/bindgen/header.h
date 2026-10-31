@@ -1,0 +1,1 @@
+struct BindgenActionTest { int value; };
