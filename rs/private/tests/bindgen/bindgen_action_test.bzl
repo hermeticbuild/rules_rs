@@ -14,6 +14,7 @@ def _config_impl(ctx):
         "/imsvc",
         "declared-sdk",
         "/MT",
+        "/WX",
         "/clang:-nostdlibinc",
         "/clang:-nobuiltininc",
         "/clang:-fms-compatibility-version=19.50.35717",
@@ -114,16 +115,17 @@ def bindgen_action_tests(name):
         )
     _clang_cl_test(
         name = "clang_cl_action_test",
-        target_under_test = "bindings",
+        target_under_test = "bindings_clang_cl",
         expected = [
             "--driver-mode=cl",
             "--target=x86_64-pc-windows-msvc",
             "/imsvc",
             "declared-sdk",
             "/MT",
+            "/WX",
             "/clang:-nostdlibinc",
             "/clang:-nobuiltininc",
-            "/clang:-std=c++20",
+            "/std:c++20",
             "/clang:-fms-compatibility-version=19.50.35717",
             "/clang:-ivfsoverlay",
             "/clang:declared-overlay.json",

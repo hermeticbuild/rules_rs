@@ -19,7 +19,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain", "use_cc_toolchain")
 load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
-load("//rs/private:bindgen.bzl", "CLANG_PARAMETER_FLAGS", "clang_cl_compile_flags", "clang_cl_user_flags", "normalize_msvc_compile_flags")
+load("//rs/private:bindgen.bzl", "CLANG_PARAMETER_FLAGS", "normalize_msvc_compile_flags")
 load("//rs/toolchains:declare_bindgen_toolchains.bzl", "BINDGEN_PREBUILTS", "bindgen_binary_name")
 
 _BINDGEN_TOOLCHAIN_TYPE = Label("//rs:bindgen_toolchain_type")
@@ -27,7 +27,6 @@ _BINDGEN_TOOLCHAIN_TYPE = Label("//rs:bindgen_toolchain_type")
 def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
     compilation_context = ctx.attr.cc_lib[CcInfo].compilation_context
     is_clang_cl = cc_toolchain.compiler == "clang-cl"
-    user_flags = clang_cl_user_flags(ctx.attr.clang_flags) if is_clang_cl else ctx.attr.clang_flags
     compile_variables = cc_common.create_compile_variables(
         cc_toolchain = cc_toolchain,
         feature_configuration = feature_configuration,
@@ -43,7 +42,7 @@ def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
                 compilation_context.external_includes,
             ],
         ),
-        user_compile_flags = user_flags,
+        user_compile_flags = ctx.attr.clang_flags,
     )
     compile_flags = cc_common.get_memory_inefficient_command_line(
         feature_configuration = feature_configuration,
@@ -51,7 +50,7 @@ def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
         variables = compile_variables,
     )
     if is_clang_cl:
-        return clang_cl_compile_flags(compile_flags, user_flags) + ["-D" + define for define in compilation_context.defines.to_list()]
+        return ["--driver-mode=cl"] + compile_flags + ["-D" + define for define in compilation_context.defines.to_list()]
     clang_flags = normalize_msvc_compile_flags(ctx.attr.clang_flags)
     compile_flags = normalize_msvc_compile_flags(compile_flags)
 
@@ -152,7 +151,7 @@ rust_bindgen = rule(
             providers = [CcInfo],
         ),
         "clang_flags": attr.string_list(
-            doc = "Additional Clang arguments used to parse the header. GNU-style flags are supported with clang-cl too; GNU-only options use its /clang: forwarding mechanism. Native clang-cl flags are also accepted when the target C++ compiler is clang-cl.",
+            doc = "Additional Clang arguments used to parse the header. For clang-cl toolchains, use clang-cl argument syntax (including /clang: for GNU-only options).",
         ),
         "header": attr.label(
             doc = "Header to generate bindings for.",
