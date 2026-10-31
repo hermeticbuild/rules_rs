@@ -80,7 +80,7 @@ def _action_test(compiler):
         _action_test_impl,
         attrs = {"expected": attr.string_list(), "unexpected": attr.string_list()},
         config_settings = {
-            "//command_line_option:extra_toolchains": [str(Label("//rs/private/tests/bindgen:" + compiler))],
+            "//command_line_option:extra_toolchains": [str(Label(":" + compiler))],
         },
     )
 
