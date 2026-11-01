@@ -8,6 +8,7 @@ load("//rs/private:bpf_linker_repository.bzl", "BPF_LINKER_SUPPORTED_EXEC_TRIPLE
 load("//rs/private:cargo_repository.bzl", "cargo_repository")
 load("//rs/private:clippy_repository.bzl", "clippy_repository")
 load("//rs/private:host_cargo_repository.bzl", "host_cargo_repository")
+load("//rs/private:llvm_tools_repository.bzl", "llvm_tools_repository")
 load("//rs/private:rust_analyzer_repository.bzl", "rust_analyzer_repository")
 load(
     "//rs/private:rust_repository_utils.bzl",
@@ -93,6 +94,13 @@ _TOOLCHAIN_TAG = tag_class(
         ),
         "extra_exec_rustc_flags": attr.string_list_dict(
             doc = "Additional rustc flags by exec triple.",
+        ),
+        "use_rustc_llvm_tools": attr.bool(
+            doc = """Take `llvm-cov` and `llvm-profdata` for Rust coverage from this Rust release's
+            `llvm-tools` component instead of `@llvm`. The raw coverage profile format changes in some
+            LLVM releases, so enable this when `@llvm`'s `llvm-profdata` expects a different format
+            than rustc writes.""",
+            default = False,
         ),
     },
 )
@@ -182,6 +190,7 @@ def _toolchains_impl(mctx):
             edition = _DEFAULT_EDITION,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
+            use_rustc_llvm_tools = False,
         )
     version_tags = repo_configs.values()
 
@@ -189,9 +198,12 @@ def _toolchains_impl(mctx):
     rustfmt_versions = set([])
     rust_analyzer_versions = set([])
     upstream_versions = set([])
+    llvm_tools_versions = set([])
 
     for tag in version_tags:
         versions.add(tag.version)
+        if tag.use_rustc_llvm_tools:
+            llvm_tools_versions.add(tag.version)
         rustfmt_versions.add(tag.rustfmt_version or tag.version)
         rust_analyzer_versions.add(tag.rust_analyzer_version or tag.version)
         if not tag.use_rust_redist:
@@ -333,6 +345,8 @@ def _toolchains_impl(mctx):
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
             if version in versions:
                 _request_sha("clippy", base_version, iso_date, exec_triple)
+            if version in llvm_tools_versions:
+                _request_sha("llvm-tools", base_version, iso_date, exec_triple)
             if version in miri_versions:
                 _request_sha("miri", base_version, iso_date, exec_triple)
 
@@ -430,6 +444,16 @@ def _toolchains_impl(mctx):
                     iso_date = iso_date,
                     sha256 = _sha_for("clippy", base_version, iso_date, exec_triple),
                     rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                    urls = urls,
+                )
+
+            if version in llvm_tools_versions:
+                llvm_tools_repository(
+                    name = "llvm_tools_{}_{}".format(triple_suffix, version_key),
+                    triple = triple,
+                    version = base_version,
+                    iso_date = iso_date,
+                    sha256 = _sha_for("llvm-tools", base_version, iso_date, exec_triple),
                     urls = urls,
                 )
 
@@ -550,6 +574,7 @@ def _toolchains_impl(mctx):
             extra_rustc_flags = tag.extra_rustc_flags,
             extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
             target_triples = stdlib_targets_by_version[tag.version] + SUPPORTED_TIER_3_TRIPLES,
+            use_rustc_llvm_tools = tag.use_rustc_llvm_tools,
         )
 
     # rules_rs registers the default repo, so it must exist even without toolchains.

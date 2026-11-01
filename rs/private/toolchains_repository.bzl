@@ -23,6 +23,7 @@ declare_rustc_toolchains(
     extra_rustc_flags = {extra_rustc_flags},
     extra_exec_rustc_flags = {extra_exec_rustc_flags},
     target_triples = {target_triples},
+    use_rustc_llvm_tools = {use_rustc_llvm_tools},
 )
 """.format(
             version = repr(rctx.attr.version),
@@ -30,6 +31,7 @@ declare_rustc_toolchains(
             extra_rustc_flags = repr(rctx.attr.extra_rustc_flags),
             extra_exec_rustc_flags = repr(rctx.attr.extra_exec_rustc_flags),
             target_triples = repr(rctx.attr.target_triples),
+            use_rustc_llvm_tools = repr(rctx.attr.use_rustc_llvm_tools),
         ),
     )
 
@@ -78,5 +80,6 @@ toolchains_repository = repository_rule(
         "extra_rustc_flags": attr.string_list_dict(),
         "extra_exec_rustc_flags": attr.string_list_dict(),
         "target_triples": attr.string_list(mandatory = True),
+        "use_rustc_llvm_tools": attr.bool(default = False),
     },
 )

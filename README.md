@@ -85,7 +85,8 @@ Dependencies that mix stable, beta, or nightly versions, or specify different
 `extra_rustc_flags` or `extra_exec_rustc_flags`, must use different toolchain repo
 names or be overridden by a root-module declaration. Conflicting declarations
 within the root module are errors. Without a root override, any declaration with
-`use_rust_redist = False` disables redistribution for the selected versions.
+`use_rust_redist = False` disables redistribution for the selected versions, and
+any declaration with `use_rustc_llvm_tools = True` enables rustc's coverage tools.
 
 ### Rust toolchain archives
 
@@ -117,6 +118,27 @@ bazel mod deps --lockfile_mode=update
 
 The second command restores the normal environment before the updated lockfile
 is committed.
+
+### Coverage tools
+
+`bazel coverage` merges Rust profiles with `llvm-profdata` and `llvm-cov` from
+`@llvm` by default, so no extra download is needed when `@llvm` is also the C++
+toolchain. The raw profile format changes in some LLVM releases (LLVM 21 and 22
+use format 10, LLVM 23 uses 11), so this works only while `@llvm`'s
+`llvm-profdata` expects the format rustc writes. Otherwise every `rust_test`
+fails under coverage with
+`raw profile version mismatch: Profile uses raw profile format version = 10; expected version = 11`.
+
+Set `use_rustc_llvm_tools = True` to take the tools from the Rust release's own
+`llvm-tools` component instead. It always matches rustc:
+
+```bzl
+toolchains.toolchain(
+    edition = "2024",
+    version = "1.95.0",
+    use_rustc_llvm_tools = True,
+)
+```
 
 ### Global Cargo configuration
 

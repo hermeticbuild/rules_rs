@@ -10,6 +10,7 @@ def _config(tag):
         extra_rustc_flags = tag.extra_rustc_flags,
         extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
         use_rust_redist = tag.use_rust_redist,
+        use_rustc_llvm_tools = tag.use_rustc_llvm_tools,
     )
 
 def _highest_version(a, b, repo_name, attribute):
@@ -39,6 +40,7 @@ def _merge_configs(a, b):
         extra_rustc_flags = a.extra_rustc_flags,
         extra_exec_rustc_flags = a.extra_exec_rustc_flags,
         use_rust_redist = a.use_rust_redist and b.use_rust_redist,
+        use_rustc_llvm_tools = a.use_rustc_llvm_tools or b.use_rustc_llvm_tools,
     )
 
 def resolve_toolchain_configs(modules):

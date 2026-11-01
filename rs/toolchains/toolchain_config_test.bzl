@@ -13,6 +13,7 @@ def _tag(**kwargs):
         extra_rustc_flags = {},
         extra_exec_rustc_flags = {},
         use_rust_redist = True,
+        use_rustc_llvm_tools = False,
     )
     attrs.update(kwargs)
     return struct(**attrs)
@@ -28,7 +29,7 @@ def _root_override_impl(ctx):
     root = _module(_tag(version = "1.85.0", edition = "2018"), is_root = True)
     deps = [
         _module(_tag(version = "nightly/2026-01-01", extra_rustc_flags = {"*": ["-Zfoo"]}, use_rust_redist = False)),
-        _module(_tag(version = "1.99.0", edition = "2024", rustfmt_version = "beta/2026-02-01")),
+        _module(_tag(version = "1.99.0", edition = "2024", rustfmt_version = "beta/2026-02-01", use_rustc_llvm_tools = True)),
     ]
     for modules in [[root] + deps, deps + [root]]:
         config = _resolve(*modules)
@@ -38,12 +39,13 @@ def _root_override_impl(ctx):
         asserts.equals(env, "1.85.0", config.rust_analyzer_version)
         asserts.equals(env, {}, config.extra_rustc_flags)
         asserts.true(env, config.use_rust_redist)
+        asserts.false(env, config.use_rustc_llvm_tools)
     return unittest.end(env)
 
 def _dependency_maxima_impl(ctx):
     env = unittest.begin(ctx)
     a = _module(_tag(version = "1.99.0", edition = "2024", rustfmt_version = "1.101.0", use_rust_redist = False))
-    b = _module(_tag(version = "1.100.0", edition = "2021", rust_analyzer_version = "1.102.0"))
+    b = _module(_tag(version = "1.100.0", edition = "2021", rust_analyzer_version = "1.102.0", use_rustc_llvm_tools = True))
     for modules in [(a, b), (b, a)]:
         config = _resolve(*modules)
         asserts.equals(env, "1.100.0", config.version)
@@ -51,6 +53,7 @@ def _dependency_maxima_impl(ctx):
         asserts.equals(env, "1.101.0", config.rustfmt_version)
         asserts.equals(env, "1.102.0", config.rust_analyzer_version)
         asserts.false(env, config.use_rust_redist)
+        asserts.true(env, config.use_rustc_llvm_tools)
     config = _resolve(_module(_tag(version = "1.92.9")), _module(_tag(version = "1.92.10")))
     asserts.equals(env, "1.92.10", config.version)
     asserts.equals(env, "1.92.10", config.rustfmt_version)

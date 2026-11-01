@@ -87,6 +87,7 @@ bzl_library(
         "//rs/private:cargo_repository",
         "//rs/private:clippy_repository",
         "//rs/private:host_cargo_repository",
+        "//rs/private:llvm_tools_repository",
         "//rs/private:rust_analyzer_repository",
         "//rs/private:rust_repository_utils",
         "//rs/private:rust_src_repository",

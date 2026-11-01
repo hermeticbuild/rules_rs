@@ -43,7 +43,8 @@ def declare_rustc_toolchains(
         rust_objcopy = None,
         rust_lld = None,
         bpf_linker = None,
-        rust_std = None):
+        rust_std = None,
+        use_rustc_llvm_tools = False):
     """Declares Rust compiler and Cargo toolchains from the same release.
 
     Register the generated toolchain targets before default toolchains when
@@ -70,6 +71,8 @@ def declare_rustc_toolchains(
         (`@platforms//os:none`) and wasm targets.
       bpf_linker: Optional bpf-linker label or labels keyed by execution triple.
       rust_std: Optional standard-library label or labels keyed by target triple.
+      use_rustc_llvm_tools: Take Rust coverage tools from the `llvm-tools` repositories the
+        toolchains extension creates for this version instead of `@llvm`.
     """
     if not target_triples:
         fail("target_triples must not be empty")
@@ -140,6 +143,15 @@ def declare_rustc_toolchains(
         cargo_repo_label = "@cargo_{}_{}//:".format(triple_suffix, version_key)
         clippy_repo_label = "@clippy_{}_{}//:".format(triple_suffix, version_key)
         lld_label = _component(rust_lld, triple, rustc_repo_label + "rust-lld")
+        if use_rustc_llvm_tools:
+            llvm_tools_repo_label = "@llvm_tools_{}_{}//:".format(triple_suffix, version_key)
+            llvm_cov = rust_toolchain_component_label(llvm_tools_repo_label + "llvm_cov_bin")
+            llvm_profdata = rust_toolchain_component_label(llvm_tools_repo_label + "llvm_profdata_bin")
+            llvm_lib = rust_toolchain_component_label(llvm_tools_repo_label + "llvm_lib")
+        else:
+            llvm_cov = "@llvm//tools:llvm-cov"
+            llvm_profdata = "@llvm//tools:llvm-profdata"
+            llvm_lib = None
 
         toolchain_prefix = name + "_" + triple_suffix + "_" + version_key
         rust_toolchain_name = toolchain_prefix + "_rust_toolchain"
@@ -179,8 +191,9 @@ def declare_rustc_toolchains(
                 "@llvm//constraints/windows/abi:gnu": "@llvm//tools:llvm-dlltool",
                 "//conditions:default": None,
             }),
-            llvm_cov = "@llvm//tools:llvm-cov",
-            llvm_profdata = "@llvm//tools:llvm-profdata",
+            llvm_cov = llvm_cov,
+            llvm_profdata = llvm_profdata,
+            llvm_lib = llvm_lib,
             linker = select({
                 # Bare-metal targets link with the bundled rust-lld, as the Rust target specs do.
                 # The BPF toolchains below set their own linker.
