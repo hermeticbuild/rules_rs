@@ -25,6 +25,8 @@ alias(
 alias(
     name = "non_bpf_targets",
     actual = select({
+        # UEFI has separate toolchains with an explicit Rust linker preference.
+        "@platforms//os:uefi": "//rs/platforms/config:bpfeb-unknown-none",
         # Select the opposite BPF config setting so non_bpf_targets does not
         # match either BPF target.
         "//rs/platforms/config:bpfeb-unknown-none": "//rs/platforms/config:bpfel-unknown-none",
@@ -123,3 +125,8 @@ bzl_library(
 )
 
 toolchain_config_tests(name = "toolchain_config_tests")
+
+config_setting(
+    name = "uefi_targets",
+    constraint_values = ["@platforms//os:uefi"],
+)
