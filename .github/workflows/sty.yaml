@@ -24,7 +24,7 @@ jobs:
         id: downloads
         run: sed -i '/^common --remote_cache=/d; /^common --experimental_remote_downloader=/d; /^common --bes_backend=/d' .bazelrc test/.bazelrc
       - name: Check test repository fixtures
-        uses: &sty tamird/sty@d400a00807b3c7f7b2ac82bf1e1e6a16db0290e3
+        uses: &sty tamird/sty@8d51556a1e3153dc52c3cc335b05fb1dd8cd929b
         with:
           working-directory: test
           artifact-name: sty-test
