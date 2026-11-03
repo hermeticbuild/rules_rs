@@ -1,24 +1,7 @@
-"""Toolchain declarations resolved from the module graph."""
+"""Read module tags from a Bazel module or a test fixture."""
 
-# TODO: Move these views into toolchain_config.bzl when a source type can
-# describe the same fields on a module tag and on the normalized struct.
-# A file-local type alias cannot declare a structural protocol.
-# Input tags and normalized output records expose the same fields.
-class _ToolchainValues(Protocol):
-    name: Final[str]
-    version: Final[str]
-    rustfmt_version: Final[str]
-    rust_analyzer_version: Final[str]
-    edition: Final[str]
-    extra_rustc_flags: Final[dict[str, list[str]]]
-    extra_exec_rustc_flags: Final[dict[str, list[str]]]
-    use_rust_redist: Final[bool]
-
-class _ToolchainTags(Protocol):
-    toolchain: Final[Sequence[_ToolchainValues]]
-
-class _ToolchainModule(Protocol):
+# TODO(https://github.com/bazelbuild/bazel/issues/32370): Declare these shared
+# fields in source when Bazel can describe a bazel_module and a test struct.
+class _ToolchainModule[Config](Protocol):
     is_root: Final[bool]
-    tags: Final[_ToolchainTags]
-
-type _ResolvedToolchainConfig = Intersection[struct[object], _ToolchainValues]
+    tags: Final[struct[{"toolchain": Sequence[Config]}, ...]]
