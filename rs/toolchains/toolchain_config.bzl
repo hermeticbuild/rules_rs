@@ -1,6 +1,18 @@
 """Resolve toolchain declarations from the module graph."""
 
+# type _ToolchainConfig = struct[{
+#     "name": str,
+#     "version": str,
+#     "rustfmt_version": str,
+#     "rust_analyzer_version": str,
+#     "edition": str,
+#     "extra_rustc_flags": dict[str, list[str]],
+#     "extra_exec_rustc_flags": dict[str, list[str]],
+#     "use_rust_redist": bool,
+# }, ...]
+
 def _config(tag):
+    # type: (_ToolchainConfig) -> _ToolchainConfig
     return struct(
         name = tag.name,
         version = tag.version,
@@ -13,6 +25,7 @@ def _config(tag):
     )
 
 def _highest_version(a, b, repo_name, attribute):
+    # type: (str, str, str, str) -> str
     if a == b:
         return a
     a_parts = a.split("/", 1)
@@ -24,9 +37,11 @@ def _highest_version(a, b, repo_name, attribute):
     return max([a, b], key = _stable_version_key)
 
 def _stable_version_key(version):
+    # type: (str) -> tuple[int, ...]
     return tuple([int(part) for part in version.split(".")])
 
 def _merge_configs(a, b):
+    # type: (_ToolchainConfig, _ToolchainConfig) -> _ToolchainConfig
     for attribute in ("extra_rustc_flags", "extra_exec_rustc_flags"):
         if getattr(a, attribute) != getattr(b, attribute):
             fail("Toolchain repo %s has conflicting %s; configure it in the root module or use different toolchain repo names" % (a.name, attribute))
@@ -42,6 +57,7 @@ def _merge_configs(a, b):
     )
 
 def resolve_toolchain_configs(modules):
+    # type: (Collection[_ToolchainModule[_ToolchainConfig]]) -> dict[str, _ToolchainConfig]
     """Return configurations by repo name, preferring root-module declarations.
 
     Args:

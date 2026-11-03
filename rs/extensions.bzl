@@ -25,15 +25,9 @@ load("//rs/private:git_crate_metadata_repository.bzl", "git_crate_metadata_repos
 load("//rs/private:lint_flags.bzl", "cargo_toml_lint_flags", "workspace_cargo_toml_lint_flags")
 load("//rs/private:registry_config_repository.bzl", "registry_config_repository")
 load("//rs/private:registry_utils.bzl", "CRATES_IO_REGISTRY", "registry_config_repo_name", "resolve_registry_source")
-load("//rs/private:repository_utils.bzl", "render_select")
+load("//rs/private:repository_utils.bzl", "render_select", _spoke_repo = "spoke_repo_name")
 load("//rs/private:toml2json.bzl", "run_toml2json")
 load("//rs/private:visibility.bzl", "visibility_with_internal_access")
-
-def _spoke_repo(hub_name, name, version):
-    s = "%s__%s-%s" % (hub_name, name, version)
-    if "+" in s:
-        s = s.replace("+", "-")
-    return s
 
 def _git_repo_remote_name(remote):
     scheme_separator = remote.find("://")
@@ -610,6 +604,7 @@ _PLATFORMS = [
 ]
 
 def aliases(package_name = None):
+    # type: (str | None) -> dict[str, str]
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return {{}}
@@ -617,6 +612,7 @@ def aliases(package_name = None):
     return dep_data["aliases"]
 
 def crate_name(package_name = None):
+    # type: (str | None) -> str | None
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
@@ -624,6 +620,7 @@ def crate_name(package_name = None):
     return dep_data["crate_name"]
 
 def edition(package_name = None):
+    # type: (str | None) -> str | None
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
@@ -631,6 +628,7 @@ def edition(package_name = None):
     return dep_data["edition"]
 
 def lint_config(package_name = None):
+    # type: (str | None) -> str | None
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
@@ -643,6 +641,9 @@ def all_crate_deps(
         build = False,
         package_name = None,
         cargo_only = False):
+    # type: (bool, bool, bool, str | None, bool) -> list[str] | select[list[str], Literal['list']]
+    # TODO(https://github.com/tamird/sty/blob/8d51556a1/docs/type-interfaces.md#selectors):
+    # Use a native return type when Bazel can express a selector whose first branch is a list.
 
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
@@ -657,13 +658,11 @@ def all_crate_deps(
         filter_prefix = {this_repo} if cargo_only else None,
     )
 
-RESOLVED_PLATFORMS = select({{
-    {target_compatible_with},
-    "//conditions:default": ["@platforms//:incompatible"],
-}})
+_PLATFORM_COMPATIBILITY = {{platform: [] for platform in _PLATFORMS}}  # type: dict[str, list[str]]
+_PLATFORM_COMPATIBILITY["//conditions:default"] = ["@platforms//:incompatible"]
+RESOLVED_PLATFORMS = select(_PLATFORM_COMPATIBILITY)  # type: select[list[str], Literal["list"]]
 """.format(
             platforms = render_string_list(resolved_platforms),
-            target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_platforms]),
             this_repo = repr("@" + hub_name + "//:"),
         )
 

@@ -1,6 +1,9 @@
 """Module extension that provisions the rules_rust_wasm_bindgen repository."""
 
 def _rules_rust_wasm_bindgen_repo_impl(rctx):
+    # type: (...) -> repo_metadata
+    # TODO(https://github.com/bazelbuild/bazel/issues/32020): Use native return annotations
+    # when Bazel exposes repo_metadata and extension_metadata.
     rctx.file("BUILD.bazel", """\
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 
@@ -62,6 +65,7 @@ _rules_rust_wasm_bindgen_repo = repository_rule(
 )
 
 def _rules_rust_wasm_bindgen_impl(mctx):
+    # type: (...) -> extension_metadata
     _rules_rust_wasm_bindgen_repo(
         name = "rules_rust_wasm_bindgen",
     )

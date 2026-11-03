@@ -2,14 +2,7 @@ load("@rules_rust//rust:rust_analyzer_toolchain.bzl", "rust_analyzer_toolchain")
 load("@rules_rust//rust/platform:triple.bzl", _parse_triple = "triple")
 load("//rs/platforms:triples.bzl", "SUPPORTED_EXEC_TRIPLES")
 load("//rs/private:rust_repository_utils.bzl", "includes_rust_analyzer_proc_macro_srv")
-load("//rs/toolchains:toolchain_utils.bzl", "sanitize_version")
-
-def _channel(version):
-    if version.startswith("nightly"):
-        return "nightly"
-    if version.startswith("beta"):
-        return "beta"
-    return "stable"
+load("//rs/toolchains:toolchain_utils.bzl", "rust_version_channel", "sanitize_version")
 
 def _parse_version(version):
     if "/" in version:
@@ -23,7 +16,7 @@ def declare_rust_analyzer_toolchains(
         execs = SUPPORTED_EXEC_TRIPLES):
     version_key = sanitize_version(version)
     rust_analyzer_version_key = sanitize_version(rust_analyzer_version)
-    channel = _channel(version)
+    channel = rust_version_channel(version)
     rust_analyzer_base_version, rust_analyzer_iso_date = _parse_version(rust_analyzer_version)
 
     for triple in execs:

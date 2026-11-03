@@ -783,7 +783,30 @@ def workspace_dep_data(
     return dep_data
 
 def render_dep_data(dep_data):
-    return "DEP_DATA = {\n%s\n}\n\n" % "\n".join([
+    return """\
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Annotate DEP_DATA
+# directly once supported Bazel versions accept typed dictionary fields.
+# type: dict[str, dict[{
+#     "aliases": dict[str, str],
+#     "binaries": dict[str, str],
+#     "build_deps": list[str],
+#     "build_deps_by_platform": dict[str, list[str]],
+#     "crate_features": list[str],
+#     "crate_features_by_platform": dict[str, list[str]],
+#     "crate_name": str,
+#     "deps": list[str],
+#     "deps_by_platform": dict[str, list[str]],
+#     "dev_deps": list[str],
+#     "dev_deps_by_platform": dict[str, list[str]],
+#     "edition": str,
+#     "lint_config": NotRequired[str],
+#     "shared_libraries": dict[str, str],
+# }]]
+DEP_DATA = {
+%s
+}
+
+""" % "\n".join([
         "    %s: %s," % (repr(package), repr(dep_data[package]))
         for package in sorted(dep_data.keys())
     ])

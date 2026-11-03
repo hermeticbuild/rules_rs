@@ -1,6 +1,9 @@
 """Materialize a tiny external Cargo source tree without network downloads."""
 
 def _source_repository_impl(ctx):
+    # type: (...) -> repo_metadata
+    # TODO(https://github.com/bazelbuild/bazel/issues/32020): Use native return annotations
+    # when Bazel exposes repo_metadata.
     for path in [
         "Cargo.toml",
         "Cargo.lock",

@@ -1,4 +1,5 @@
 def compute_select(non_platform_items, platform_items):
+    # type: (Collection[str], Mapping[str, Collection[str]]) -> tuple[Collection[str], dict[str, list[str]]]
     if not platform_items:
         return non_platform_items, {}
 

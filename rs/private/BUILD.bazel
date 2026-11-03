@@ -15,6 +15,14 @@ load(":rust_repository_utils_test.bzl", "rust_repository_utils_tests")
 load(":semver_test.bzl", "semver_select_tests")
 load(":visibility_test.bzl", "visibility_tests")
 
+exports_files([
+    "cargo_toml_utils.bzli",
+    "cfg_parser.bzli",
+    "git_crate_metadata_repository.bzli",
+    "repository_utils.bzli",
+    "resolver.bzli",
+])
+
 bool_setting(
     name = "source_stdlib_building",
     build_setting_default = False,
@@ -41,8 +49,6 @@ bindgen_tests()
 
 bpf_linker_repository_tests()
 
-cargo_manifest_tests()
-
 cargo_toml_utils_tests()
 
 cargo_workspace_graph_tests()
@@ -52,6 +58,8 @@ cfg_parser_tests()
 lint_flags_tests()
 
 registry_utils_tests()
+
+cargo_manifest_tests()
 
 rust_repository_utils_tests()
 

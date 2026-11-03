@@ -1,0 +1,25 @@
+"""Providers for Miri rules."""
+
+load("@rules_rust//rust/private:providers.bzl", "CrateInfo")
+
+# TODO(https://github.com/bazelbuild/bazel/issues/32207): Move MiriCrateInfo into
+# providers.bzl when provider fields can bind the distinct types passed as host and target.
+# Field comments cannot tie each stored type to its constructor argument.
+type _CompiledCrate = struct[{
+    "output": File,
+    # TODO(https://github.com/bazelbuild/bazel/issues/32021): Preserve the File element type
+    # in source once Bazel supports typed depsets.
+    "transitive_inputs": depset[File],
+    "transitive_outputs": depset[File],
+}, ...]
+
+def MiriCrateInfo[H: _CompiledCrate, T: _CompiledCrate](
+    *,
+    crate_info: CrateInfo,
+    host: H,
+    target: T,
+) -> record[{
+    "crate_info": CrateInfo,
+    "host": H,
+    "target": T,
+}]: ...
