@@ -2,6 +2,8 @@
 
 def _rules_rust_prost_repo_impl(rctx):
     # type: (...) -> repo_metadata
+    # TODO(https://github.com/bazelbuild/bazel/issues/32020): Use native return annotations
+    # when Bazel exposes repo_metadata and extension_metadata.
     rctx.file("BUILD.bazel", """\
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 

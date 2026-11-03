@@ -642,6 +642,8 @@ def all_crate_deps(
         package_name = None,
         cargo_only = False):
     # type: (bool, bool, bool, str | None, bool) -> list[str] | select[list[str], Literal['list']]
+    # TODO(https://github.com/tamird/sty/blob/8d51556a1/docs/type-interfaces.md#selectors):
+    # Use a native return type when Bazel can express a selector whose first branch is a list.
 
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:

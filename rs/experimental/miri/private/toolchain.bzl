@@ -20,6 +20,8 @@ _COMMON_ATTRS = {
 
 def _all_files(ctx, direct = [], transitive = []):
     # type: (_AllFilesContext, list[File], list[depset[File]]) -> depset[File]
+    # TODO(https://github.com/bazelbuild/bazel/issues/32021): Annotate these inputs and the result
+    # in source when Bazel can express the File element type of a depset.
     return depset(
         [ctx.file.miri] + direct,
         transitive = [

@@ -43,6 +43,8 @@ def bpf_linker_binary_name(exec_triple):
 
 def _bpf_linker_repository_impl(rctx):
     # type: (...) -> repo_metadata
+    # TODO(https://github.com/bazelbuild/bazel/issues/32020): Use native return annotations
+    # when Bazel exposes repo_metadata.
     archive_triple = rctx.attr.archive_triple
     rctx.download_and_extract(
         url = "https://github.com/aya-rs/bpf-linker/releases/download/v{version}/bpf-linker-{triple}.tar.zst".format(
