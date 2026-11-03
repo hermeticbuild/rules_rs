@@ -1,3 +1,18 @@
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Use native type aliases
+# for these dictionary fields once all supported Bazel versions check them.
+# type _Dependencies = dict[{
+#     "deps": NotRequired[ReadOnly[Collection[str]]],
+#     "deps_by_platform": NotRequired[ReadOnly[Mapping[str, Collection[str]]]],
+# }, ...]
+# type _DevDependencies = dict[{
+#     "dev_deps": NotRequired[ReadOnly[Collection[str]]],
+#     "dev_deps_by_platform": NotRequired[ReadOnly[Mapping[str, Collection[str]]]],
+# }, ...]
+# type _Features = dict[{
+#     "crate_features": NotRequired[ReadOnly[Collection[str]]],
+#     "crate_features_by_platform": NotRequired[ReadOnly[Mapping[str, Collection[str]]]],
+# }, ...]
+
 def _verify_alias_impl(ctx):
     # type: (...) -> list[DefaultInfo]
     actual = ctx.attr.aliases.get(ctx.attr.expected_label)

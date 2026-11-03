@@ -1,3 +1,10 @@
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Use native type aliases
+# for these dictionary fields once all supported Bazel versions check them.
+# type Version = tuple[int, int, int, str]
+# type VersionCore = tuple[int, int, int]
+# type ParsedVersion = dict[{"version": Version, "specified": int, "wildcard_pos": int | None}]
+# type Comparator = tuple[str, Version]
+
 def _is_numeric_identifier(s):
     # type: (str) -> bool
     if not s:

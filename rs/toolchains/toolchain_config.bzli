@@ -1,5 +1,8 @@
 """Toolchain declarations resolved from the module graph."""
 
+# TODO: Move these views into toolchain_config.bzl when a source type can
+# describe the same fields on a module tag and on the normalized struct.
+# A file-local type alias cannot declare a structural protocol.
 # Input tags and normalized output records expose the same fields.
 class _ToolchainValues(Protocol):
     name: Final[str]

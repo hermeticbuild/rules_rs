@@ -2,8 +2,9 @@
 
 load(":cargo_toml_utils.bzli", "CargoLibrary")
 
-# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
-# in source when Bazel supports typed dictionary keys.
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Move the manifest schema into
+# repository_utils.bzl when native types can describe its optional fields and be shared with
+# the crate and visibility repositories. A comment alias is local to one file.
 type BazelMetadata = dict[{
     "deps": NotRequired[list[str]],
     "additive_build_file_content": NotRequired[str],
@@ -93,8 +94,8 @@ class CrateValues(CargoValues):
 
 type _CargoBuildValues = struct[{"bazel_metadata": BazelMetadata, "values": CargoValues}]
 
-# TODO(https://github.com/bazelbuild/starlark/pull/362): Move type parameters
-# into source when the supported Bazel versions can parse them.
+# TODO(https://github.com/bazelbuild/bazel/pull/30373): Move these generic
+# signatures into .bzl when the minimum Bazel parses def with type parameters.
 def inherit_workspace_package_fields[T: dict[{"package": dict[str, object]}, ...]](
         cargo_toml: T,
         workspace_cargo_toml: dict[{"workspace": NotRequired[dict[{"package": NotRequired[dict[str, object]]}, ...]]}, ...],

@@ -1,5 +1,17 @@
 load(":select_utils.bzl", "compute_select")
 
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Use native type aliases
+# for these dictionary fields once all supported Bazel versions check them.
+# type _DependencyData = dict[{
+#     "deps": NotRequired[ReadOnly[list[str]]],
+#     "deps_by_platform": NotRequired[ReadOnly[dict[str, list[str]]]],
+#     "dev_deps": NotRequired[ReadOnly[list[str]]],
+#     "dev_deps_by_platform": NotRequired[ReadOnly[dict[str, list[str]]]],
+#     "build_deps": NotRequired[ReadOnly[list[str]]],
+#     "build_deps_by_platform": NotRequired[ReadOnly[dict[str, list[str]]]],
+# }, ...]
+# type _DependencySpec = tuple[list[str], dict[str, list[str]]]
+
 def _filter_by_prefix(deps, prefix):
     # type: (Collection[str], str) -> list[str]
     return [dep for dep in deps if dep.startswith(prefix)]
