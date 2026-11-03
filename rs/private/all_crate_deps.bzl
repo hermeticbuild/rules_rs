@@ -59,6 +59,8 @@ def all_crate_deps(
         build = False,
         filter_prefix = None):
     # type: (_DependencyData, Collection[str], bool, bool, bool, str | None) -> list[str] | select[list[str], Literal['list']]
+    # TODO(https://github.com/tamird/sty/blob/8d51556a1/docs/type-interfaces.md#selectors):
+    # Use a native return type when Bazel can express a selector whose first branch is a list.
     specs = []
 
     if normal_dev:

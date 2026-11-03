@@ -7,6 +7,8 @@ load("@rules_rust//rust/private:providers.bzl", "CrateInfo")
 # Field comments cannot tie each stored type to its constructor argument.
 type _CompiledCrate = struct[{
     "output": File,
+    # TODO(https://github.com/bazelbuild/bazel/issues/32021): Preserve the File element type
+    # in source once Bazel supports typed depsets.
     "transitive_inputs": depset[File],
     "transitive_outputs": depset[File],
 }, ...]
