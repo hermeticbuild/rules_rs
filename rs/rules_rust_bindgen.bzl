@@ -34,10 +34,8 @@ def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
         include_directories = compilation_context.includes,
         quote_include_directories = compilation_context.quote_includes,
         system_include_directories = depset(
-            # Builtin directories describe the compiler's implicit search paths
-            # for Bazel's header validation. Reinjecting them changes clang-cl's
-            # header order and can undo -nobuiltininc.
-            direct = [] if is_clang_cl else cc_toolchain.built_in_include_directories,
+            # Builtin directories are for header validation. Reinjecting them
+            # can bypass libc++ wrappers or undo clang-cl's -nobuiltininc.
             transitive = [
                 compilation_context.system_includes,
                 compilation_context.external_includes,
