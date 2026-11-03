@@ -1,5 +1,7 @@
 module(
     name = "rules_rs",
+    # TODO(https://github.com/bazelbuild/bazel/pull/30373): Convert simple .bzl type
+    # comments to annotations once every supported Bazel parses them (8.8+ on 8.x).
     bazel_compatibility = [">=8.7.0"],
 )
 

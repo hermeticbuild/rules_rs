@@ -20,19 +20,15 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - name: List implementations in each Bazel workspace
-        run: |
-          git -c core.quotePath=false ls-files -- '*.bzl' ':(exclude)test/**' > "$RUNNER_TEMP/sty-root-files"
-          git -C test -c core.quotePath=false ls-files -- '*.bzl' > "$RUNNER_TEMP/sty-test-files"
       - name: Use public Bazel downloads
         id: downloads
         run: sed -i '/^common --remote_cache=/d; /^common --experimental_remote_downloader=/d; /^common --bes_backend=/d' .bazelrc test/.bazelrc
       - name: Check test repository fixtures
-        uses: &sty tamird/sty@2ab74c830937d3ca85165ca0e9a02a42400ad9e5
+        uses: &sty tamird/sty@d400a00807b3c7f7b2ac82bf1e1e6a16db0290e3
         with:
           working-directory: test
           artifact-name: sty-test
-          advisory-files-from: ${{ runner.temp }}/sty-test-files
+          advisory-pathspecs: "*.bzl"
           audit-loads: true
           files: |
             external_path_dependency/source_repository.bzl
@@ -45,7 +41,7 @@ jobs:
         run: |
           location=$(bazel query --output=location '@rrra//:BUILD.bazel')
           hub="${location%/BUILD.bazel:*}"
-          for file in data.bzl data.bzli defs.bzl; do
+          for file in data.bzl defs.bzl; do
             if [[ ! -f "$hub/$file" ]]; then
               echo "Missing generated Cargo workspace file: $hub/$file" >&2
               exit 1
@@ -55,7 +51,9 @@ jobs:
       - uses: *sty
         if: ${{ !cancelled() && steps.workspace.outcome == 'success' }}
         with:
-          advisory-files-from: ${{ runner.temp }}/sty-root-files
+          advisory-pathspecs: |
+            *.bzl
+            :(exclude)test/**
           audit-loads: true
           files: |
             rs/experimental/miri/private/providers.bzl

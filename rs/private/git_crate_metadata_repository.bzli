@@ -2,6 +2,9 @@
 
 load(":repository_utils.bzli", "CrateAttributes")
 
+# TODO(https://github.com/bazelbuild/bazel/issues/32020): Type _repo_impl in its source when
+# Bazel exposes a repository context with the crate attributes shared from repository_utils.
+# Source comments cannot import its type-only CrateAttributes.
 type _Metadata = repo_metadata
 
 class _MetadataContext(Protocol):

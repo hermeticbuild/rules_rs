@@ -1,7 +1,8 @@
 """Library fields consulted when detecting procedural macro crates."""
 
-# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
-# in source when Bazel supports typed dictionary keys.
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Move CargoLibrary into
+# cargo_toml_utils.bzl when source can export a typed dictionary to repository_utils. A
+# comment alias is local to its file.
 type CargoLibrary = dict[{
     "path": NotRequired[str],
     "name": NotRequired[str],

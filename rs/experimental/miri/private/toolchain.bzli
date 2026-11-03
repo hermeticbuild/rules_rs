@@ -1,5 +1,7 @@
 """Miri toolchain rule implementations."""
 
+# TODO(https://github.com/bazelbuild/bazel/issues/32370): Move these views to
+# source when Bazel can type the fields a helper reads from a rule's Ctx.
 class _AllFilesContext(Protocol):
     file: Final[struct[{"miri": File}, ...]]
     files: Final[struct[{"rustc_lib": list[File]}, ...]]

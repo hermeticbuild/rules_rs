@@ -1,3 +1,16 @@
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Use native type aliases
+# for these dictionary fields once all supported Bazel versions check them.
+# type _RegistryConfig = dict[{"dl": str}, ...]
+# type _Source = dict[{
+#     "replace-with": NotRequired[str],
+#     "registry": NotRequired[str],
+# }, ...]
+# type _Registry = dict[{"index": NotRequired[str]}, ...]
+# type _CargoConfig = dict[{
+#     "source": NotRequired[dict[str, _Source]],
+#     "registries": NotRequired[dict[str, _Registry]],
+# }, ...]
+
 CRATES_IO_REGISTRY = "sparse+https://index.crates.io/"
 
 def resolve_registry_source(source, cargo_config = {}):

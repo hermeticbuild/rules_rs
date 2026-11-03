@@ -2,8 +2,9 @@
 
 load(":cfg_parser.bzli", "CfgAttrs")
 
-# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
-# in source when Bazel supports typed dictionary keys.
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Move the dependency alternatives
+# into resolver.bzl when a source annotation can extend shared dictionary fields and import
+# CfgAttrs.
 type _UnresolvedDependency = dict[{
     "bazel_target": NotRequired[Literal[""] | None],
     "feature_resolutions": NotRequired[Never],
