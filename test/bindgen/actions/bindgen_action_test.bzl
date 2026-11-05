@@ -152,15 +152,15 @@ def bindgen_action_tests(name):
     _clang_test(
         name = "clang_action_test",
         target_under_test = "bindings",
-        expected = ["--target=aarch64-linux-gnu", "-isystem", "declared-sdk", "-isystem/validation-only", "-std=c++20", "-x", "c++", "-DFROM_CC_INFO=1", "-DTRANSITIVE=1", "-DOVERRIDE=1", "-DOVERRIDE=2", "-DREMOVE_ME=1", "-UREMOVE_ME"],
-        unexpected = ["--driver-mode=cl", "/clang:", "/imsvc", "PRIVATE"],
+        expected = ["--target=aarch64-linux-gnu", "-isystem", "declared-sdk", "-std=c++20", "-x", "c++", "-DFROM_CC_INFO=1", "-DTRANSITIVE=1", "-DOVERRIDE=1", "-DOVERRIDE=2", "-DREMOVE_ME=1", "-UREMOVE_ME"],
+        unexpected = ["--driver-mode=cl", "/clang:", "/imsvc", "/validation-only", "PRIVATE"],
         ordered_pairs = {"-DOVERRIDE=1": "-DOVERRIDE=2", "-DREMOVE_ME=1": "-UREMOVE_ME"},
     )
     _msvc_test(
         name = "msvc_action_test",
         target_under_test = "bindings_clang_cl",
         expected = ["--target=x86_64-pc-windows-msvc", "-std=c++20", "FROM_CC_INFO=1", "TRANSITIVE=1", "OVERRIDE=1", "OVERRIDE=2", "REMOVE_ME=1", "REMOVE_ME"],
-        unexpected = ["--driver-mode=cl", "/D", "/U", "-DFROM_CC_INFO", "PRIVATE"],
+        unexpected = ["--driver-mode=cl", "/D", "/U", "-DFROM_CC_INFO", "/validation-only", "PRIVATE"],
         ordered_pairs = {"OVERRIDE=1": "OVERRIDE=2", "REMOVE_ME=1": "REMOVE_ME"},
     )
     native.test_suite(name = name, tests = ["clang_cl_action_test", "clang_action_test", "msvc_action_test"])
