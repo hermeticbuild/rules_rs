@@ -34,6 +34,7 @@ def _selection_test_impl(ctx):
     asserts.equals(env, ctx.attr.expected_linker_preference, toolchain.linker_preference or "")
     asserts.equals(env, ctx.attr.expected_linker, toolchain.linker.basename if toolchain.linker else "")
     asserts.equals(env, ctx.attr.expected_dlltool, toolchain.dlltool.basename if toolchain.dlltool else "")
+    asserts.equals(env, ctx.attr.expected_flags, toolchain.extra_rustc_flags)
     asserts.equals(env, None, toolchain.cargo)
     asserts.equals(env, ctx.attr.expected_cargo, resolved.cargo.cargo.basename)
     if ctx.attr.expected_cargo == "custom-cargo":
@@ -56,6 +57,7 @@ def _selection_test(triple, bootstrap = False, exec_triple = "x86_64-unknown-lin
             "expected_dlltool": attr.string(),
             "expected_linker_preference": attr.string(),
             "expected_cargo": attr.string(default = "custom-cargo"),
+            "expected_flags": attr.string_list(),
         },
         config_settings = {
             _PLATFORM: str(Label("//rs/platforms:" + triple)),
@@ -86,6 +88,7 @@ _thumbv6m_test = _selection_test("thumbv6m-none-eabi")
 _riscv32imac_test = _selection_test("riscv32imac-unknown-none-elf")
 _x86_64_none_test = _selection_test("x86_64-unknown-none")
 _uefi_test = _selection_test("x86_64-unknown-uefi")
+_aarch64_uefi_test = _selection_test("aarch64-unknown-uefi")
 _uefi_bootstrap_test = _selection_test("x86_64-unknown-uefi", bootstrap = True)
 _windows_gnu_test = _selection_test("x86_64-pc-windows-gnu")
 _windows_gnullvm_test = _selection_test("x86_64-pc-windows-gnullvm")
@@ -118,6 +121,7 @@ def declare_rustc_toolchains_test_suite(name):
         name = "narrow",
         version = "1.92.0",
         edition = "2024",
+        extra_rustc_flags = {"x86_64-unknown-uefi": ["--cfg=custom_uefi"]},
         cargo = {"x86_64-unknown-linux-gnu": ":custom_cargo"},
         exec_triples = ["x86_64-unknown-linux-gnu"],
         target_triples = [
@@ -128,6 +132,7 @@ def declare_rustc_toolchains_test_suite(name):
             "riscv32imac-unknown-none-elf",
             "x86_64-unknown-none",
             "x86_64-unknown-uefi",
+            "aarch64-unknown-uefi",
             "x86_64-pc-windows-gnu",
             "x86_64-pc-windows-gnullvm",
             "x86_64-pc-windows-msvc",
@@ -159,8 +164,9 @@ def declare_rustc_toolchains_test_suite(name):
         ("thumbv6m", _thumbv6m_test, {"expected_linker": "rust-lld"}),
         ("riscv32imac", _riscv32imac_test, {"expected_linker": "rust-lld"}),
         ("x86_64_none", _x86_64_none_test, {"expected_linker": "rust-lld"}),
-        ("uefi", _uefi_test, {"expected_linker": "rust-lld", "expected_linker_preference": "rust"}),
-        ("uefi_bootstrap", _uefi_bootstrap_test, {"expected_linker": "rust-lld", "expected_linker_preference": "rust"}),
+        ("uefi", _uefi_test, {"expected_linker": "rust-lld", "expected_linker_preference": "rust", "expected_flags": ["--cfg=custom_uefi", "-Cdebuginfo=0", "-Clink-arg=/DEBUG:none"]}),
+        ("uefi_bootstrap", _uefi_bootstrap_test, {"expected_linker": "rust-lld", "expected_linker_preference": "rust", "expected_flags": ["--cfg=custom_uefi", "-Cdebuginfo=0", "-Clink-arg=/DEBUG:none"]}),
+        ("aarch64_uefi", _aarch64_uefi_test, {"expected_linker": "rust-lld", "expected_linker_preference": "rust", "expected_flags": ["-Cdebuginfo=0", "-Clink-arg=/DEBUG:none"]}),
         ("windows_gnu", _windows_gnu_test, {"expected_dlltool": "llvm-dlltool"}),
         ("windows_gnullvm", _windows_gnullvm_test, {}),
         ("windows_msvc", _windows_msvc_test, {}),
