@@ -1,0 +1,7 @@
+exports_files([
+    "defs.bzl",
+    "bindgen.h",
+    "include/openssl/ssl_prefix_symbols.h",
+    "additive.BUILD.bazel",
+    "include.MODULE.bazel",
+])

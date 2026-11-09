@@ -1,0 +1,8 @@
+[package]
+name = "fips-ssl-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aws-lc-rs = { version = "=1.17.1", default-features = false, features = ["fips"] }
+aws-lc-fips-sys = { version = "=0.13.11", features = ["ssl"] }

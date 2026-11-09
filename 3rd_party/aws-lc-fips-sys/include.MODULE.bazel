@@ -1,0 +1,24 @@
+# Use this adapter instead of the non-FIPS aws-lc-sys adapter. Including both
+# in the same module is unsupported: they configure aws-lc-rs differently.
+bazel_dep(name = "aws-lc-fips", version = "3.1.0")
+
+rules_rust_bindgen = use_extension("@rules_rs//rs:rules_rust_bindgen.bzl", "rules_rust_bindgen")
+use_repo(rules_rust_bindgen, "rules_rust_bindgen")
+
+register_toolchains("@rules_rust_bindgen//:all")
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "aws-lc-rs",
+    gen_build_script = "on",
+)
+crate.annotation(
+    additive_build_file = "@rules_rs//3rd_party/aws-lc-fips-sys:additive.BUILD.bazel",
+    crate = "aws-lc-fips-sys",
+    extra_aliased_targets = {"aws_lc_fips_sys_build_info": "aws_lc_fips_sys_build_info"},
+    gen_build_script = "off",
+    version = "0.13.11",
+    deps = ["@many_workspace_deps//:aws_lc_fips_sys_build_info"],
+)
+
+inject_repo(crate, "aws-lc-fips")

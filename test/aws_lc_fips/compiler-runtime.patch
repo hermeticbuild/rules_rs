@@ -1,0 +1,13 @@
+--- a/bazel/defs.bzl
++++ b/bazel/defs.bzl
+@@ -92,8 +92,8 @@
+         defines = defines,
+         local_defines = ["BORINGSSL_IMPLEMENTATION", "S2N_BN_HIDE_SYMBOLS"],
+         deps = [":" + headers, _PRIVATE_HEADERS],
+-        # Rust can append native archives after its standard-library runtime flags.
+-        linkopts = ["-pthread", "-lc", "-lgcc"],
++        # Leave compiler runtime selection to the consuming toolchain.
++        linkopts = ["-pthread", "-lc"],
+         linkstatic = True,
+         target_compatible_with = _SUPPORTED,
+         visibility = visibility,
