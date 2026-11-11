@@ -37,6 +37,10 @@ use_repo(
 rules_rust_bindgen = use_extension("//rs:rules_rust_bindgen.bzl", "rules_rust_bindgen")
 use_repo(rules_rust_bindgen, "rules_rust_bindgen")
 
+host_repo = use_repo_rule("@bazel_lib//lib:host_repo.bzl", "host_repo")
+
+host_repo(name = "bazel_lib_host")
+
 [
     http_file(
         name = "toml2json_" + name,

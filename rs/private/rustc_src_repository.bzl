@@ -3,6 +3,7 @@ load("@bazel_tools//tools/build_defs/repo:utils.bzl", "get_auth")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
+    "cargo_platforms",
     "fq_crate",
     "manifest_package_dir",
     "normalize_path",
@@ -89,15 +90,6 @@ def _select_by_triple(platform_triples, by_platform):
         for triple in platform_triples
     }
 
-def _resolved_select_by_triple(platform_triples, by_triple):
-    if not by_triple:
-        return {}
-
-    return {
-        triple: sorted(by_triple.get(triple, []))
-        for triple in platform_triples
-    }
-
 def _crate_attr(
         *,
         aliases,
@@ -135,15 +127,15 @@ def _crate_attr(
         use_legacy_rules_rust_platforms = False,
     )
 
-def _resolved_crate_attr(feature_resolutions, platform_triples):
+def _resolved_crate_attr(feature_resolutions):
     return _crate_attr(
         aliases = feature_resolutions.aliases,
         build_script_deps = [],
-        build_script_deps_select = _resolved_select_by_triple(platform_triples, feature_resolutions.build_deps),
+        build_script_deps_select = feature_resolutions.build_deps,
         crate_features = [],
-        crate_features_select = _resolved_select_by_triple(platform_triples, feature_resolutions.features_enabled),
+        crate_features_select = feature_resolutions.features_enabled,
         deps = [],
-        deps_select = _resolved_select_by_triple(platform_triples, feature_resolutions.deps),
+        deps_select = feature_resolutions.deps,
         extra_compile_data = [],
     )
 
@@ -311,16 +303,15 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
     package_metadata_info = resolve_cargo_metadata_packages(
         source_packages,
         cargo_metadata,
-        ALL_TARGET_TRIPLES,
         skip_internal_rustc_placeholder_crates = False,
     )
-    resolution = resolve_cargo_workspace_members(
+    platforms = cargo_platforms(ALL_TARGET_TRIPLES)
+    resolve_cargo_workspace_members(
         rctx,
         cargo_metadata = workspace_cargo_metadata,
         packages = source_packages,
         workspace_members = lockfile_package_info.workspace_members,
-        versions_by_name = package_metadata_info.versions_by_name,
-        feature_resolutions_by_fq_crate = package_metadata_info.feature_resolutions_by_fq_crate,
+        package_resolution = package_metadata_info,
         annotations = {
             "std": {
                 "*": struct(
@@ -329,7 +320,7 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
                 ),
             },
         },
-        platform_triples = ALL_TARGET_TRIPLES,
+        platforms = platforms,
         materialize_workspace_members = True,
         dep_label_prefix = "//{}:".format(source_root),
         skip_internal_rustc_placeholder_crates = False,
@@ -337,10 +328,8 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
 
     dep_data_by_package = workspace_dep_data(
         cargo_metadata = workspace_cargo_metadata,
-        cfg_match_cache = resolution.cfg_match_cache,
-        feature_resolutions_by_fq_crate = resolution.feature_resolutions_by_fq_crate,
-        platform_cfg_attrs = resolution.platform_cfg_attrs,
-        platform_triples = ALL_TARGET_TRIPLES,
+        feature_resolutions_by_fq_crate = package_metadata_info.feature_resolutions_by_fq_crate,
+        platforms = platforms,
         repo_root = workspace_root,
         use_legacy_rules_rust_platforms = False,
         workspace_package = source_root,
@@ -415,7 +404,7 @@ alias(
                 bazel_package,
                 workspace_cargo_toml,
                 target_name,
-                crate_attr = _resolved_crate_attr(package["feature_resolutions"], ALL_TARGET_TRIPLES),
+                crate_attr = _resolved_crate_attr(package["feature_resolutions"]),
             ),
         )
 

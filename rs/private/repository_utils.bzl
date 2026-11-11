@@ -5,6 +5,9 @@ load(":semver.bzl", "parse_full_version")
 # Bazel 8 does not define attr.label_list_dict.
 _label_list_dict = getattr(attr, "label_list_dict", attr.string_list_dict)
 
+def spoke_repo_name(hub_name, name, version):
+    return ("%s__%s-%s" % (hub_name, name, version)).replace("+", "-")
+
 def _platform(triple, use_legacy_rules_rust_platforms):
     if use_legacy_rules_rust_platforms:
         return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
