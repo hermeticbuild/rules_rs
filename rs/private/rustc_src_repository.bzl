@@ -86,7 +86,7 @@ def _select_by_triple(platform_triples, by_platform):
         return {}
 
     return {
-        triple: sorted(by_platform.get(platform_label(triple, False), []))
+        triple: by_platform.get(platform_label(triple, False), [])
         for triple in platform_triples
     }
 
@@ -187,30 +187,18 @@ def _render_source_crate_build_file(rctx, source_root, bazel_package, workspace_
     cargo = _cargo_build_values(rctx, bazel_package, workspace_cargo_toml, target_name)
     return _render_crate_build_file(source_root, crate_attr, cargo.values, cargo.bazel_metadata)
 
-def _source_packages(source_root, lock_packages):
-    packages = []
+def _source_crate_package(source_root, package):
+    source = package.get("source")
+    name = package["name"]
+    version = package["version"]
+    if source == _CRATES_IO_INDEX:
+        return _source_package(source_root, paths.join(_VENDOR_ROOT, fq_crate(name, version)))
     path_source_prefix = "path+source_stdlib/"
-
-    for package in lock_packages:
-        source = package.get("source")
-        package = dict(package)
-        name = package["name"]
-        version = package["version"]
-
-        if source == _CRATES_IO_INDEX:
-            bazel_package = _source_package(source_root, paths.join(_VENDOR_ROOT, "%s-%s" % (name, version)))
-        elif source and source.startswith(path_source_prefix):
-            bazel_package = _source_package(source_root, source.removeprefix(path_source_prefix))
-        elif source:
-            fail("Unsupported rustc-src registry source %s for %s %s" % (source, name, version))
-        else:
-            fail("Unknown rustc-src source %s for %s %s" % (source, name, version))
-
-        package["bazel_package"] = bazel_package
-        package["target_name"] = name
-        packages.append(package)
-
-    return packages
+    if source and source.startswith(path_source_prefix):
+        return _source_package(source_root, source.removeprefix(path_source_prefix))
+    if source:
+        fail("Unsupported rustc-src registry source %s for %s %s" % (source, name, version))
+    fail("Unknown rustc-src source %s for %s %s" % (source, name, version))
 
 def _prune_rustc_src(rctx, source_root):
     for path in rctx.path(source_root).readdir():
@@ -299,7 +287,9 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
         repo_root = workspace_root,
         workspace_package_dir = "library",
     )
-    source_packages = _source_packages(source_root, lockfile_package_info.packages)
+    source_packages = lockfile_package_info.packages
+    for package in source_packages:
+        package["bazel_package"] = _source_crate_package(source_root, package)
     package_metadata_info = resolve_cargo_metadata_packages(
         source_packages,
         cargo_metadata,
@@ -385,7 +375,6 @@ alias(
         version = package["version"]
         fq = fq_crate(name, version)
         bazel_package = package["bazel_package"]
-        target_name = package["target_name"]
         rustc_srcs.add(_target_label(bazel_package, "srcs"))
         root_build.append("""\
 alias(
@@ -393,7 +382,7 @@ alias(
     actual = "{actual}",
 )
 """.format(
-            actual = _target_label(bazel_package, target_name),
+            actual = _target_label(bazel_package, name),
             fq = fq,
         ))
         rctx.file(
@@ -403,7 +392,7 @@ alias(
                 source_root,
                 bazel_package,
                 workspace_cargo_toml,
-                target_name,
+                name,
                 crate_attr = _resolved_crate_attr(package["feature_resolutions"]),
             ),
         )

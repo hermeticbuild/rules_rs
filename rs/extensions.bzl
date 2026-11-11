@@ -42,7 +42,7 @@ def _git_crate_purl(name, version, remote, commit):
     return "pkg:cargo/%s@%s?vcs_url=git+%s@%s" % (name, version, remote, commit)
 
 def _render_ordered_string_list(items):
-    """Like _render_string_list but preserves insertion order."""
+    """Renders lint flags in the order Cargo applies them."""
     return ",\n        ".join([repr(item) for item in items])
 
 def _render_alias(name, actual, visibility):
@@ -227,6 +227,7 @@ def _generate_hub_and_spokes(mctx, hub, platforms, cargo_path, suggested_annotat
     # All spokes need visibility to the crates they depend on, including Git checkouts.
     internal_packages = set(["@%s//:__pkg__" % hub_name])
     facts_by_fq_crate = {}
+    package_by_fq = {}
     for package in packages:
         name = package["name"]
         version = package["version"]
@@ -238,9 +239,10 @@ def _generate_hub_and_spokes(mctx, hub, platforms, cargo_path, suggested_annotat
             fact = cargo_toml_fact(run_toml2json(mctx, manifest_path))
         else:
             key = package["fact_key"]
-            if key in existing_facts:
-                facts[key] = existing_facts[key]
-                fact = json.decode(existing_facts[key])
+            encoded_fact = existing_facts.get(key)
+            if encoded_fact != None:
+                facts[key] = encoded_fact
+                fact = json.decode(encoded_fact)
             else:
                 fact = _git_crate_fact(mctx, package, cfg.debug) if git_source else _registry_crate_fact(mctx, package)
 
@@ -255,7 +257,9 @@ def _generate_hub_and_spokes(mctx, hub, platforms, cargo_path, suggested_annotat
             repo_name = spoke_repo_name(hub_name, name, version)
         package["target_repo_name"] = repo_name
         internal_packages.add("@%s//:__subpackages__" % repo_name)
-        facts_by_fq_crate[_fq_crate(name, version)] = fact
+        fq = _fq_crate(name, version)
+        facts_by_fq_crate[fq] = fact
+        package_by_fq[fq] = package
 
     resolved_facts = resolve_package_facts(packages, facts_by_fq_crate)
 
@@ -404,10 +408,6 @@ crate.annotation(
 
     mctx.report_progress("Initializing hub")
 
-    package_by_fq = {
-        _fq_crate(package["name"], package["version"]): package
-        for package in packages
-    }
     repo_root = _normalize_path(cargo_metadata["workspace_root"])
     workspace_package = _label_directory(cfg.cargo_toml)
 
@@ -442,8 +442,7 @@ crate.annotation(
 
     hub_contents = []
     for name, versions in resolved_facts.versions_by_name.items():
-        workspace_versions = workspace_resolution.workspace_dep_versions_by_name.get(name)
-        default_fq = max(workspace_versions) if workspace_versions else None
+        default_fq = workspace_resolution.default_workspace_dep_by_name.get(name)
         for version in versions:
             fq = _fq_crate(name, version)
             package = package_by_fq[fq]
@@ -537,11 +536,7 @@ filegroup(
     for target_name, lint_flags in package_lint_targets:
         hub_contents.append(_render_cargo_lints_target(target_name, lint_flags))
 
-    resolved_platforms = []
-    for triple in platform_triples:
-        platform = platform_label(triple, use_legacy_rules_rust_platforms)
-        if platform not in resolved_platforms:
-            resolved_platforms.append(platform)
+    resolved_platforms = set([platform_label(triple, use_legacy_rules_rust_platforms) for triple in platform_triples])
 
     defs_bzl_contents = \
         """load(":data.bzl", "DEP_DATA")
@@ -704,6 +699,7 @@ def _crate_impl(mctx):
                     registries.add(source)
                     key = package["name"] + "_" + package["version"]
                 elif source.startswith("git+"):
+                    # Enforce allow_git_cli even when a cached fact lets us skip the clone.
                     if not allow_git_cli and not source.startswith("git+https://github.com/"):
                         fail("The crate %s %s of the hub `%s` comes from %s, which needs git, and `allow_git_cli` is false." % (
                             package["name"],
@@ -738,7 +734,7 @@ def _crate_impl(mctx):
                 registries = registries,
                 downloads = downloads,
                 cargo_config = effective_cargo_config,
-                cargo_credentials = load_cargo_credentials(mctx, effective_cargo_config) if use_home_cargo_credentials else {},
+                cargo_credentials = load_cargo_credentials(mctx, cargo_config) if use_home_cargo_credentials else {},
                 use_home_cargo_credentials = use_home_cargo_credentials,
                 allow_git_cli = allow_git_cli,
             ))

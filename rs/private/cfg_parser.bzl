@@ -2,6 +2,17 @@
 
 _VARIADIC_CFG_OPS = ("all", "any")
 
+_TARGET_CFG_KEYS = (
+    "target_os",
+    "target_family",
+    "target_arch",
+    "target_env",
+    "target_vendor",
+    "target_endian",
+    "target_pointer_width",
+    "target_abi",
+)
+
 def _get(xs, index, default):
     if index < len(xs):
         return xs[index]
@@ -375,16 +386,7 @@ def _eval_eq(ctx, key, value, has_feature):
         return has_feature(value)
     if key == "target_feature":
         return _target_has_feature(ctx, value)
-    return key in (
-        "target_os",
-        "target_family",
-        "target_arch",
-        "target_env",
-        "target_vendor",
-        "target_endian",
-        "target_pointer_width",
-        "target_abi",
-    ) and ctx.get(key, "") == value
+    return key in _TARGET_CFG_KEYS and ctx.get(key, "") == value
 
 def cfg_matches_ast(ast, ctx, has_feature):
     todo = [ast]
@@ -405,14 +407,17 @@ def cfg_matches_ast(ast, ctx, has_feature):
                 results.append(all(values) if op == "all" else any(values))
             else:
                 fail("cfg eval error: unknown op '" + op + "'.")
-        elif node["kind"] == "pred":
+            continue
+
+        kind = node["kind"]
+        if kind == "pred":
             # Only boolean entries represent bare configuration names.
             results.append(ctx.get(node["name"]) == True)
-        elif node["kind"] == "eq":
+        elif kind == "eq":
             results.append(_eval_eq(ctx, node["key"], node["value"], has_feature))
         else:
             children = node["args"]
-            todo.append((node["kind"], len(children)))
+            todo.append((kind, len(children)))
             todo.extend(reversed(children))
     if todo:
         fail("cfg eval error: internal traversal did not finish.")

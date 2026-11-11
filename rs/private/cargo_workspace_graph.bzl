@@ -1,13 +1,10 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("//rs/private:cfg_parser.bzl", "cfg_matches_expr_for_cfg_attrs", "triple_to_cfg_attrs")
 load("//rs/private:resolver.bzl", "resolve")
-load("//rs/private:select_utils.bzl", "compute_select")
+load("//rs/private:select_utils.bzl", "compute_select", _platform_label = "platform_label")
 load("//rs/private:semver.bzl", "select_matching_version")
 
-def platform_label(triple, use_legacy_rules_rust_platforms):
-    if use_legacy_rules_rust_platforms:
-        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
-    return "@rules_rs//rs/platforms/config:" + triple
+platform_label = _platform_label
 
 def fq_crate(name, version):
     return name + "-" + version
@@ -205,8 +202,7 @@ def prepare_possible_deps(dependencies, converter = None, skip_internal_rustc_pl
         if dep.get("kind") == "dev":
             continue
 
-        dep_package = dep.get("package") or dep["name"]
-        if skip_internal_rustc_placeholder_crates and dep_package in _INTERNAL_RUSTC_PLACEHOLDER_CRATES:
+        if skip_internal_rustc_placeholder_crates and _dep_package_name(dep) in _INTERNAL_RUSTC_PLACEHOLDER_CRATES:
             continue
 
         if dep.get("default_features", True):
@@ -399,10 +395,11 @@ def _resolve_possible_deps(
                 continue
 
             dep_fq = fq_crate(dep_package, resolved_version)
-            if dep_fq not in feature_resolutions_by_fq_crate:
+            resolution = feature_resolutions_by_fq_crate.get(dep_fq)
+            if resolution == None:
                 fail("Resolved %s dependency %s but no crate metadata was available" % (name, dep_fq))
             dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
-            dep["package_index"] = feature_resolutions_by_fq_crate[dep_fq].package_index
+            dep["package_index"] = resolution.package_index
 
             info = _match_target(dep.get("target"), platforms)
 
@@ -470,7 +467,7 @@ def resolve_cargo_workspace_members(
     )
 
     workspace_versions = {p["name"]: locked_dependency_versions(p, resolver_versions_by_name) for p in workspace_members}
-    workspace_dep_versions_by_name = {}
+    default_workspace_dep_by_name = {}
     workspace_dep_labels_by_triple = {triple: set() for triple in platform_triples}
 
     for package in cargo_metadata["packages"]:
@@ -506,14 +503,15 @@ def resolve_cargo_workspace_members(
             if dep.get("uses_default_features"):
                 features = features + ["default"]
 
-            if dep_fq not in feature_resolutions_by_fq_crate:
+            resolution = feature_resolutions_by_fq_crate.get(dep_fq)
+            if resolution == None:
                 fail("Resolved %s dependency %s but no crate metadata was available" % (package["name"], dep_fq))
 
             match = _match_target(dep.get("target"), platforms)
-            feature_resolutions_by_fq_crate[dep_fq].feature_seeds.append((features, match.mask))
+            resolution.feature_seeds.append((features, match.mask))
             if materialize_workspace_members or not is_first_party_dep:
                 dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
-                workspace_dep_versions_by_name.setdefault(dep_name, set()).add(dep_fq)
+                default_workspace_dep_by_name[dep_name] = max(default_workspace_dep_by_name.get(dep_name, ""), dep_fq)
                 for triple in match.matches:
                     workspace_dep_labels_by_triple[triple].add(":" + dep_name)
 
@@ -552,7 +550,7 @@ def resolve_cargo_workspace_members(
 
     return struct(
         workspace_dep_labels_by_triple = workspace_dep_labels_by_triple,
-        workspace_dep_versions_by_name = workspace_dep_versions_by_name,
+        default_workspace_dep_by_name = default_workspace_dep_by_name,
     )
 
 def workspace_dep_data(
@@ -606,8 +604,10 @@ def workspace_dep_data(
 
             if dep_path and normalize_path(dep_path) == package_manifest_dir:
                 continue
-            if dep.get("rename") or dep_path:
-                aliases[bazel_target] = (dep.get("rename") or dep["name"]).replace("-", "_")
+            rename = dep.get("rename")
+            dep_name = rename or dep["name"]
+            if rename or dep_path:
+                aliases[bazel_target] = dep_name.replace("-", "_")
 
             match = _match_target(dep.get("target"), platforms).matches
 
@@ -619,9 +619,9 @@ def workspace_dep_data(
             else:
                 target_deps = deps
 
+            optional = dep.get("optional")
             for triple in match:
-                if dep.get("optional") and feature_resolutions:
-                    dep_name = dep.get("rename") or dep["name"]
+                if optional and feature_resolutions:
                     triple_features = feature_resolutions.features_enabled[triple]
                     if dep_name not in triple_features and ("dep:" + dep_name) not in triple_features:
                         continue

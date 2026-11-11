@@ -8,11 +8,7 @@ load("//rs:cargo_build_script.bzl", "cargo_build_script")
 load("//rs:rust_binary.bzl", "rust_binary")
 load("//rs:rust_library.bzl", "rust_library")
 load("//rs:rust_proc_macro.bzl", "rust_proc_macro")
-
-def _platform(triple, use_legacy_rules_rust_platforms):
-    if use_legacy_rules_rust_platforms:
-        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
-    return "@rules_rs//rs/platforms/config:" + triple
+load(":select_utils.bzl", "platform_label")
 
 def rust_crate(
         name,
@@ -119,7 +115,7 @@ def rust_crate(
             # Only stamp out one target per triple when there are per-platform feature deltas.
             for triple in triples:
                 build_script_name = "_bs_" + triple
-                branches[_platform(triple, use_legacy_rules_rust_platforms)] = build_script_name
+                branches[platform_label(triple, use_legacy_rules_rust_platforms)] = build_script_name
 
                 build_script_kwargs_for_triple = dict(build_script_kwargs)
                 build_script_kwargs_for_triple["rustc_flags"] = build_script_kwargs["rustc_flags"] + [
@@ -191,7 +187,7 @@ def rust_crate(
             deps = deps,
             data = data,
             crate_features = crate_features + select(
-                {_platform(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
+                {platform_label(k, use_legacy_rules_rust_platforms): v for k, v in conditional_crate_features.items()} |
                 {"//conditions:default": []},
             ),
             crate_root = crate_root,

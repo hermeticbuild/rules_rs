@@ -1,3 +1,8 @@
+def platform_label(triple, use_legacy_rules_rust_platforms):
+    if use_legacy_rules_rust_platforms:
+        return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
+    return "@rules_rs//rs/platforms/config:" + triple
+
 def compute_select(non_platform_items, platform_items):
     if not platform_items:
         return non_platform_items, {}

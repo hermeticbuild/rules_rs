@@ -141,10 +141,11 @@ def _compute_strip_prefix(annotation, cargo_toml_json, name):
 def _read_git_cargo_tomls(mctx, packages, manifest, github_url = None):
     _ensure_cargo_toml_exists(manifest, packages[0]["name"])
     cargo_toml = run_toml2json(mctx, manifest)
+    root_package_name = cargo_toml.get("package", {}).get("name")
     workspace_members = None
     for package in packages:
         name = package["name"]
-        if cargo_toml.get("package", {}).get("name") == name:
+        if root_package_name == name:
             package["cargo_toml_json"] = cargo_toml
             if cargo_toml.get("workspace"):
                 package["workspace_cargo_toml_json"] = cargo_toml
