@@ -171,6 +171,12 @@ rust_binary(
 )
 
 rust_test(
+    name = "tracy_client_sys_test",
+    srcs = ["tracy_client_sys_test.rs"],
+    deps = ["@many_workspace_deps//:tracy-client-sys"],
+)
+
+rust_test(
     name = "aws_lc_sys_test",
     srcs = ["aws_lc_sys_test.rs"],
     deps = [
@@ -433,9 +439,11 @@ genrule(
 
 filegroup(
     name = "all_builds",
+    testonly = True,
     srcs = ["@%s//:_workspace_deps" % test for test in TESTS] + [
         ":aws_lc_openssl",
         ":rust_binary",
+        ":tracy_client_sys_test",
         ":verify_self_dev_dependency_feature_present",
         ":verify_self_dev_dependency_no_self_alias",
         ":verify_self_dev_dependency_no_self_dev_dep",
@@ -487,6 +495,7 @@ LINUX_GNU_PLATFORMS = {
 [
     platform_transition_filegroup(
         name = "all_builds_" + platform,
+        testonly = True,
         srcs = ["all_builds"],
         target_platform = LINUX_GNU_PLATFORMS.get(
             platform,

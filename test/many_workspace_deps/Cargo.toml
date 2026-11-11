@@ -43,6 +43,7 @@ tantivy = "0.25.0"
 #tauri = "2.8.5" - gtk-rs components like javascriptcore-rs-sys
 tonic = "0.14.2"
 tower = "0.5.2"
+tracy-client-sys = { version = "=0.30.1", features = ["manual-lifetime", "ondemand"] }
 walrus = "0.23.3"
 warp = "0.4.2"
 #wasmer = "6.0.1"
