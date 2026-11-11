@@ -1,5 +1,7 @@
 """Parses Cargo `cfg(...)` expressions and evaluates them against target triples."""
 
+_VARIADIC_CFG_OPS = ("all", "any")
+
 def _get(xs, index, default):
     if index < len(xs):
         return xs[index]
@@ -123,10 +125,8 @@ def cfg_parse(expr):
                 if len(args_list) != 1:
                     fail("cfg parse error: cfg(...) must contain a single expression.")
                 parent.append(args_list[0])
-            elif fname == "all":
-                parent.append({"kind": "all", "args": args_list})
-            elif fname == "any":
-                parent.append({"kind": "any", "args": args_list})
+            elif fname in _VARIADIC_CFG_OPS:
+                parent.append({"kind": fname, "args": args_list})
             elif fname == "not":
                 if len(args_list) != 1:
                     fail("cfg parse error: not(...) must have exactly one argument.")
@@ -400,7 +400,7 @@ def cfg_matches_ast(ast, ctx, has_feature):
                 if count != 1:
                     fail("cfg eval error: not(...) arity mismatch.")
                 results.append(not results.pop())
-            elif op in ("all", "any"):
+            elif op in _VARIADIC_CFG_OPS:
                 values = [results.pop() for _ in range(count)]
                 results.append(all(values) if op == "all" else any(values))
             else:

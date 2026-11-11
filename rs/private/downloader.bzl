@@ -4,6 +4,8 @@ load(":registry_utils.bzl", "sharded_path")
 load(":toml2json.bzl", "run_toml2json")
 
 def parse_git_url(url):
+    # In a Cargo.lock source such as git+https://github.com/dovahcrow/tldextract-rs?rev=63d75b0#<sha>,
+    # the query selects the requested revision and the fragment pins the resolved commit.
     parts = url.split("#")
     if len(parts) < 2:
         fail("No commit SHA (#...) fragment found in URL: " + url)
@@ -48,6 +50,8 @@ def start_crate_downloads(mctx, state, packages, cargo_credentials):
                 state.in_flight_registry_fetches_by_crate[name] = token
             package["download_token"] = token
         else:
+            # start_github_download already queued Cargo.toml downloads for HTTPS GitHub sources.
+            # TODO(zbarsky): Download Cargo.toml directly from other Git forges too.
             state.pending_git_clones_by_source.setdefault(source, []).append(package)
 
 def _ensure_cargo_toml_exists(cargo_toml_path, name):
@@ -183,5 +187,7 @@ def download_metadata_for_git_crates(mctx, state):
                 verbose = False,
             ),
         ), clone_dir)
+
+        # TODO(zbarsky): Honor each package's workspace_cargo_toml when a clone contains multiple workspaces.
         manifest = clone_dir.get_child(packages[0]["annotation"].workspace_cargo_toml)
         _read_git_cargo_tomls(mctx, packages, manifest)
