@@ -788,7 +788,8 @@ def _crate_impl(mctx):
     if legacy_hubs:
         print("WARNING: Root alias targets (@hub//:name) will be removed after March 1, 2027. " +
               "Use @hub//name and set incompatible_no_root_alias_targets = True in crate.from_cargo for " +
-              ", ".join(sorted(legacy_hubs)) + ".")
+              ", ".join(sorted(legacy_hubs)) + ".\n" +
+              "Each @hub//name alias has its own BUILD file, so Bazel can reuse analysis for targets that depend only on unchanged aliases.")
 
     for hub in hubs:
         start_crate_downloads(mctx, downloader_state, hub.downloads, hub.cargo_credentials)
