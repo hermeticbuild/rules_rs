@@ -273,77 +273,55 @@ def _toolchains_impl(mctx):
         if archives != None:
             rust_redist_archives[version] = archives
 
-    def _record_redist_sha(archive_path, version):
-        sha = existing_facts.get(archive_path)
-        archives = rust_redist_archives[version]
-        if archives == None and sha == None:
-            archives = _read_manifest(_request_manifest(version, required = True))
-            rust_redist_archives[version] = archives
-
-        if archives != None:
-            if archive_path in archives:
-                sha = sha or archives[archive_path]["sha256"]
-                if not sha:
-                    fail("Could not parse sha256 for {}".format(archive_path))
-            else:
-                # Record that the archive is absent so a later evaluation can skip the lookup.
-                sha = False
-
-        new_facts[archive_path] = sha
-        return sha
-
-    stdlib_targets_by_version = {}
-    for version in rust_versions:
-        base_version, iso_date = _parse_version(version)
-        if iso_date or base_version not in rust_redist_archives:
-            stdlib_targets_by_version[version] = SUPPORTED_TIER_1_AND_2_TRIPLES
-            continue
-
-        urls = rust_redist_url_templates(base_version)
-        stdlib_targets_by_version[version] = [
-            target_triple
-            for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES
-            if _record_redist_sha(
-                _archive_path("rust-std", _parse_triple(target_triple), base_version, iso_date, urls),
-                base_version,
-            )
-        ]
-
     pending_downloads = {}
 
-    def _request_archive_sha(archive_path, suburl, version, iso_date):
-        if archive_path in new_facts or archive_path in pending_downloads:
-            return
+    def _request_archive_sha(suburl, version, iso_date, allow_missing = False):
+        urls = _urls_for_version(version, iso_date, rust_redist_archives)
+        archive_path = suburl + rust_archive_extension(urls)
+        if archive_path in new_facts:
+            return bool(new_facts[archive_path])
+        if archive_path in pending_downloads:
+            return True
 
+        sha = existing_facts.get(archive_path)
         if not iso_date and version in rust_redist_archives:
-            if not _record_redist_sha(archive_path, version):
-                fail("Could not find sha256 for {}".format(archive_path))
-            return
+            archives = rust_redist_archives[version]
+            if archives == None and sha == None:
+                archives = _read_manifest(_request_manifest(version, required = True))
+                rust_redist_archives[version] = archives
 
-        existing = existing_facts.get(archive_path)
-        if existing:
-            new_facts[archive_path] = existing
-            return
+            if archives != None:
+                archive = archives.get(archive_path)
 
-        sha_filename = _sanitize_path_fragment(archive_path) + ".sha256"
-        pending_downloads[archive_path] = struct(
-            token = mctx.download(
-                DEFAULT_STATIC_RUST_URL_TEMPLATES[0].format(suburl) + ".sha256",
-                sha_filename,
-                block = False,
-            ),
-            file = sha_filename,
-        )
+                # A false fact records an archive confirmed absent from this release.
+                sha = (sha or archive["sha256"]) if archive != None else False
+            if not sha and not (allow_missing and sha == False):
+                fail("Could not resolve sha256 for {}".format(archive_path))
+        elif not sha:
+            sha_filename = _sanitize_path_fragment(archive_path) + ".sha256"
+            pending_downloads[archive_path] = struct(
+                token = mctx.download(
+                    DEFAULT_STATIC_RUST_URL_TEMPLATES[0].format(suburl) + ".sha256",
+                    sha_filename,
+                    block = False,
+                ),
+                file = sha_filename,
+            )
+            return True
 
-    def _request_sha(tool_name, version, iso_date, target_triple):
-        _request_archive_sha(
-            _archive_path(tool_name, target_triple, version, iso_date, _urls_for_version(version, iso_date, rust_redist_archives)),
+        new_facts[archive_path] = sha
+        return bool(sha)
+
+    def _request_sha(tool_name, version, iso_date, target_triple, allow_missing = False):
+        return _request_archive_sha(
             produce_tool_suburl(tool_name, target_triple, version, iso_date),
             version,
             iso_date,
+            allow_missing = allow_missing,
         )
 
-    # First pass: enqueue all sha downloads we don't already have.
+    # Request checksums and discover which stdlib archives are available.
+    stdlib_targets_by_version = {}
     for version in rust_versions:
         base_version, iso_date = _parse_version(version)
 
@@ -356,11 +334,13 @@ def _toolchains_impl(mctx):
             if version in miri_versions:
                 _request_sha("miri", base_version, iso_date, exec_triple)
 
-        for target_triple in stdlib_targets_by_version[version]:
-            _request_sha("rust-std", base_version, iso_date, _parse_triple(target_triple))
+        stdlib_targets_by_version[version] = [
+            target_triple
+            for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES
+            if _request_sha("rust-std", base_version, iso_date, _parse_triple(target_triple), allow_missing = True)
+        ]
 
         _request_archive_sha(
-            _rustc_src_archive_path(base_version, iso_date, _urls_for_version(base_version, iso_date, rust_redist_archives)),
             _rustc_src_tool_suburl(base_version, iso_date),
             base_version,
             iso_date,
