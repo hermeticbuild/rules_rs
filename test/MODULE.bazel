@@ -357,6 +357,8 @@ include("//:3rd_party/libudev-sys/include.MODULE.bazel")
 
 include("//:3rd_party/apriltag-sys/include.MODULE.bazel")
 
+include("//:3rd_party/tracy-client-sys/include.MODULE.bazel")
+
 include("//:3rd_party/objc-sys/include.MODULE.bazel")
 
 include("//:3rd_party/zstd-sys/include.MODULE.bazel")
