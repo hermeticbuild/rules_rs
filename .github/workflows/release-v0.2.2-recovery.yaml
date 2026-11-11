@@ -1,0 +1,32 @@
+name: Recover v0.2.2 release
+on:
+  push:
+    branches: [codex/recover-v0.2.2]
+permissions:
+  id-token: write
+  attestations: write
+  contents: write
+jobs:
+  release:
+    uses: bazel-contrib/.github/.github/workflows/release_ruleset.yaml@v7.2.2
+    with:
+      release_files: rules_rs-*.tar.gz
+      prerelease: false
+      tag_name: v0.2.2
+      # Bazel checks both packages against the SHA-256 values in rustc_repository.bzl.
+      bazel_test_command: |-
+        set -euo pipefail
+        distdir=$(mktemp -d)
+        package=zlib1g_1.3.dfsg-3.1ubuntu2.3
+        curl -fsSL --retry 2 "https://mirrors.mit.edu/ubuntu/pool/main/z/zlib/${package}_amd64.deb" -o "$distdir/${package}_amd64.deb"
+        curl -fsSL --retry 2 "https://mirrors.mit.edu/ubuntu-ports/pool/main/z/zlib/${package}_arm64.deb" -o "$distdir/${package}_arm64.deb"
+        sed -i '/^common --remote_cache=/d; /^common --experimental_remote_downloader=/d' .bazelrc
+        printf 'common --distdir=%s\n' "$distdir" >> .bazelrc
+        bazel test //...
+  publish:
+    needs: release
+    uses: ./.github/workflows/publish.yaml
+    with:
+      tag_name: v0.2.2
+    secrets:
+      publish_token: ${{ secrets.BCR_PUBLISH_TOKEN }}
