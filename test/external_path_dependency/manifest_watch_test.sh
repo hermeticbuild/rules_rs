@@ -44,13 +44,23 @@ query "some(attr(crate_features, after, $spoke))"
 
 # Both metadata files must pick up changes to a workspace member's edition.
 sed -i.bak 's/exclude =/members =/' "$fixture/Cargo.toml"
-cat > BUILD.bazel <<'BUILD'
+mkdir hub_metadata
+cat > hub_metadata/BUILD.bazel <<'BUILD'
 load("@crates//:defs.bzl", "edition")
+filegroup(name = "edition_" + edition("vendor/dependency"))
+BUILD
+cat > BUILD.bazel <<'BUILD'
 load("@crates//:packages.bzl", "PACKAGES")
 load("@crates//vendored-dependency:data.bzl", "crate_data")
-filegroup(name = "edition_" + edition("vendor/dependency"))
 filegroup(name = PACKAGES["vendor/dependency"] + "_" + crate_data()["edition"])
 BUILD
-query "set(//:edition_2021 //:vendored-dependency_2021)"
+query "set(//hub_metadata:edition_2021 //:vendored-dependency_2021)"
 sed -i.bak 's/edition = "2021"/edition = "2024"/' "$manifest"
-query "set(//:edition_2024 //:vendored-dependency_2024)"
+query "set(//hub_metadata:edition_2024 //:vendored-dependency_2024)"
+
+# Omit hub-wide metadata while keeping root aliases and per-member loads.
+sed -i.bak 's/incompatible_no_root_alias_targets = True/incompatible_no_root_crate_data = True/' MODULE.bazel
+query "set(@crates//:vendored-dependency-0.1.0 //:vendored-dependency_2024)"
+hub_build=$(query --output=location @crates//:_workspace_deps)
+hub_dir=${hub_build%/BUILD.bazel:*}
+[[ -f "$hub_dir/packages.bzl" && ! -e "$hub_dir/data.bzl" && ! -e "$hub_dir/defs.bzl" ]]

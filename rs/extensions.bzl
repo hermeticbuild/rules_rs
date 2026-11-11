@@ -548,13 +548,30 @@ filegroup(
 
     resolved_platforms = set([platform_label(triple, use_legacy_rules_rust_platforms) for triple in platform_triples])
 
-    platforms_bzl_contents = "RESOLVED_PLATFORMS = select(%s)\n" % repr({
+    files["BUILD.bazel"] = "\n".join(hub_contents)
+    files["platforms.bzl"] = "RESOLVED_PLATFORMS = select(%s)\n" % repr({
         platform: []
         for platform in resolved_platforms
     } | {"//conditions:default": ["@platforms//:incompatible"]})
 
-    defs_bzl_contents = \
-        """load(":data.bzl", "DEP_DATA")
+    dep_data = workspace_dep_data(
+        cargo_metadata = cargo_metadata,
+        feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate,
+        platforms = platforms,
+        repo_root = repo_root,
+        workspace_package = workspace_package,
+        use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
+        lint_configs = lint_configs,
+    )
+    _write_package_data(files, dep_data, sorted(resolved_platforms), hub_name)
+    if not cfg.incompatible_no_root_crate_data:
+        files["data.bzl"] = render_dep_data(dep_data)
+        files["defs.bzl"] = _render_root_defs(resolved_platforms, hub_name)
+
+    _hub_repo(name = hub_name, contents = files)
+
+def _render_root_defs(resolved_platforms, hub_name):
+    return """load(":data.bzl", "DEP_DATA")
 load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
 
 _PLATFORMS = [
@@ -609,29 +626,8 @@ def all_crate_deps(
         filter_prefix = {this_repo} if cargo_only else None,
     )
 """.format(
-            platforms = render_string_list(resolved_platforms),
-            this_repo = repr("@" + hub_name + "//"),
-        )
-
-    dep_data = workspace_dep_data(
-        cargo_metadata = cargo_metadata,
-        feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate,
-        platforms = platforms,
-        repo_root = repo_root,
-        workspace_package = workspace_package,
-        use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
-        lint_configs = lint_configs,
-    )
-    _write_package_data(files, dep_data, sorted(resolved_platforms), hub_name)
-
-    _hub_repo(
-        name = hub_name,
-        contents = files | {
-            "BUILD.bazel": "\n".join(hub_contents),
-            "defs.bzl": defs_bzl_contents,
-            "data.bzl": render_dep_data(dep_data),
-            "platforms.bzl": platforms_bzl_contents,
-        },
+        platforms = render_string_list(resolved_platforms),
+        this_repo = repr("@" + hub_name + "//"),
     )
 
 def _write_package_data(files, dep_data, platforms, hub_name):
@@ -791,6 +787,13 @@ def _crate_impl(mctx):
               ", ".join(sorted(legacy_hubs)) + ".\n" +
               "Each @hub//name alias has its own BUILD file, so Bazel can reuse analysis for targets that depend only on unchanged aliases.")
 
+    root_data_hubs = [hub.cfg.name for hub in hubs if not hub.cfg.incompatible_no_root_crate_data]
+    if root_data_hubs:
+        print("WARNING: Hub-wide @hub//:data.bzl and @hub//:defs.bzl will be removed after March 1, 2027. " +
+              "Load @hub//<cargo-package-name>:data.bzl and set incompatible_no_root_crate_data = True in crate.from_cargo for " +
+              ", ".join(sorted(root_data_hubs)) + ".\n" +
+              "When one member's metadata changes, Bazel can reuse analysis for targets that load only other members' data.bzl files.")
+
     for hub in hubs:
         start_crate_downloads(mctx, downloader_state, hub.downloads, hub.cargo_credentials)
         for source in sorted(hub.registries):
@@ -912,6 +915,10 @@ _from_cargo = tag_class(
         ),
         "incompatible_no_root_alias_targets": attr.bool(
             doc = "Omit root aliases such as @crates//:serde. The subpackage aliases such as @crates//serde are always generated.",
+            default = False,
+        ),
+        "incompatible_no_root_crate_data": attr.bool(
+            doc = "Omit the hub-wide data.bzl and defs.bzl. Each workspace member has its own @crates//<cargo-package-name>:data.bzl.",
             default = False,
         ),
         "use_home_cargo_credentials": attr.bool(

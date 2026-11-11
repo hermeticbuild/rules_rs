@@ -224,7 +224,11 @@ from `@crates//<cargo-package-name>:data.bzl`, including a member at the
 workspace root. The `PACKAGES` dictionary in `@crates//:packages.bzl` maps
 Bazel package paths to Cargo package names.
 
-The hub-wide helpers in `@crates//:defs.bzl` remain available.
+By default, `crate.from_cargo` also generates `@crates//:data.bzl` and the
+helpers in `@crates//:defs.bzl`, and warns that both files will be removed
+after March 1, 2027. Once your BUILD files load per-member metadata, set
+`incompatible_no_root_crate_data = True` to omit both files. Per-member
+loads let Bazel reuse analysis when an unrelated member's metadata changes.
 
 For direct dependencies, use subpackage aliases such as `@crates//serde`
 or `@crates//serde-1.0.228`. By default, `crate.from_cargo` also emits
