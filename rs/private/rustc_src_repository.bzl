@@ -50,11 +50,7 @@ def _rustc_src_tool_suburl(version, iso_date = None):
     path = _rustc_src_tool_path(version)
     return iso_date + "/" + path if (iso_date and version in ("beta", "nightly")) else path
 
-def _srcs_filegroup(extra_srcs = None):
-    srcs = 'glob(["**/*"])'
-    if extra_srcs:
-        srcs = "%s + %s" % (srcs, repr(extra_srcs))
-
+def _srcs_filegroup(srcs = 'glob(["**/*"])'):
     return """\
 filegroup(
     name = "srcs",
@@ -277,7 +273,7 @@ source_stdlib(
     ]
     rustc_srcs = _generate_source_stdlib_build_files(rctx, _SOURCE_ROOT, root_build)
     root_build.extend([
-        _srcs_filegroup(extra_srcs = rustc_srcs),
+        _srcs_filegroup('glob(["library/**"]) + %s' % repr(rustc_srcs)),
         _rustc_srcs_filegroup(),
     ])
     rctx.file(paths.join(_SOURCE_ROOT, "BUILD.bazel"), "\n".join(root_build))
