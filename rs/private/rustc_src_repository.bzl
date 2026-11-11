@@ -169,7 +169,7 @@ def _cargo_build_values(rctx, bazel_package, workspace_cargo_toml, target_name):
 def _render_crate_build_file(source_root, crate_attr, values, bazel_metadata):
     return """\
 load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
-load("//{source_root}:defs.bzl", "RESOLVED_PLATFORMS")
+load("//{source_root}:platforms.bzl", "RESOLVED_PLATFORMS")
 
 {srcs_filegroup}{rust_crate_call}{package_metadata_bazel_additive_build_file_content}""".format(
         source_root = source_root,
@@ -404,7 +404,7 @@ alias(
         rustc_srcs.add(_target_label(bazel_package, "srcs"))
 
     _prune_rustc_src(rctx, source_root)
-    rctx.file(paths.join(source_root, "defs.bzl"), "RESOLVED_PLATFORMS = []")
+    rctx.file(paths.join(source_root, "platforms.bzl"), "RESOLVED_PLATFORMS = []\n")
     return sorted(rustc_srcs)
 
 rustc_src_repository = repository_rule(

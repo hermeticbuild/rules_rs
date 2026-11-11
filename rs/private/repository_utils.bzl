@@ -319,7 +319,7 @@ def render_build_file_content(rctx, attr, values, bazel_metadata = {}):
     return """\
 load("@rules_rs//rs/private:rust_crate.bzl", "rust_crate")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
-load("@{hub_name}//:defs.bzl", "RESOLVED_PLATFORMS")
+load("@{hub_name}//:platforms.bzl", "RESOLVED_PLATFORMS")
 
 {rust_crate_call}""".format(
         hub_name = attr.hub_name,
