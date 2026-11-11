@@ -43,8 +43,9 @@ def _resolve_features(state, states, dirty, platforms, debug):
             unmatched = mask
             for dep in state.deps_by_name.get(dep_name, []):
                 matches = unmatched & dep["platforms"]
-                if matches and dep.get("feature_cfg"):
-                    matches = _cfg_platforms(dep["feature_cfg"], matches, features, platforms)
+                feature_cfg = matches and dep.get("feature_cfg")
+                if feature_cfg:
+                    matches = _cfg_platforms(feature_cfg, matches, features, platforms)
                 if not matches:
                     continue
                 unmatched ^= matches
@@ -66,8 +67,9 @@ def _resolve_dependencies(state, pending, states, dirty, platforms):
         name = dep["name"]
         if dep.get("optional"):
             active &= state.features.get(name, 0) | state.features.get("dep:" + name, 0)
-        if active and dep.get("feature_cfg"):
-            active = _cfg_platforms(dep["feature_cfg"], active, state.features, platforms)
+        feature_cfg = active and dep.get("feature_cfg")
+        if feature_cfg:
+            active = _cfg_platforms(feature_cfg, active, state.features, platforms)
         if active != mask:
             remaining.append((dep, mask ^ active))
         if not active:

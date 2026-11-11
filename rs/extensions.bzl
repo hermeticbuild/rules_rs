@@ -143,7 +143,7 @@ def _add_git_crate(git_repos, hub, package, remote, commit):
         git_repo["patch_tool"] = patch_tool
         git_repo["patches"].update(annotation.patches)
 
-def _sparse_crate_fact(mctx, package):
+def _registry_crate_fact(mctx, package):
     name = package["name"]
     version = package["version"]
     package["download_token"].wait()
@@ -242,7 +242,7 @@ def _generate_hub_and_spokes(mctx, hub, platforms, cargo_path, suggested_annotat
                 facts[key] = existing_facts[key]
                 fact = json.decode(existing_facts[key])
             else:
-                fact = _git_crate_fact(mctx, package, cfg.debug) if git_source else _sparse_crate_fact(mctx, package)
+                fact = _git_crate_fact(mctx, package, cfg.debug) if git_source else _registry_crate_fact(mctx, package)
 
                 # Encode the manifest because Bazel limits the depth of extension facts.
                 facts[key] = json.encode(fact)
