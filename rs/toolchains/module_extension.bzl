@@ -35,15 +35,12 @@ _DEFAULT_TOOLCHAIN_REPO_NAME = "default_rust_toolchains"
 def _sanitize_path_fragment(path):
     return path.replace("/", "_").replace(":", "_")
 
-def _archive_path(tool_name, target_triple, version, iso_date, urls):
-    return produce_tool_suburl(tool_name, target_triple, version, iso_date) + rust_archive_extension(urls)
+def _archive_path(suburl, urls):
+    return suburl + rust_archive_extension(urls)
 
 def _rustc_src_tool_suburl(version, iso_date = None):
     path = "rustc-{}-src".format(version)
     return iso_date + "/" + path if (iso_date and version in ("beta", "nightly")) else path
-
-def _rustc_src_archive_path(version, iso_date, urls):
-    return _rustc_src_tool_suburl(version, iso_date) + rust_archive_extension(urls)
 
 def _urls_for_version(version, iso_date, rust_redist_archives):
     if not iso_date and version in rust_redist_archives:
@@ -234,13 +231,13 @@ def _toolchains_impl(mctx):
     pending_manifests = {}
     new_facts = {}
 
-    def _request_manifest(version, required):
+    def _request_manifest(version, allow_fail = False):
         path = "rust_redist_{}_manifest.json".format(_sanitize_path_fragment(version))
         return struct(
             token = mctx.download(
                 rust_redist_manifest_url(version),
                 path,
-                allow_fail = not required,
+                allow_fail = allow_fail,
                 block = False,
             ),
             path = path,
@@ -266,7 +263,7 @@ def _toolchains_impl(mctx):
             # Defer reading the inventory until an archive fact is missing.
             rust_redist_archives[base_version] = None
         elif not locked_upstream or refresh_rust_redist:
-            pending_manifests[base_version] = _request_manifest(base_version, required = locked_zstd)
+            pending_manifests[base_version] = _request_manifest(base_version, allow_fail = not locked_zstd)
 
     for version, request in pending_manifests.items():
         archives = _read_manifest(request)
@@ -277,7 +274,7 @@ def _toolchains_impl(mctx):
 
     def _request_archive_sha(suburl, version, iso_date, allow_missing = False):
         urls = _urls_for_version(version, iso_date, rust_redist_archives)
-        archive_path = suburl + rust_archive_extension(urls)
+        archive_path = _archive_path(suburl, urls)
         if archive_path in new_facts:
             return bool(new_facts[archive_path])
         if archive_path in pending_downloads:
@@ -287,7 +284,7 @@ def _toolchains_impl(mctx):
         if not iso_date and version in rust_redist_archives:
             archives = rust_redist_archives[version]
             if archives == None and sha == None:
-                archives = _read_manifest(_request_manifest(version, required = True))
+                archives = _read_manifest(_request_manifest(version))
                 rust_redist_archives[version] = archives
 
             if archives != None:
@@ -295,7 +292,7 @@ def _toolchains_impl(mctx):
 
                 # A false fact records an archive confirmed absent from this release.
                 sha = (sha or archive["sha256"]) if archive != None else False
-            if not sha and not (allow_missing and sha == False):
+            if not (sha or (allow_missing and sha == False)):
                 fail("Could not resolve sha256 for {}".format(archive_path))
         elif not sha:
             sha_filename = _sanitize_path_fragment(archive_path) + ".sha256"
@@ -312,12 +309,12 @@ def _toolchains_impl(mctx):
         new_facts[archive_path] = sha
         return bool(sha)
 
-    def _request_sha(tool_name, version, iso_date, target_triple, allow_missing = False):
+    def _request_sha(tool_name, version, iso_date, target_triple):
         return _request_archive_sha(
             produce_tool_suburl(tool_name, target_triple, version, iso_date),
             version,
             iso_date,
-            allow_missing = allow_missing,
+            allow_missing = tool_name == "rust-std",
         )
 
     # Request checksums and discover which stdlib archives are available.
@@ -337,7 +334,7 @@ def _toolchains_impl(mctx):
         stdlib_targets_by_version[version] = [
             target_triple
             for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES
-            if _request_sha("rust-std", base_version, iso_date, _parse_triple(target_triple), allow_missing = True)
+            if _request_sha("rust-std", base_version, iso_date, _parse_triple(target_triple))
         ]
 
         _request_archive_sha(
@@ -377,8 +374,9 @@ def _toolchains_impl(mctx):
         new_facts[archive_path] = sha
 
     def _sha_for(tool_name, version, iso_date, target_triple):
-        archive_path = _archive_path(tool_name, target_triple, version, iso_date, _urls_for_version(version, iso_date, rust_redist_archives))
-        return new_facts[archive_path]
+        suburl = produce_tool_suburl(tool_name, target_triple, version, iso_date)
+        urls = _urls_for_version(version, iso_date, rust_redist_archives)
+        return new_facts[_archive_path(suburl, urls)]
 
     host_os, host_arch = repo_utils.platform(mctx).split("_", 1)
     host_os = "macos" if host_os == "darwin" else host_os
@@ -515,7 +513,7 @@ def _toolchains_impl(mctx):
             name = "rustc_src_{}".format(version_key),
             version = base_version,
             iso_date = iso_date,
-            sha256 = new_facts[_rustc_src_archive_path(base_version, iso_date, urls)],
+            sha256 = new_facts[_archive_path(_rustc_src_tool_suburl(base_version, iso_date), urls)],
             cargo = "@{}//:bin/cargo{}".format(host_cargo_repos[version], host_exe_suffix),
             rustc = "@{}//:bin/rustc{}".format(host_rustc_repos[version], host_exe_suffix),
             urls = urls,
