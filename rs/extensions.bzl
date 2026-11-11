@@ -538,9 +538,17 @@ filegroup(
 
     resolved_platforms = set([platform_label(triple, use_legacy_rules_rust_platforms) for triple in platform_triples])
 
+    platforms_bzl_contents = "RESOLVED_PLATFORMS = select(%s)\n" % repr({
+        platform: []
+        for platform in resolved_platforms
+    } | {"//conditions:default": ["@platforms//:incompatible"]})
+
     defs_bzl_contents = \
         """load(":data.bzl", "DEP_DATA")
+load(":platforms.bzl", _RESOLVED_PLATFORMS = "RESOLVED_PLATFORMS")
 load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
+
+RESOLVED_PLATFORMS = _RESOLVED_PLATFORMS
 
 _PLATFORMS = [
     {platforms}
@@ -594,13 +602,8 @@ def all_crate_deps(
         filter_prefix = {this_repo} if cargo_only else None,
     )
 
-RESOLVED_PLATFORMS = select({{
-    {target_compatible_with},
-    "//conditions:default": ["@platforms//:incompatible"],
-}})
 """.format(
             platforms = render_string_list(resolved_platforms),
-            target_compatible_with = ",\n    ".join(['"%s": []' % platform for platform in resolved_platforms]),
             this_repo = repr("@" + hub_name + "//:"),
         )
 
@@ -620,6 +623,7 @@ RESOLVED_PLATFORMS = select({{
             "BUILD.bazel": "\n".join(hub_contents),
             "defs.bzl": defs_bzl_contents,
             "data.bzl": data_bzl_contents,
+            "platforms.bzl": platforms_bzl_contents,
         },
     )
 
