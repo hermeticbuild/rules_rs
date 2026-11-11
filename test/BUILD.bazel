@@ -1,7 +1,7 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
-load("@root_package//:defs.bzl", root_package_lint_config = "lint_config")
+load("@root_package//root_pkg:data.bzl", root_package_data = "crate_data")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
@@ -84,7 +84,7 @@ rust_library(
     srcs = ["lib.rs"],
     crate_name = "root_pkg",
     edition = "2021",
-    lint_config = root_package_lint_config(),
+    lint_config = root_package_data().get("lint_config"),
 )
 
 package_lints_test(
@@ -197,7 +197,7 @@ rust_binary(
 
 cargo_bin_name_test(
     name = "generated_cargo_bin_name_test",
-    binary = "@binaries//:protoc-gen-prost__protoc-gen-prost",
+    binary = "@binaries//protoc-gen-prost__protoc-gen-prost",
     expected = "protoc-gen-prost",
 )
 
@@ -264,7 +264,7 @@ genrule(
     srcs = [":cfg_feature_target_dep_inner_deps"],
     outs = ["verify_cfg_feature_target_dep.txt"],
     cmd = """
-        grep '@@rules_rs++crate+cfg_feature_target_dep//:itoa-1.0.15' $(location :cfg_feature_target_dep_inner_deps)
+        grep '@@rules_rs++crate+cfg_feature_target_dep//itoa-1.0.15:itoa-1.0.15' $(location :cfg_feature_target_dep_inner_deps)
         echo ok > $@
     """,
     target_compatible_with = select({
@@ -284,8 +284,8 @@ genrule(
     srcs = [":first_party_feature_propagation_dep_leaf_deps"],
     outs = ["verify_first_party_feature_propagation.txt"],
     cmd = """
-        grep '@@rules_rs++crate+first_party_feature_propagation//:itoa-1.0.17' $(location :first_party_feature_propagation_dep_leaf_deps)
-        grep '@@rules_rs++crate+first_party_feature_propagation//:ryu-1.0.23' $(location :first_party_feature_propagation_dep_leaf_deps)
+        grep '@@rules_rs++crate+first_party_feature_propagation//itoa-1.0.17:itoa-1.0.17' $(location :first_party_feature_propagation_dep_leaf_deps)
+        grep '@@rules_rs++crate+first_party_feature_propagation//ryu-1.0.23:ryu-1.0.23' $(location :first_party_feature_propagation_dep_leaf_deps)
         echo ok > $@
     """,
     target_compatible_with = select({
@@ -311,7 +311,7 @@ genrule(
     srcs = [":vendored_workspace_dep_itoa_deps"],
     outs = ["verify_vendored_workspace_dep.txt"],
     cmd = """
-        grep 'vendored_workspace_dep//:mylib-0.1.0' $(location :vendored_workspace_dep_itoa_deps)
+        grep 'vendored_workspace_dep//mylib-0.1.0:mylib-0.1.0' $(location :vendored_workspace_dep_itoa_deps)
         grep '//vendored_workspace_dep/mylib:mylib' $(location :vendored_workspace_dep_itoa_deps)
         echo ok > $@
     """,
@@ -356,7 +356,7 @@ verify_crate_feature_present(
 verify_dep_present(
     name = "verify_single_crate_dep_data_key",
     dep_data = build_script_aliases_dep_data["build_script_aliases"],
-    expected = "@build_script_aliases//:wasmtime-internal-jit-debug-37.0.0",
+    expected = "@build_script_aliases//wasmtime-internal-jit-debug-37.0.0",
 )
 
 genrule(
@@ -364,7 +364,7 @@ genrule(
     srcs = [":workspace_member_annotation_features_dep_leaf_deps"],
     outs = ["verify_workspace_member_annotation_features.txt"],
     cmd = """
-        grep '@@rules_rs++crate+workspace_member_annotation_features//:ryu-1.0.20' $(location :workspace_member_annotation_features_dep_leaf_deps)
+        grep '@@rules_rs++crate+workspace_member_annotation_features//ryu-1.0.20:ryu-1.0.20' $(location :workspace_member_annotation_features_dep_leaf_deps)
         echo ok > $@
     """,
     target_compatible_with = select({
@@ -376,7 +376,7 @@ genrule(
 verify_dep_absent(
     name = "verify_target_workspace_dep_feature_dep_absent",
     dep_data = target_workspace_dep_feature_dep_data["target_workspace_dep_feature/app"],
-    unexpected = "@target_workspace_dep_feature//:cfg-if-1.0.0",
+    unexpected = "@target_workspace_dep_feature//cfg-if-1.0.0",
 )
 
 verify_crate_feature_absent(
@@ -388,7 +388,7 @@ verify_crate_feature_absent(
 verify_dep_present(
     name = "verify_workspace_default_features_dep_present",
     dep_data = workspace_default_features_dep_data["workspace_default_features/app"],
-    expected = "@workspace_default_features//:itoa-1.0.17",
+    expected = "@workspace_default_features//itoa-1.0.17",
 )
 
 verify_crate_feature_present(

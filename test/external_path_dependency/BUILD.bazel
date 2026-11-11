@@ -8,7 +8,7 @@ rust_test(
     size = "small",
     srcs = ["external_path_dependency_test.rs"],
     edition = "2021",
-    deps = ["@external_path_dependency//:vendored-dependency"],
+    deps = ["@external_path_dependency//vendored-dependency"],
 )
 
 sh_test(

@@ -91,7 +91,7 @@ def _windows_gnullvm_implicit_annotation(crate_name, version, hub_name):
     return _crate_annotation(
         additive_build_file_content = _WINDOWS_GNULLVM_ADDITIVE_BUILD_FILE_CONTENT,
         gen_build_script = "off",
-        deps = ["@%s//:%s-%s" % (hub_name, alias_name, version)],
+        deps = ["@%s//%s-%s" % (hub_name, alias_name, version)],
         extra_aliased_targets = {
             alias_name: "windows_import_lib",
         },

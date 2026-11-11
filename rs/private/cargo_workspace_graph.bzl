@@ -513,7 +513,7 @@ def resolve_cargo_workspace_members(
                 dep["bazel_target"] = "%s%s" % (dep_label_prefix, dep_fq)
                 default_workspace_dep_by_name[dep_name] = max(default_workspace_dep_by_name.get(dep_name, ""), dep_fq)
                 for triple in match.matches:
-                    workspace_dep_labels_by_triple[triple].add(":" + dep_name)
+                    workspace_dep_labels_by_triple[triple].add(dep_label_prefix + dep_name)
 
     for crate, annotation_versions in annotations.items():
         for version_key, annotation in annotation_versions.items():
@@ -652,6 +652,7 @@ def workspace_dep_data(
             "dev_deps": dev_deps,
             "dev_deps_by_platform": dev_deps_by_platform,
             "edition": package.get("edition", "2015"),
+            "package_name": package["name"],
             "shared_libraries": shared_libraries,
         }
         lint_config = lint_configs.get(bazel_package)

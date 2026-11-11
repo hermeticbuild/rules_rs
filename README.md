@@ -200,7 +200,7 @@ macOS does not need an additional ABI constraint for the default host case.
 Prefer the `rules_rs` wrappers for Rust targets:
 
 ```bzl
-load("@crates//:defs.bzl", "aliases", "all_crate_deps")
+load("@crates//my-app:data.bzl", "aliases", "all_crate_deps")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 
@@ -218,6 +218,25 @@ rust_binary(
 )
 ```
 
+The example assumes `[package].name = "my-app"` in `Cargo.toml`. Each
+workspace member can load `aliases()`, `all_crate_deps()`, and `crate_data()`
+from `@crates//<cargo-package-name>:data.bzl`, including a member at the
+workspace root. The `PACKAGES` dictionary in `@crates//:packages.bzl` maps
+Bazel package paths to Cargo package names.
+
+By default, `crate.from_cargo` also generates `@crates//:data.bzl` and the
+helpers in `@crates//:defs.bzl`, and warns that both files will be removed
+after March 1, 2027. Once your BUILD files load per-member metadata, set
+`incompatible_no_root_crate_data = True` to omit both files. Per-member
+loads let Bazel reuse analysis when an unrelated member's metadata changes.
+
+For direct dependencies, use subpackage aliases such as `@crates//serde`
+or `@crates//serde-1.0.228`. By default, `crate.from_cargo` also emits
+root aliases such as `@crates//:serde` and prints a warning. Root aliases
+will be removed after March 1, 2027. Set
+`incompatible_no_root_alias_targets = True` on `crate.from_cargo` once
+you have migrated the root aliases in your build.
+
 ### Cargo lint configuration
 
 Enable Cargo lint configuration for a dependency closure through its
@@ -234,20 +253,19 @@ crate.from_cargo(
 ```
 
 When enabled, the crate extension parses each workspace member's `Cargo.toml`
-and exposes its effective Cargo lint configuration through the generated
-`lint_config()` helper. A member with `[lints] workspace = true` receives
+and exposes its effective Cargo lint configuration in `crate_data()`.
+A member with `[lints] workspace = true` receives
 `[workspace.lints]`, a member with package lints receives those lints, and a
 member without a `[lints]` table receives no lint configuration.
 
-Pass the generated helper to the existing Rust rule alongside the other
-`DEP_DATA` helpers:
+Pass the lint configuration to the Rust rule:
 
 ```bzl
 load(
-    "@crates//:defs.bzl",
+    "@crates//my-app:data.bzl",
     "aliases",
     "all_crate_deps",
-    "lint_config",
+    "crate_data",
 )
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 
@@ -256,7 +274,7 @@ rust_library(
     srcs = ["src/lib.rs"],
     aliases = aliases(),
     deps = all_crate_deps(normal = True),
-    lint_config = lint_config(),
+    lint_config = crate_data().get("lint_config"),
 )
 ```
 
