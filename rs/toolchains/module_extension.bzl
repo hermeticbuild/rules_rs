@@ -35,6 +35,12 @@ _DEFAULT_TOOLCHAIN_REPO_NAME = "default_rust_toolchains"
 def _sanitize_path_fragment(path):
     return path.replace("/", "_").replace(":", "_")
 
+def _manifest_path(version):
+    return "rust_redist_{}_manifest.json".format(_sanitize_path_fragment(version))
+
+def _checksum_path(archive_path):
+    return _sanitize_path_fragment(archive_path) + ".sha256"
+
 def _archive_path(suburl, urls):
     return suburl + rust_archive_extension(urls)
 
@@ -174,8 +180,8 @@ def _toolchains_impl(mctx):
             name = _DEFAULT_TOOLCHAIN_REPO_NAME,
             version = _DEFAULT_RUSTC_VERSION,
             use_rust_redist = True,
-            rustfmt_version = "",
-            rust_analyzer_version = "",
+            rustfmt_version = _DEFAULT_RUSTC_VERSION,
+            rust_analyzer_version = _DEFAULT_RUSTC_VERSION,
             edition = _DEFAULT_EDITION,
             extra_rustc_flags = {},
             extra_exec_rustc_flags = {},
@@ -189,16 +195,13 @@ def _toolchains_impl(mctx):
 
     for tag in version_tags:
         versions.add(tag.version)
-        rustfmt_versions.add(tag.rustfmt_version or tag.version)
-        rust_analyzer_versions.add(tag.rust_analyzer_version or tag.version)
+        rustfmt_versions.add(tag.rustfmt_version)
+        rust_analyzer_versions.add(tag.rust_analyzer_version)
         if not tag.use_rust_redist:
-            upstream_versions.add(tag.version)
-            upstream_versions.add(tag.rustfmt_version or tag.version)
-            upstream_versions.add(tag.rust_analyzer_version or tag.version)
+            upstream_versions.update([tag.version, tag.rustfmt_version, tag.rust_analyzer_version])
 
     miri_versions = set([])
     miri_repo_configs = {}
-    miri_repo_tags = []
     for mod in mctx.modules:
         for tag in mod.tags.experimental_miri:
             _parse_version(tag.version)
@@ -217,7 +220,6 @@ def _toolchains_impl(mctx):
 
             if not existing:
                 miri_repo_configs[tag.name] = tag
-                miri_repo_tags.append(tag)
                 miri_versions.add(tag.version)
 
     rust_versions = versions | miri_versions
@@ -226,30 +228,28 @@ def _toolchains_impl(mctx):
     for triple in BPF_LINKER_SUPPORTED_EXEC_TRIPLES:
         declare_bpf_linker_repository(triple)
 
+    parsed_versions = {version: _parse_version(version) for version in all_versions}
+    exec_triples = {triple: _parse_triple(triple) for triple in SUPPORTED_EXEC_TRIPLES}
+
     existing_facts = getattr(mctx, "facts", {}) or {}
     rust_redist_archives = {}
     pending_manifests = {}
     new_facts = {}
 
     def _request_manifest(version, allow_fail = False):
-        path = "rust_redist_{}_manifest.json".format(_sanitize_path_fragment(version))
-        return struct(
-            token = mctx.download(
-                rust_redist_manifest_url(version),
-                path,
-                allow_fail = allow_fail,
-                block = False,
-            ),
-            path = path,
+        return mctx.download(
+            rust_redist_manifest_url(version),
+            _manifest_path(version),
+            allow_fail = allow_fail,
+            block = False,
         )
 
-    def _read_manifest(request):
-        if request.token.wait().success:
-            return json.decode(mctx.read(request.path))["archives"]
+    def _read_manifest(version, token):
+        if token.wait().success:
+            return json.decode(mctx.read(_manifest_path(version)))["archives"]
         return None
 
-    for version in all_versions:
-        base_version, iso_date = _parse_version(version)
+    for version, (base_version, iso_date) in parsed_versions.items():
         if version in upstream_versions or iso_date or base_version in ("beta", "nightly"):
             continue
 
@@ -265,8 +265,8 @@ def _toolchains_impl(mctx):
         elif not locked_upstream or refresh_rust_redist:
             pending_manifests[base_version] = _request_manifest(base_version, allow_fail = not locked_zstd)
 
-    for version, request in pending_manifests.items():
-        archives = _read_manifest(request)
+    for version, token in pending_manifests.items():
+        archives = _read_manifest(version, token)
         if archives != None:
             rust_redist_archives[version] = archives
 
@@ -284,7 +284,7 @@ def _toolchains_impl(mctx):
         if not iso_date and version in rust_redist_archives:
             archives = rust_redist_archives[version]
             if archives == None and sha == None:
-                archives = _read_manifest(_request_manifest(version))
+                archives = _read_manifest(version, _request_manifest(version))
                 rust_redist_archives[version] = archives
 
             if archives != None:
@@ -295,14 +295,10 @@ def _toolchains_impl(mctx):
             if not (sha or (allow_missing and sha == False)):
                 fail("Could not resolve sha256 for {}".format(archive_path))
         elif not sha:
-            sha_filename = _sanitize_path_fragment(archive_path) + ".sha256"
-            pending_downloads[archive_path] = struct(
-                token = mctx.download(
-                    DEFAULT_STATIC_RUST_URL_TEMPLATES[0].format(suburl) + ".sha256",
-                    sha_filename,
-                    block = False,
-                ),
-                file = sha_filename,
+            pending_downloads[archive_path] = mctx.download(
+                urls[0].format(suburl) + ".sha256",
+                _checksum_path(archive_path),
+                block = False,
             )
             return True
 
@@ -320,10 +316,9 @@ def _toolchains_impl(mctx):
     # Request checksums and discover which stdlib archives are available.
     stdlib_targets_by_version = {}
     for version in rust_versions:
-        base_version, iso_date = _parse_version(version)
+        base_version, iso_date = parsed_versions[version]
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
-            exec_triple = _parse_triple(triple)
+        for exec_triple in exec_triples.values():
             for tool_name in ["rustc", "cargo"]:
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
             if version in versions:
@@ -344,31 +339,26 @@ def _toolchains_impl(mctx):
         )
 
     for version in rustfmt_versions:
-        base_version, iso_date = _parse_version(version)
+        base_version, iso_date = parsed_versions[version]
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
-            exec_triple = _parse_triple(triple)
-
+        for exec_triple in exec_triples.values():
             # Rustfmt dynamically links against components in rustc, so we need both.
             for tool_name in ["rustc", "rustfmt"]:
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
 
     for version in rust_analyzer_versions:
-        base_version, iso_date = _parse_version(version)
+        base_version, iso_date = parsed_versions[version]
 
         _request_sha("rust-src", base_version, iso_date, None)
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
-            exec_triple = _parse_triple(triple)
-
+        for exec_triple in exec_triples.values():
             for tool_name in ["rustc", "rust-analyzer"]:
                 _request_sha(tool_name, base_version, iso_date, exec_triple)
 
     # Finish downloads and record facts.
-    for archive_path, req in pending_downloads.items():
-        req.token.wait()
-        sha_text = mctx.read(req.file).strip()
-        sha = sha_text.split(" ")[0] if sha_text else ""
+    for archive_path, token in pending_downloads.items():
+        token.wait()
+        sha = mctx.read(_checksum_path(archive_path)).strip().partition(" ")[0]
         if not sha:
             fail("Could not parse sha256 for {}".format(archive_path))
         new_facts[archive_path] = sha
@@ -382,34 +372,31 @@ def _toolchains_impl(mctx):
     host_os = "macos" if host_os == "darwin" else host_os
     host_platform = "%s_%s" % (host_os, host_arch)
     host_arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(host_arch, host_arch)
-    host_cargo_repos = {}
-    host_rustc_repos = {}
+    host_repos = {}
 
     for version in all_versions:
         version_key = sanitize_version(version)
-        base_version, iso_date = _parse_version(version)
+        base_version, iso_date = parsed_versions[version]
         urls = _urls_for_version(base_version, iso_date, rust_redist_archives)
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
-            exec_triple = _parse_triple(triple)
-
+        for triple, exec_triple in exec_triples.items():
             triple_suffix = exec_triple.system + "_" + exec_triple.arch
             rustc_name = "rustc_{}_{}".format(triple_suffix, version_key)
+            rustc_sha = _sha_for("rustc", base_version, iso_date, exec_triple)
 
             rustc_repository(
                 name = rustc_name,
                 triple = triple,
                 version = base_version,
                 iso_date = iso_date,
-                sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                sha256 = rustc_sha,
                 urls = urls,
             )
 
             if version in rust_versions:
                 cargo_name = "cargo_{}_{}".format(triple_suffix, version_key)
                 if exec_triple.arch == host_arch and exec_triple.system == host_os:
-                    host_cargo_repos[version] = cargo_name
-                    host_rustc_repos[version] = rustc_name
+                    host_repos[version] = struct(cargo = cargo_name, rustc = rustc_name)
 
                 cargo_repository(
                     name = cargo_name,
@@ -427,7 +414,7 @@ def _toolchains_impl(mctx):
                     version = base_version,
                     iso_date = iso_date,
                     sha256 = _sha_for("clippy", base_version, iso_date, exec_triple),
-                    rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                    rustc_sha256 = rustc_sha,
                     urls = urls,
                 )
 
@@ -438,7 +425,7 @@ def _toolchains_impl(mctx):
                     version = base_version,
                     iso_date = iso_date,
                     sha256 = _sha_for("miri", base_version, iso_date, exec_triple),
-                    rustc_sha256 = _sha_for("rustc", base_version, iso_date, exec_triple),
+                    rustc_sha256 = rustc_sha,
                     urls = urls,
                 )
 
@@ -455,11 +442,10 @@ def _toolchains_impl(mctx):
 
     for version in rustfmt_versions:
         version_key = sanitize_version(version)
-        base_version, iso_date = _parse_version(version)
+        base_version, iso_date = parsed_versions[version]
         urls = _urls_for_version(base_version, iso_date, rust_redist_archives)
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
-            exec_triple = _parse_triple(triple)
+        for triple, exec_triple in exec_triples.items():
             triple_suffix = exec_triple.system + "_" + exec_triple.arch
 
             rustfmt_repository(
@@ -474,7 +460,7 @@ def _toolchains_impl(mctx):
 
     for version in rust_analyzer_versions:
         version_key = sanitize_version(version)
-        base_version, iso_date = _parse_version(version)
+        base_version, iso_date = parsed_versions[version]
         urls = _urls_for_version(base_version, iso_date, rust_redist_archives)
 
         rust_src_repository(
@@ -485,8 +471,7 @@ def _toolchains_impl(mctx):
             urls = urls,
         )
 
-        for triple in SUPPORTED_EXEC_TRIPLES:
-            exec_triple = _parse_triple(triple)
+        for triple, exec_triple in exec_triples.items():
             triple_suffix = exec_triple.system + "_" + exec_triple.arch
 
             rust_analyzer_repository(
@@ -499,23 +484,22 @@ def _toolchains_impl(mctx):
                 urls = urls,
             )
 
-    if len(host_cargo_repos) != len(rust_versions):
+    if len(host_repos) != len(rust_versions):
         fail("Could not find host Cargo repository for {}-{}".format(host_os, host_arch))
-    if len(host_rustc_repos) != len(rust_versions):
-        fail("Could not find host rustc repository for {}-{}".format(host_os, host_arch))
     host_exe_suffix = ".exe" if host_os == "windows" else ""
 
     for version in rust_versions:
         version_key = sanitize_version(version)
-        base_version, iso_date = _parse_version(version)
+        base_version, iso_date = parsed_versions[version]
         urls = _urls_for_version(base_version, iso_date, rust_redist_archives)
+        host_repo = host_repos[version]
         rustc_src_repository(
             name = "rustc_src_{}".format(version_key),
             version = base_version,
             iso_date = iso_date,
             sha256 = new_facts[_archive_path(_rustc_src_tool_suburl(base_version, iso_date), urls)],
-            cargo = "@{}//:bin/cargo{}".format(host_cargo_repos[version], host_exe_suffix),
-            rustc = "@{}//:bin/rustc{}".format(host_rustc_repos[version], host_exe_suffix),
+            cargo = "@{}//:bin/cargo{}".format(host_repo.cargo, host_exe_suffix),
+            rustc = "@{}//:bin/rustc{}".format(host_repo.rustc, host_exe_suffix),
             urls = urls,
         )
 
@@ -524,7 +508,7 @@ def _toolchains_impl(mctx):
         if not host_cargo:
             fail("Set toolchains.host_cargo(%s = ...) to provide Cargo for this Bazel host" % host_platform)
     else:
-        host_cargo = "@%s//:bin/cargo%s" % (host_cargo_repos[version_tags[0].version], host_exe_suffix)
+        host_cargo = "@%s//:bin/cargo%s" % (host_repos[version_tags[0].version].cargo, host_exe_suffix)
     host_cargo_repository(
         name = "host_cargo",
         cargo = host_cargo,
@@ -540,10 +524,10 @@ def _toolchains_impl(mctx):
     for tag in version_tags:
         toolchains_repository(
             name = tag.name,
-            library_notice = "@%s//:share/doc/rust/COPYRIGHT-library.html" % host_rustc_repos[tag.version],
+            library_notice = "@%s//:share/doc/rust/COPYRIGHT-library.html" % host_repos[tag.version].rustc,
             version = tag.version,
-            rustfmt_version = tag.rustfmt_version or tag.version,
-            rust_analyzer_version = tag.rust_analyzer_version or tag.version,
+            rustfmt_version = tag.rustfmt_version,
+            rust_analyzer_version = tag.rust_analyzer_version,
             edition = tag.edition,
             extra_rustc_flags = tag.extra_rustc_flags,
             extra_exec_rustc_flags = tag.extra_exec_rustc_flags,
@@ -571,7 +555,7 @@ def _toolchains_impl(mctx):
         deps.append(_DEFAULT_TOOLCHAIN_REPO_NAME)
     direct_dev_deps = [name for name in direct_dev_deps if name not in direct_deps]
 
-    for tag in miri_repo_tags:
+    for tag in miri_repo_configs.values():
         if tag.name in repo_configs or tag.name == _DEFAULT_TOOLCHAIN_REPO_NAME:
             fail("Miri toolchain repo {} conflicts with a Rust toolchain repo of the same name".format(tag.name))
 
