@@ -191,6 +191,7 @@ crate.from_cargo(
     name = "external_path_dependency",
     cargo_lock = "@external_workspace//:Cargo.lock",
     cargo_toml = "@external_workspace//:Cargo.toml",
+    incompatible_no_root_alias_targets = True,
     platform_triples = [
         "aarch64-unknown-linux-gnu",
         "aarch64-apple-darwin",

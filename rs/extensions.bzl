@@ -225,7 +225,7 @@ def _generate_hub_and_spokes(mctx, hub, platforms, cargo_path, suggested_annotat
     mctx.report_progress("Computing dependencies and features")
 
     # All spokes need visibility to the crates they depend on, including Git checkouts.
-    internal_packages = set(["@%s//:__pkg__" % hub_name])
+    internal_packages = set(["@%s//:__subpackages__" % hub_name])
     facts_by_fq_crate = {}
     package_by_fq = {}
     for package in packages:
@@ -274,7 +274,7 @@ def _generate_hub_and_spokes(mctx, hub, platforms, cargo_path, suggested_annotat
         materialize_workspace_members = False,
         validate_lockfile = cfg.validate_lockfile,
         debug = cfg.debug,
-        dep_label_prefix = "@%s//:" % hub_name,
+        dep_label_prefix = "@%s//" % hub_name,
     )
 
     mctx.report_progress("Initializing spokes")
@@ -440,7 +440,7 @@ crate.annotation(
                     cargo_toml_lint_flags(cargo_toml_json),
                 ))
 
-    hub_contents = []
+    aliases = []
     for name, versions in resolved_facts.versions_by_name.items():
         default_fq = workspace_resolution.default_workspace_dep_by_name.get(name)
         for version in versions:
@@ -451,13 +451,13 @@ crate.annotation(
             target_repo_name = package["target_repo_name"]
             target_package_path = package["target_package_path"]
 
-            hub_contents.append(_render_alias(
+            aliases.append((
                 fq,
                 _target_label(target_repo_name, target_package_path, name),
                 crate_visibility,
             ))
             for binary in annotation.gen_binaries:
-                hub_contents.append(_render_alias(
+                aliases.append((
                     "%s__%s" % (fq, binary),
                     _target_label(target_repo_name, target_package_path, binary + "__bin"),
                     crate_visibility,
@@ -465,20 +465,20 @@ crate.annotation(
 
             for alias_name, target in sorted(annotation.extra_aliased_targets.items()):
                 versioned_alias = "%s-%s" % (alias_name, version)
-                hub_contents.append(_render_alias(
+                aliases.append((
                     versioned_alias,
                     _target_label(target_repo_name, target_package_path, target),
                     crate_visibility,
                 ))
                 if len(versions) == 1:
-                    hub_contents.append(_render_alias(alias_name, ":" + versioned_alias, crate_visibility))
+                    aliases.append((alias_name, "//" + versioned_alias, crate_visibility))
 
             if fq == default_fq:
-                hub_contents.append(_render_alias(name, ":" + fq, crate_visibility))
+                aliases.append((name, "//" + fq, crate_visibility))
                 for binary in annotation.gen_binaries:
-                    hub_contents.append(_render_alias(
+                    aliases.append((
                         "%s__%s" % (name, binary),
-                        ":%s__%s" % (fq, binary),
+                        "//%s__%s" % (fq, binary),
                         crate_visibility,
                     ))
 
@@ -491,11 +491,21 @@ crate.annotation(
             # at the bazel workspace root, there's no path component to
             # derive a name from.
             continue
-        hub_contents.append(_render_alias(
+        aliases.append((
             _fq_crate(package["name"], package["version"]),
             "@@//" + bazel_package,
             ["//visibility:public"],
         ))
+
+    files = {}
+    hub_contents = []
+    for name, actual, visibility in aliases:
+        build_file = name + "/BUILD.bazel"
+        if build_file in files:
+            fail("Duplicate alias @%s//%s" % (hub_name, name))
+        files[build_file] = _render_alias(paths.basename(name), actual, visibility)
+        if not cfg.incompatible_no_root_alias_targets:
+            hub_contents.append(_render_alias(name, actual, visibility))
 
     workspace_deps, conditional_workspace_deps = render_select(
         [],
@@ -600,10 +610,10 @@ def all_crate_deps(
     )
 """.format(
             platforms = render_string_list(resolved_platforms),
-            this_repo = repr("@" + hub_name + "//:"),
+            this_repo = repr("@" + hub_name + "//"),
         )
 
-    data_bzl_contents = render_dep_data(workspace_dep_data(
+    dep_data = workspace_dep_data(
         cargo_metadata = cargo_metadata,
         feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate,
         platforms = platforms,
@@ -611,17 +621,52 @@ def all_crate_deps(
         workspace_package = workspace_package,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         lint_configs = lint_configs,
-    ))
+    )
+    _write_package_data(files, dep_data, sorted(resolved_platforms), hub_name)
 
     _hub_repo(
         name = hub_name,
-        contents = {
+        contents = files | {
             "BUILD.bazel": "\n".join(hub_contents),
             "defs.bzl": defs_bzl_contents,
-            "data.bzl": data_bzl_contents,
+            "data.bzl": render_dep_data(dep_data),
             "platforms.bzl": platforms_bzl_contents,
         },
     )
+
+def _write_package_data(files, dep_data, platforms, hub_name):
+    files["packages.bzl"] = "PACKAGES = %s\n" % repr({package: True for package in sorted(dep_data)})
+    for package, data in dep_data.items():
+        directory = paths.join("packages", package)
+        files.setdefault(paths.join(directory, "BUILD.bazel"), "")
+        files[paths.join(directory, "data.bzl")] = """load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
+
+_CRATE_DATA = {crate_data}
+
+def crate_data():
+    return _CRATE_DATA
+
+def aliases():
+    return _CRATE_DATA["aliases"]
+
+def all_crate_deps(
+        normal = False,
+        normal_dev = False,
+        build = False,
+        cargo_only = False):
+    return _all_crate_deps(
+        _CRATE_DATA,
+        platforms = _CRATE_DATA["platforms"],
+        normal = normal,
+        normal_dev = normal_dev,
+        build = build,
+        filter_prefix = {this_repo} if cargo_only else None,
+    )
+""".format(
+            # Keep empty branches so platform-only deps stay conditional.
+            crate_data = repr(data | {"platforms": platforms}),
+            this_repo = repr("@" + hub_name + "//"),
+        )
 
 _ALLOW_GIT_ENV = "RULES_RS_ALLOW_GIT"
 
@@ -738,6 +783,12 @@ def _crate_impl(mctx):
                 use_home_cargo_credentials = use_home_cargo_credentials,
                 allow_git_cli = allow_git_cli,
             ))
+
+    legacy_hubs = [hub.cfg.name for hub in hubs if not hub.cfg.incompatible_no_root_alias_targets]
+    if legacy_hubs:
+        print("WARNING: Root alias targets (@hub//:name) will be removed after March 1, 2027. " +
+              "Use @hub//name and set incompatible_no_root_alias_targets = True in crate.from_cargo for " +
+              ", ".join(sorted(legacy_hubs)) + ".")
 
     for hub in hubs:
         start_crate_downloads(mctx, downloader_state, hub.downloads, hub.cargo_credentials)
@@ -856,6 +907,10 @@ _from_cargo = tag_class(
         ),
         "generate_lint_config": attr.bool(
             doc = "If true, generate per-package Cargo lint configuration by reading workspace member manifests.",
+            default = False,
+        ),
+        "incompatible_no_root_alias_targets": attr.bool(
+            doc = "Omit root aliases such as @crates//:serde. The subpackage aliases such as @crates//serde are always generated.",
             default = False,
         ),
         "use_home_cargo_credentials": attr.bool(

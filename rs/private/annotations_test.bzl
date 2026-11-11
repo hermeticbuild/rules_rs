@@ -218,7 +218,7 @@ def _selected_windows_gnullvm_annotation_keeps_implicit_values_impl(ctx):
 
     annotation = annotation_for(annotations, "windows_x86_64_gnullvm", "0.53.0", "repo")
     asserts.equals(env, "off", annotation.gen_build_script)
-    asserts.equals(env, ["@repo//:windows_x86_64_gnullvm_import_lib-0.53.0"], annotation.deps)
+    asserts.equals(env, ["@repo//windows_x86_64_gnullvm_import_lib-0.53.0"], annotation.deps)
     asserts.equals(env, {"windows_x86_64_gnullvm_import_lib": "windows_import_lib"}, annotation.extra_aliased_targets)
     asserts.equals(env, {
         "aarch64-apple-darwin": [],

@@ -21,6 +21,7 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate", isolate = True)
 crate.from_cargo(
     cargo_lock = "@source//:Cargo.lock",
     cargo_toml = "@source//:Cargo.toml",
+    incompatible_no_root_alias_targets = False,
     platform_triples = ["x86_64-unknown-linux-gnu"],
 )
 use_repo(crate, "crates")
@@ -32,18 +33,23 @@ query() {
 
 fixture=external_path_dependency/fixture
 manifest=$fixture/vendor/dependency/Cargo.toml
-spoke='labels(actual, @crates//:vendored-dependency-0.1.0)'
+spoke='labels(actual, @crates//vendored-dependency-0.1.0)'
 printf '\n[features]\ndefault = ["before"]\nbefore = []\nafter = []\n' >> "$manifest"
-query "some(attr(crate_features, before, $spoke))"
+query "some(attr(crate_features, before, $spoke intersect labels(actual, @crates//:vendored-dependency-0.1.0)))"
+sed -i.bak 's/incompatible_no_root_alias_targets = False/incompatible_no_root_alias_targets = True/' MODULE.bazel
+root_aliases=$(query 'kind("alias rule", @crates//:*)')
+[[ -z "$root_aliases" ]]
 sed -i.bak 's/default = \["before"\]/default = ["after"]/' "$manifest"
 query "some(attr(crate_features, after, $spoke))"
 
-# As a workspace member, the crate's edition is exposed by @crates//:defs.bzl.
+# Both metadata files must pick up changes to a workspace member's edition.
 sed -i.bak 's/exclude =/members =/' "$fixture/Cargo.toml"
 cat > BUILD.bazel <<'BUILD'
 load("@crates//:defs.bzl", "edition")
+load("@crates//packages/vendor/dependency:data.bzl", "crate_data")
 filegroup(name = "edition_" + edition("vendor/dependency"))
+filegroup(name = "member_edition_" + crate_data()["edition"])
 BUILD
-query //:edition_2021
+query "set(//:edition_2021 //:member_edition_2021)"
 sed -i.bak 's/edition = "2021"/edition = "2024"/' "$manifest"
-query //:edition_2024
+query "set(//:edition_2024 //:member_edition_2024)"

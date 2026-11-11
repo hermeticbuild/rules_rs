@@ -17,7 +17,7 @@ crate.annotation(
     gen_build_script = "off",
     rustc_flags = ["--cfg=use_bindgen_pregenerated"],
     # Use aws_lc_sys_build_info-<version> when multiple versions are resolved.
-    deps = ["@many_workspace_deps//:aws_lc_sys_build_info"],
+    deps = ["@many_workspace_deps//aws_lc_sys_build_info"],
 )
 
 inject_repo(crate, "aws-lc")

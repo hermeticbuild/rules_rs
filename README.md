@@ -200,7 +200,7 @@ macOS does not need an additional ABI constraint for the default host case.
 Prefer the `rules_rs` wrappers for Rust targets:
 
 ```bzl
-load("@crates//:defs.bzl", "aliases", "all_crate_deps")
+load("@crates//packages:data.bzl", "aliases", "all_crate_deps")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 
@@ -218,6 +218,24 @@ rust_binary(
 )
 ```
 
+The example loads metadata for a crate in the root Bazel package. For a
+crate in `//path/to/member`, use
+`@crates//packages/path/to/member:data.bzl`. These files expose
+`aliases()`, `all_crate_deps()`, and `crate_data()` for a single crate, so
+unrelated workspace metadata changes stay outside the package's Starlark
+loads. Tools that only need to discover workspace members can load the
+`PACKAGES` dictionary from `@crates//:packages.bzl` and look up Bazel package
+paths there.
+
+The hub-wide helpers in `@crates//:defs.bzl` remain available.
+
+For direct dependencies, use subpackage aliases such as `@crates//serde`
+or `@crates//serde-1.0.228`. By default, `crate.from_cargo` also emits
+root aliases such as `@crates//:serde` and prints a warning. Root aliases
+will be removed after March 1, 2027. Set
+`incompatible_no_root_alias_targets = True` on `crate.from_cargo` once
+you have migrated the root aliases in your build.
+
 ### Cargo lint configuration
 
 Enable Cargo lint configuration for a dependency closure through its
@@ -234,20 +252,19 @@ crate.from_cargo(
 ```
 
 When enabled, the crate extension parses each workspace member's `Cargo.toml`
-and exposes its effective Cargo lint configuration through the generated
-`lint_config()` helper. A member with `[lints] workspace = true` receives
+and exposes its effective Cargo lint configuration in `crate_data()`.
+A member with `[lints] workspace = true` receives
 `[workspace.lints]`, a member with package lints receives those lints, and a
 member without a `[lints]` table receives no lint configuration.
 
-Pass the generated helper to the existing Rust rule alongside the other
-`DEP_DATA` helpers:
+Pass the lint configuration to the Rust rule:
 
 ```bzl
 load(
-    "@crates//:defs.bzl",
+    "@crates//packages:data.bzl",
     "aliases",
     "all_crate_deps",
-    "lint_config",
+    "crate_data",
 )
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 
@@ -256,7 +273,7 @@ rust_library(
     srcs = ["src/lib.rs"],
     aliases = aliases(),
     deps = all_crate_deps(normal = True),
-    lint_config = lint_config(),
+    lint_config = crate_data().get("lint_config"),
 )
 ```
 
