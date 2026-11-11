@@ -216,7 +216,7 @@ bzl_library(
     name = "toml2json",
     srcs = ["toml2json.bzl"],
     visibility = ["//rs:__subpackages__"],
-    deps = ["@bazel_lib_host//:defs"],
+    deps = ["@platforms//host:constraints_lib"],
 )
 
 bzl_library(
