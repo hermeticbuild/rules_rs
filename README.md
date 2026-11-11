@@ -200,7 +200,7 @@ macOS does not need an additional ABI constraint for the default host case.
 Prefer the `rules_rs` wrappers for Rust targets:
 
 ```bzl
-load("@crates//packages:data.bzl", "aliases", "all_crate_deps")
+load("@crates//my-app:data.bzl", "aliases", "all_crate_deps")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
 
@@ -218,14 +218,11 @@ rust_binary(
 )
 ```
 
-The example loads metadata for a crate in the root Bazel package. For a
-crate in `//path/to/member`, use
-`@crates//packages/path/to/member:data.bzl`. These files expose
-`aliases()`, `all_crate_deps()`, and `crate_data()` for a single crate, so
-unrelated workspace metadata changes stay outside the package's Starlark
-loads. Tools that only need to discover workspace members can load the
-`PACKAGES` dictionary from `@crates//:packages.bzl` and look up Bazel package
-paths there.
+The example assumes `[package].name = "my-app"` in `Cargo.toml`. Each
+workspace member can load `aliases()`, `all_crate_deps()`, and `crate_data()`
+from `@crates//<cargo-package-name>:data.bzl`, including a member at the
+workspace root. The `PACKAGES` dictionary in `@crates//:packages.bzl` maps
+Bazel package paths to Cargo package names.
 
 The hub-wide helpers in `@crates//:defs.bzl` remain available.
 
@@ -261,7 +258,7 @@ Pass the lint configuration to the Rust rule:
 
 ```bzl
 load(
-    "@crates//packages:data.bzl",
+    "@crates//my-app:data.bzl",
     "aliases",
     "all_crate_deps",
     "crate_data",

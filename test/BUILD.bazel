@@ -1,7 +1,7 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
-load("@root_package//packages:data.bzl", root_package_data = "crate_data")
+load("@root_package//root_pkg:data.bzl", root_package_data = "crate_data")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")

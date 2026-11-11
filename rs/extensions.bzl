@@ -635,11 +635,11 @@ def all_crate_deps(
     )
 
 def _write_package_data(files, dep_data, platforms, hub_name):
-    files["packages.bzl"] = "PACKAGES = %s\n" % repr({package: True for package in sorted(dep_data)})
-    for package, data in dep_data.items():
-        directory = paths.join("packages", package)
-        files.setdefault(paths.join(directory, "BUILD.bazel"), "")
-        files[paths.join(directory, "data.bzl")] = """load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
+    files["packages.bzl"] = "PACKAGES = %s\n" % repr({package: dep_data[package]["package_name"] for package in sorted(dep_data)})
+    for data in dep_data.values():
+        name = data["package_name"]
+        files.setdefault(name + "/BUILD.bazel", "")
+        files[name + "/data.bzl"] = """load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
 
 _CRATE_DATA = {crate_data}
 

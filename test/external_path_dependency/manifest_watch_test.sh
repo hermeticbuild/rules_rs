@@ -46,10 +46,11 @@ query "some(attr(crate_features, after, $spoke))"
 sed -i.bak 's/exclude =/members =/' "$fixture/Cargo.toml"
 cat > BUILD.bazel <<'BUILD'
 load("@crates//:defs.bzl", "edition")
-load("@crates//packages/vendor/dependency:data.bzl", "crate_data")
+load("@crates//:packages.bzl", "PACKAGES")
+load("@crates//vendored-dependency:data.bzl", "crate_data")
 filegroup(name = "edition_" + edition("vendor/dependency"))
-filegroup(name = "member_edition_" + crate_data()["edition"])
+filegroup(name = PACKAGES["vendor/dependency"] + "_" + crate_data()["edition"])
 BUILD
-query "set(//:edition_2021 //:member_edition_2021)"
+query "set(//:edition_2021 //:vendored-dependency_2021)"
 sed -i.bak 's/edition = "2021"/edition = "2024"/' "$manifest"
-query "set(//:edition_2024 //:member_edition_2024)"
+query "set(//:edition_2024 //:vendored-dependency_2024)"

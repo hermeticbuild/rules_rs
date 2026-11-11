@@ -652,6 +652,7 @@ def workspace_dep_data(
             "dev_deps": dev_deps,
             "dev_deps_by_platform": dev_deps_by_platform,
             "edition": package.get("edition", "2015"),
+            "package_name": package["name"],
             "shared_libraries": shared_libraries,
         }
         lint_config = lint_configs.get(bazel_package)
