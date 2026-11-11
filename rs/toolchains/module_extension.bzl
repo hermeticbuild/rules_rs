@@ -230,74 +230,94 @@ def _toolchains_impl(mctx):
         declare_bpf_linker_repository(triple)
 
     existing_facts = getattr(mctx, "facts", {}) or {}
+    rust_redist_archives = {}
     pending_manifests = {}
+    new_facts = {}
+
+    def _request_manifest(version, required):
+        path = "rust_redist_{}_manifest.json".format(_sanitize_path_fragment(version))
+        return struct(
+            token = mctx.download(
+                rust_redist_manifest_url(version),
+                path,
+                allow_fail = not required,
+                block = False,
+            ),
+            path = path,
+        )
+
+    def _read_manifest(request):
+        if request.token.wait().success:
+            return json.decode(mctx.read(request.path))["archives"]
+        return None
+
     for version in all_versions:
         base_version, iso_date = _parse_version(version)
         if version in upstream_versions or iso_date or base_version in ("beta", "nightly"):
             continue
 
-        if base_version in pending_manifests:
+        if base_version in pending_manifests or base_version in rust_redist_archives:
             continue
 
         rustc_archive = "rustc-{}-x86_64-unknown-linux-gnu.tar".format(base_version)
         locked_zstd = bool(existing_facts.get(rustc_archive + ".zst"))
         locked_upstream = bool(existing_facts.get(rustc_archive + ".xz"))
-        if locked_upstream and not locked_zstd and not refresh_rust_redist:
-            continue
+        if locked_zstd and not refresh_rust_redist:
+            # Defer reading the inventory until an archive fact is missing.
+            rust_redist_archives[base_version] = None
+        elif not locked_upstream or refresh_rust_redist:
+            pending_manifests[base_version] = _request_manifest(base_version, required = locked_zstd)
 
-        manifest_path = "rust_redist_{}_manifest.json".format(_sanitize_path_fragment(base_version))
-        pending_manifests[base_version] = struct(
-            token = mctx.download(
-                rust_redist_manifest_url(base_version),
-                manifest_path,
-                allow_fail = not locked_zstd,
-                block = False,
-            ),
-            path = manifest_path,
-        )
-
-    rust_redist_archives = {}
     for version, request in pending_manifests.items():
-        result = request.token.wait()
-        if not result.success:
-            continue
+        archives = _read_manifest(request)
+        if archives != None:
+            rust_redist_archives[version] = archives
 
-        rust_redist_archives[version] = json.decode(mctx.read(request.path))["archives"]
+    def _record_redist_sha(archive_path, version):
+        sha = existing_facts.get(archive_path)
+        archives = rust_redist_archives[version]
+        if archives == None and sha == None:
+            archives = _read_manifest(_request_manifest(version, required = True))
+            rust_redist_archives[version] = archives
+
+        if archives != None:
+            if archive_path in archives:
+                sha = sha or archives[archive_path]["sha256"]
+                if not sha:
+                    fail("Could not parse sha256 for {}".format(archive_path))
+            else:
+                # Record that the archive is absent so a later evaluation can skip the lookup.
+                sha = False
+
+        new_facts[archive_path] = sha
+        return sha
 
     stdlib_targets_by_version = {}
     for version in rust_versions:
         base_version, iso_date = _parse_version(version)
-        archives = rust_redist_archives.get(base_version) if not iso_date else None
-        if not archives:
+        if iso_date or base_version not in rust_redist_archives:
             stdlib_targets_by_version[version] = SUPPORTED_TIER_1_AND_2_TRIPLES
             continue
 
-        urls = _urls_for_version(base_version, iso_date, rust_redist_archives)
+        urls = rust_redist_url_templates(base_version)
         stdlib_targets_by_version[version] = [
             target_triple
             for target_triple in SUPPORTED_TIER_1_AND_2_TRIPLES
-            if _archive_path(
-                "rust-std",
-                _parse_triple(target_triple),
+            if _record_redist_sha(
+                _archive_path("rust-std", _parse_triple(target_triple), base_version, iso_date, urls),
                 base_version,
-                iso_date,
-                urls,
-            ) in archives
+            )
         ]
 
     pending_downloads = {}
-    new_facts = {}
 
     def _request_archive_sha(archive_path, suburl, version, iso_date):
         if archive_path in new_facts or archive_path in pending_downloads:
             return
 
-        archives = rust_redist_archives.get(version) if not iso_date else None
-        if archives:
-            sha = existing_facts.get(archive_path) or archives[archive_path]["sha256"]
-            if not sha:
-                fail("Could not parse sha256 for {}".format(archive_path))
-            new_facts[archive_path] = sha
+        if not iso_date and version in rust_redist_archives:
+            if not _record_redist_sha(archive_path, version):
+                fail("Could not find sha256 for {}".format(archive_path))
             return
 
         existing = existing_facts.get(archive_path)
