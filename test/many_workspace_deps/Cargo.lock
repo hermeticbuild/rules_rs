@@ -19521,6 +19521,7 @@ dependencies = [
  "tao",
  "tonic 0.14.6",
  "tower 0.5.3",
+ "tracy-client-sys",
  "walrus",
  "warp",
  "wasm-bindgen",
@@ -20177,6 +20178,16 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "tracy-client-sys"
+version = "0.30.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08f4b6d2481c5e266e9def4c10e1680dbdfdd69523ed555a83d6675953a2785e"
+dependencies = [
+ "cc",
+ "windows-targets 0.53.5",
 ]
 
 [[package]]

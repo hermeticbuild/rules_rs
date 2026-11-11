@@ -2,13 +2,7 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 cc_library(
     name = "tracy_client",
-    srcs = [
-        "tracy/TracyClient.cpp",
-    ],
-    hdrs = glob([
-        "tracy/*/*.h",
-        "tracy/*/*.hpp",
-    ]),
+    srcs = ["tracy/TracyClient.cpp"] + glob(["tracy/**/*.h", "tracy/**/*.hpp"]),
     linkstatic = True,
     local_defines = [
         "TRACY_ENABLE",
@@ -16,8 +10,7 @@ cc_library(
         "TRACY_MANUAL_LIFETIME",
         "TRACY_DELAYED_INIT",
     ],
-    textual_hdrs = glob([
-        "tracy/*/*.cpp",
-    ]),
+    # TracyClient.cpp includes these .cpp files into one translation unit.
+    textual_hdrs = glob(["tracy/*/**/*.cpp"]),
     visibility = ["//visibility:public"],
 )

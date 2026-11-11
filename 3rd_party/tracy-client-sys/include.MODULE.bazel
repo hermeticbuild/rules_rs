@@ -1,9 +1,18 @@
 crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
-crate.annotation(
-    additive_build_file = "@rules_rs//3rd_party/tracy-client-sys:additive.BUILD.bazel",
-    crate = "tracy-client-sys",
-    extra_aliased_targets = {"tracy_client": "tracy_client"},
-    gen_build_script = "off",
-    link_deps = ["@many_workspace_deps//:tracy-client"],
-    repositories = ["many_workspace_deps"],
-)
+
+[
+    crate.annotation(
+        additive_build_file = "@rules_rs//3rd_party/tracy-client-sys:additive.BUILD.bazel",
+        crate = "tracy-client-sys",
+        extra_aliased_targets = {"tracy_client": "tracy_client"},
+        gen_build_script = "off",
+        link_deps = ["@many_workspace_deps//:tracy_client"],
+        patches = patches,
+        repositories = ["many_workspace_deps"],
+        version = version,
+    )
+    for version, patches in {
+        "*": [],
+        "0.30.1": ["@rules_rs//3rd_party/tracy-client-sys:mingw-arm64-timer.patch"],
+    }.items()
+]

@@ -1,0 +1,9 @@
+--- tracy/client/TracyProfiler.hpp
++++ tracy/client/TracyProfiler.hpp
+@@ -39,5 +39,5 @@
+ #if ( defined __i386 || defined _M_IX86 || defined __x86_64__ || defined _M_X64 )
+ #  define TRACY_HAS_RDTSC
+-#elif defined _WIN32 && defined _M_ARM64
++#elif defined _WIN32 && defined _M_ARM64 && defined _MSC_VER
+ #  define TRACY_HAS_CNTVCT
+ #elif defined __APPLE__ && defined __MACH__ && TARGET_CPU_ARM64 // For now only supported on Apple devices
