@@ -15,10 +15,8 @@ ERROR: Cannot determine home directory in order to load home `.cargo/credentials
         credentials_path = home_directory + "/.cargo/credentials.toml"
 
     credentials = run_toml2json(mctx, credentials_path)["registries"]
-    registry_map = run_toml2json(mctx, cargo_config)["registries"]
-
     result = {}
-    for name, data in registry_map.items():
+    for name, data in cargo_config["registries"].items():
         index = data["index"]
         if name in credentials:
             result[index] = credentials[name]["token"]
@@ -31,3 +29,10 @@ def registry_auth_headers(cargo_credentials, source):
         return {"Authorization": token}
 
     return {}
+
+def repository_registry_auth_headers(rctx):
+    # TODO(zbarsky): Is there a better way than fetching this in every crate repository?
+    if not rctx.attr.use_home_cargo_credentials:
+        return {}
+    cargo_config = run_toml2json(rctx, rctx.attr.cargo_config)
+    return registry_auth_headers(load_cargo_credentials(rctx, cargo_config), rctx.attr.source)

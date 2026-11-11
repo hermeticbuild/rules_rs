@@ -142,18 +142,18 @@ def _cfg_parser_smoke_test_impl(ctx):
         _cfg('all(feature = "serde", target_feature = "sse2")'),
         [triple_to_cfg_attrs(linux_gnu)],
     )
-    asserts.true(env, info.uses_feature_cfg)
+    asserts.true(env, info.feature_cfg != None)
     asserts.equals(env, info.matches, [])
 
     info = cfg_matches_expr_for_cfg_attrs(win_gnullvm, [triple_to_cfg_attrs(win_gnullvm)])
-    asserts.false(env, info.uses_feature_cfg)
+    asserts.equals(env, None, info.feature_cfg)
     asserts.equals(env, info.matches, [win_gnullvm])
 
     info = cfg_matches_expr_for_cfg_attrs(
         _cfg('target_feature = "sse2"'),
         [triple_to_cfg_attrs(linux_gnu)],
     )
-    asserts.false(env, info.uses_feature_cfg)
+    asserts.equals(env, None, info.feature_cfg)
     asserts.equals(env, info.matches, [linux_gnu])
 
     return unittest.end(env)

@@ -1,6 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:cache.bzl", "get_default_canonical_id")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "get_auth", "patch")
-load(":cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
+load(":cargo_credentials.bzl", "repository_registry_auth_headers")
 load(":registry_utils.bzl", "registry_download_url_from_template")
 load(":repository_utils.bzl", "cargo_build_file_values", "common_attrs", "package_version", "render_build_file_content")
 load(":toml2json.bzl", "run_toml2json")
@@ -27,15 +27,7 @@ def _generate_build_file(rctx, cargo_toml, purl_qualifiers = {}, package_path = 
     return render_build_file_content(rctx, rctx.attr, values, bazel_metadata = cargo.bazel_metadata)
 
 def _crate_repository_impl(rctx):
-    # TODO(zbarsky): Is there a better way than fetching this in every crate repository?
-    if rctx.attr.use_home_cargo_credentials:
-        headers = registry_auth_headers(
-            load_cargo_credentials(rctx, rctx.attr.cargo_config),
-            rctx.attr.source,
-        )
-    else:
-        headers = {}
-
+    headers = repository_registry_auth_headers(rctx)
     crate_name = rctx.attr.crate_name
     version = rctx.attr.version
     sha256 = rctx.attr.checksum

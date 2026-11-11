@@ -3,6 +3,7 @@ load("@bazel_tools//tools/build_defs/repo:utils.bzl", "get_auth")
 load("//rs/platforms:triples.bzl", "ALL_TARGET_TRIPLES")
 load(
     "//rs/private:cargo_workspace_graph.bzl",
+    "cargo_platforms",
     "fq_crate",
     "manifest_package_dir",
     "normalize_path",
@@ -85,16 +86,7 @@ def _select_by_triple(platform_triples, by_platform):
         return {}
 
     return {
-        triple: sorted(by_platform.get(platform_label(triple, False), []))
-        for triple in platform_triples
-    }
-
-def _resolved_select_by_triple(platform_triples, by_triple):
-    if not by_triple:
-        return {}
-
-    return {
-        triple: sorted(by_triple.get(triple, []))
+        triple: by_platform.get(platform_label(triple, False), [])
         for triple in platform_triples
     }
 
@@ -135,15 +127,15 @@ def _crate_attr(
         use_legacy_rules_rust_platforms = False,
     )
 
-def _resolved_crate_attr(feature_resolutions, platform_triples):
+def _resolved_crate_attr(feature_resolutions):
     return _crate_attr(
         aliases = feature_resolutions.aliases,
         build_script_deps = [],
-        build_script_deps_select = _resolved_select_by_triple(platform_triples, feature_resolutions.build_deps),
+        build_script_deps_select = feature_resolutions.build_deps,
         crate_features = [],
-        crate_features_select = _resolved_select_by_triple(platform_triples, feature_resolutions.features_enabled),
+        crate_features_select = feature_resolutions.features_enabled,
         deps = [],
-        deps_select = _resolved_select_by_triple(platform_triples, feature_resolutions.deps),
+        deps_select = feature_resolutions.deps,
         extra_compile_data = [],
     )
 
@@ -195,30 +187,18 @@ def _render_source_crate_build_file(rctx, source_root, bazel_package, workspace_
     cargo = _cargo_build_values(rctx, bazel_package, workspace_cargo_toml, target_name)
     return _render_crate_build_file(source_root, crate_attr, cargo.values, cargo.bazel_metadata)
 
-def _source_packages(source_root, lock_packages):
-    packages = []
+def _source_crate_package(source_root, package):
+    source = package.get("source")
+    name = package["name"]
+    version = package["version"]
+    if source == _CRATES_IO_INDEX:
+        return _source_package(source_root, paths.join(_VENDOR_ROOT, fq_crate(name, version)))
     path_source_prefix = "path+source_stdlib/"
-
-    for package in lock_packages:
-        source = package.get("source")
-        package = dict(package)
-        name = package["name"]
-        version = package["version"]
-
-        if source == _CRATES_IO_INDEX:
-            bazel_package = _source_package(source_root, paths.join(_VENDOR_ROOT, "%s-%s" % (name, version)))
-        elif source and source.startswith(path_source_prefix):
-            bazel_package = _source_package(source_root, source.removeprefix(path_source_prefix))
-        elif source:
-            fail("Unsupported rustc-src registry source %s for %s %s" % (source, name, version))
-        else:
-            fail("Unknown rustc-src source %s for %s %s" % (source, name, version))
-
-        package["bazel_package"] = bazel_package
-        package["target_name"] = name
-        packages.append(package)
-
-    return packages
+    if source and source.startswith(path_source_prefix):
+        return _source_package(source_root, source.removeprefix(path_source_prefix))
+    if source:
+        fail("Unsupported rustc-src registry source %s for %s %s" % (source, name, version))
+    fail("Unknown rustc-src source %s for %s %s" % (source, name, version))
 
 def _prune_rustc_src(rctx, source_root):
     for path in rctx.path(source_root).readdir():
@@ -307,20 +287,21 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
         repo_root = workspace_root,
         workspace_package_dir = "library",
     )
-    source_packages = _source_packages(source_root, lockfile_package_info.packages)
+    source_packages = lockfile_package_info.packages
+    for package in source_packages:
+        package["bazel_package"] = _source_crate_package(source_root, package)
     package_metadata_info = resolve_cargo_metadata_packages(
         source_packages,
         cargo_metadata,
-        ALL_TARGET_TRIPLES,
         skip_internal_rustc_placeholder_crates = False,
     )
-    resolution = resolve_cargo_workspace_members(
+    platforms = cargo_platforms(ALL_TARGET_TRIPLES)
+    resolve_cargo_workspace_members(
         rctx,
         cargo_metadata = workspace_cargo_metadata,
         packages = source_packages,
         workspace_members = lockfile_package_info.workspace_members,
-        versions_by_name = package_metadata_info.versions_by_name,
-        feature_resolutions_by_fq_crate = package_metadata_info.feature_resolutions_by_fq_crate,
+        package_resolution = package_metadata_info,
         annotations = {
             "std": {
                 "*": struct(
@@ -329,7 +310,7 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
                 ),
             },
         },
-        platform_triples = ALL_TARGET_TRIPLES,
+        platforms = platforms,
         materialize_workspace_members = True,
         dep_label_prefix = "//{}:".format(source_root),
         skip_internal_rustc_placeholder_crates = False,
@@ -337,10 +318,8 @@ def _generate_source_stdlib_build_files(rctx, source_root, root_build):
 
     dep_data_by_package = workspace_dep_data(
         cargo_metadata = workspace_cargo_metadata,
-        cfg_match_cache = resolution.cfg_match_cache,
-        feature_resolutions_by_fq_crate = resolution.feature_resolutions_by_fq_crate,
-        platform_cfg_attrs = resolution.platform_cfg_attrs,
-        platform_triples = ALL_TARGET_TRIPLES,
+        feature_resolutions_by_fq_crate = package_metadata_info.feature_resolutions_by_fq_crate,
+        platforms = platforms,
         repo_root = workspace_root,
         use_legacy_rules_rust_platforms = False,
         workspace_package = source_root,
@@ -396,7 +375,6 @@ alias(
         version = package["version"]
         fq = fq_crate(name, version)
         bazel_package = package["bazel_package"]
-        target_name = package["target_name"]
         rustc_srcs.add(_target_label(bazel_package, "srcs"))
         root_build.append("""\
 alias(
@@ -404,7 +382,7 @@ alias(
     actual = "{actual}",
 )
 """.format(
-            actual = _target_label(bazel_package, target_name),
+            actual = _target_label(bazel_package, name),
             fq = fq,
         ))
         rctx.file(
@@ -414,8 +392,8 @@ alias(
                 source_root,
                 bazel_package,
                 workspace_cargo_toml,
-                target_name,
-                crate_attr = _resolved_crate_attr(package["feature_resolutions"], ALL_TARGET_TRIPLES),
+                name,
+                crate_attr = _resolved_crate_attr(package["feature_resolutions"]),
             ),
         )
 

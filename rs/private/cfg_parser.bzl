@@ -1,5 +1,18 @@
 """Parses Cargo `cfg(...)` expressions and evaluates them against target triples."""
 
+_VARIADIC_CFG_OPS = ("all", "any")
+
+_TARGET_CFG_KEYS = (
+    "target_os",
+    "target_family",
+    "target_arch",
+    "target_env",
+    "target_vendor",
+    "target_endian",
+    "target_pointer_width",
+    "target_abi",
+)
+
 def _get(xs, index, default):
     if index < len(xs):
         return xs[index]
@@ -123,10 +136,8 @@ def cfg_parse(expr):
                 if len(args_list) != 1:
                     fail("cfg parse error: cfg(...) must contain a single expression.")
                 parent.append(args_list[0])
-            elif fname == "all":
-                parent.append({"kind": "all", "args": args_list})
-            elif fname == "any":
-                parent.append({"kind": "any", "args": args_list})
+            elif fname in _VARIADIC_CFG_OPS:
+                parent.append({"kind": fname, "args": args_list})
             elif fname == "not":
                 if len(args_list) != 1:
                     fail("cfg parse error: not(...) must have exactly one argument.")
@@ -370,74 +381,44 @@ def triple_to_cfg_attrs(triple):
 # Evaluator (non-recursive; explicit stack)
 ############################################
 
-def _eval_eq(ctx, key, value, features):
+def _eval_eq(ctx, key, value, has_feature):
     if key == "feature":
-        return value in features
+        return has_feature(value)
     if key == "target_feature":
         return _target_has_feature(ctx, value)
-    known = [
-        "target_os",
-        "target_family",
-        "target_arch",
-        "target_env",
-        "target_vendor",
-        "target_endian",
-        "target_pointer_width",
-        "target_abi",
-    ]
-    if key in known:
-        return ctx.get(key, "") == value
+    return key in _TARGET_CFG_KEYS and ctx.get(key, "") == value
 
-    # Unknown keys evaluate to False
-    # fail("Unknown key %s" % key)
-    return False
-
-def _eval_pred(ctx, name):
-    # Only boolean entries represent bare configuration names.
-    return ctx.get(name) == True
-
-def _cfg_eval(ast, ctx, features = []):
-    todo = [{"op": "VISIT", "node": ast}]
+def cfg_matches_ast(ast, ctx, has_feature):
+    todo = [ast]
     results = []
     for _ in range(200000):
         if not todo:
             break
-        instr = todo.pop()
-        op = instr["op"]
-        if op == "VISIT":
-            node = instr["node"]
-            kind = node["kind"]
-            if kind == "pred":
-                results.append(_eval_pred(ctx, node["name"]))
-            elif kind == "eq":
-                results.append(_eval_eq(ctx, node["key"], node["value"], features))
-            else:
-                children = node["args"]
-                n = len(children)
-                todo.append({"op": "REDUCE", "name": kind, "n": n})
-                for child in reversed(children):
-                    todo.append({"op": "VISIT", "node": child})
-        else:  # REDUCE
-            name = instr["name"]
-            n = instr["n"]
-            if name == "all":
-                ok = True
-                for _ in range(n):
-                    if not results.pop():
-                        ok = False
-                results.append(ok)
-            elif name == "any":
-                ok = False
-                for _ in range(n):
-                    if results.pop():
-                        ok = True
-                results.append(ok)
-            elif name == "not":
-                if n != 1:
+        node = todo.pop()
+        if type(node) == "tuple":
+            # All children have been evaluated before their parent.
+            op, count = node
+            if op == "not":
+                if count != 1:
                     fail("cfg eval error: not(...) arity mismatch.")
                 results.append(not results.pop())
+            elif op in _VARIADIC_CFG_OPS:
+                values = [results.pop() for _ in range(count)]
+                results.append(all(values) if op == "all" else any(values))
             else:
-                fail("cfg eval error: unknown op '" + name + "'.")
+                fail("cfg eval error: unknown op '" + op + "'.")
+            continue
+
+        kind = node["kind"]
+        if kind == "pred":
+            # Only boolean entries represent bare configuration names.
+            results.append(ctx.get(node["name"]) == True)
+        elif kind == "eq":
+            results.append(_eval_eq(ctx, node["key"], node["value"], has_feature))
+        else:
+            children = node["args"]
+            todo.append((kind, len(children)))
+            todo.extend(reversed(children))
     if todo:
         fail("cfg eval error: internal traversal did not finish.")
     if len(results) != 1:
@@ -447,7 +428,7 @@ def _cfg_eval(ast, ctx, features = []):
 def cfg_matches(expr, triple, features = []):
     ast, _ = cfg_parse(expr)
     ctx = triple_to_cfg_attrs(triple)
-    return _cfg_eval(ast, ctx, features)
+    return cfg_matches_ast(ast, ctx, lambda name: name in features)
 
 def cfg_matches_expr_for_triples(expr, triples, features = []):
     cfg_attrs = [triple_to_cfg_attrs(triple) for triple in triples]
@@ -458,14 +439,15 @@ def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features = []):
         ast, uses_feature_cfg = cfg_parse(expr)
         return struct(
             matches = cfg_matches_ast_for_triples(ast, cfg_attrs, features),
-            uses_feature_cfg = uses_feature_cfg,
+            feature_cfg = ast if uses_feature_cfg else None,
         )
     else:
         # Cargo target table keys that aren't cfg(...) are literal triples.
         return struct(
             matches = [cfg_attr["_triple"] for cfg_attr in cfg_attrs if cfg_attr["_triple"] == expr],
-            uses_feature_cfg = False,
+            feature_cfg = None,
         )
 
 def cfg_matches_ast_for_triples(ast, cfg_attrs, features = []):
-    return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if _cfg_eval(ast, cfg_attr, features)]
+    has_feature = lambda name: name in features
+    return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if cfg_matches_ast(ast, cfg_attr, has_feature)]

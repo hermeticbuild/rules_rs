@@ -1,20 +1,11 @@
-load(":cargo_credentials.bzl", "load_cargo_credentials", "registry_auth_headers")
+load(":cargo_credentials.bzl", "repository_registry_auth_headers")
 load(":registry_utils.bzl", "registry_download_template")
 
 def _registry_config_repository_impl(rctx):
-    # TODO(zbarsky): Is there a better way than fetching this in every crate repository?
-    if rctx.attr.use_home_cargo_credentials:
-        headers = registry_auth_headers(
-            load_cargo_credentials(rctx, rctx.attr.cargo_config),
-            rctx.attr.source,
-        )
-    else:
-        headers = {}
-
     rctx.download(
         rctx.attr.source.removeprefix("sparse+") + "config.json",
         "config.json",
-        headers = headers,
+        headers = repository_registry_auth_headers(rctx),
     )
 
     rctx.file("dl", registry_download_template(json.decode(rctx.read("config.json"))))
