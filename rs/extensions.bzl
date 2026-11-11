@@ -604,7 +604,7 @@ RESOLVED_PLATFORMS = select({{
             this_repo = repr("@" + hub_name + "//:"),
         )
 
-    data_bzl_contents = render_dep_data(workspace_dep_data(
+    dep_data = workspace_dep_data(
         cargo_metadata = cargo_metadata,
         feature_resolutions_by_fq_crate = resolved_facts.feature_resolutions_by_fq_crate,
         platforms = platforms,
@@ -612,16 +612,53 @@ RESOLVED_PLATFORMS = select({{
         workspace_package = workspace_package,
         use_legacy_rules_rust_platforms = use_legacy_rules_rust_platforms,
         lint_configs = lint_configs,
-    ))
+    )
+    data_bzl_contents = render_dep_data(dep_data)
+    package_files = _render_package_data_files(dep_data, sorted(resolved_platforms), hub_name)
 
     _hub_repo(
         name = hub_name,
-        contents = {
+        contents = package_files | {
             "BUILD.bazel": "\n".join(hub_contents),
             "defs.bzl": defs_bzl_contents,
             "data.bzl": data_bzl_contents,
         },
     )
+
+def _render_package_data_files(dep_data, platforms, hub_name):
+    files = {
+        "packages.bzl": "PACKAGES = %s\n" % repr({package: True for package in sorted(dep_data)}),
+    }
+    for package, data in dep_data.items():
+        files[paths.join("packages", package, "data.bzl")] = """load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
+
+_CRATE_DATA = {crate_data}
+
+def crate_data():
+    return _CRATE_DATA
+
+def aliases():
+    return _CRATE_DATA["aliases"]
+
+def all_crate_deps(
+        normal = False,
+        normal_dev = False,
+        build = False,
+        cargo_only = False):
+    return _all_crate_deps(
+        _CRATE_DATA,
+        platforms = _CRATE_DATA["platforms"],
+        normal = normal,
+        normal_dev = normal_dev,
+        build = build,
+        filter_prefix = {this_repo} if cargo_only else None,
+    )
+""".format(
+            # Keep empty branches so platform-only deps stay conditional.
+            crate_data = repr(data | {"platforms": platforms}),
+            this_repo = repr("@" + hub_name + "//:"),
+        )
+    return files
 
 _ALLOW_GIT_ENV = "RULES_RS_ALLOW_GIT"
 

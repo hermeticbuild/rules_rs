@@ -1,7 +1,7 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@build_script_aliases//:data.bzl", build_script_aliases_dep_data = "DEP_DATA")
-load("@root_package//:defs.bzl", root_package_lint_config = "lint_config")
+load("@root_package//:packages/data.bzl", root_package_data = "crate_data")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_rs//rs:rust_binary.bzl", "rust_binary")
 load("@rules_rs//rs:rust_library.bzl", "rust_library")
@@ -84,7 +84,7 @@ rust_library(
     srcs = ["lib.rs"],
     crate_name = "root_pkg",
     edition = "2021",
-    lint_config = root_package_lint_config(),
+    lint_config = root_package_data().get("lint_config"),
 )
 
 package_lints_test(
