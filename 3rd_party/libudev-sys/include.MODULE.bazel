@@ -4,5 +4,5 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.annotation(
     crate = "libudev-sys",
     gen_build_script = "off",
-    deps = ["@systemd//:libudev"],
+    link_deps = ["@systemd//:libudev"],
 )

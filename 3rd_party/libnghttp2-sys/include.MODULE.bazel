@@ -4,5 +4,5 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.annotation(
     crate = "libnghttp2-sys",
     gen_build_script = "off",
-    deps = ["@nghttp2"],
+    link_deps = ["@nghttp2"],
 )
