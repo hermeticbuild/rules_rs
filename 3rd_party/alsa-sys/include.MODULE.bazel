@@ -4,5 +4,5 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.annotation(
     crate = "alsa-sys",
     gen_build_script = "off",
-    deps = ["@alsa_lib"],
+    link_deps = ["@alsa_lib"],
 )

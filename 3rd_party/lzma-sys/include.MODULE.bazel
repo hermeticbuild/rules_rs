@@ -4,5 +4,5 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.annotation(
     crate = "lzma-sys",
     gen_build_script = "off",
-    deps = ["@xz//:lzma"],
+    link_deps = ["@xz//:lzma"],
 )
