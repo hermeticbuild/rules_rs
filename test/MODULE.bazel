@@ -155,6 +155,7 @@ TESTS = [
         # use_home_cargo_credentials = True,
         debug = True,
         generate_lint_config = test == "workspace_lints",
+        incompatible_no_root_alias_targets = True,
         platform_triples = [
             "aarch64-unknown-linux-gnu",
             "aarch64-apple-darwin",
@@ -210,6 +211,7 @@ crate.from_cargo(
     cargo_toml = "//:Cargo.toml",
     debug = True,
     generate_lint_config = True,
+    incompatible_no_root_alias_targets = True,
     platform_triples = [
         "aarch64-unknown-linux-gnu",
         "aarch64-apple-darwin",
@@ -477,6 +479,7 @@ crate.from_cargo(
     name = "visibility_hub",
     cargo_lock = "//visibility/workspace:Cargo.lock",
     cargo_toml = "//visibility/workspace:Cargo.toml",
+    incompatible_no_root_alias_targets = False,  # Exercise visibility on legacy root aliases too.
     platform_triples = [
         "aarch64-apple-darwin",
         "x86_64-apple-darwin",

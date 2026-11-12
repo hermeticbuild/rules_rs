@@ -9,7 +9,7 @@ rust_library(
     ],
     crate_name = "git_crates",
     deps = [
-        "@git_crates//:salsa",
+        "@git_crates//salsa",
     ],
 )
 

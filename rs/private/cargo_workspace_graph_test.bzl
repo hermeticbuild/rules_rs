@@ -277,7 +277,7 @@ def _resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl(ctx
         possible_deps = []
         if index:
             possible_deps.append({
-                "bazel_target": "//:chain-%s" % (index - 1),
+                "bazel_target": "//chain-%s" % (index - 1),
                 "package_index": index - 1,
                 "name": "chain-%s" % (index - 1),
                 "platforms": 1,
@@ -299,7 +299,7 @@ def _resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl(ctx
     resolve(None, packages, cargo_platforms(triples), False)
 
     asserts.true(env, "forward" in resolutions[0].features_enabled[triple])
-    asserts.equals(env, ["//:chain-0"], sorted(resolutions[1].deps[triple]))
+    asserts.equals(env, ["//chain-0"], sorted(resolutions[1].deps[triple]))
     return unittest.end(env)
 
 resolve_handles_dependency_chains_deeper_than_previous_round_limit_test = unittest.make(_resolve_handles_dependency_chains_deeper_than_previous_round_limit_impl)
@@ -353,10 +353,10 @@ def _late_optional_feature_impl(ctx):
     )
     for triple in [linux, macos]:
         asserts.equals(env, ["simd"], codec.features_enabled[triple])
-        asserts.equals(env, ["//:codec-1"], consumer.deps[triple])
+        asserts.equals(env, ["//codec-1"], consumer.deps[triple])
     asserts.equals(env, [], codec.features_enabled[windows])
     asserts.equals(env, [], consumer.deps[windows])
-    asserts.equals(env, {"//:codec-1": "backend"}, consumer.aliases)
+    asserts.equals(env, {"//codec-1": "backend"}, consumer.aliases)
     return unittest.end(env)
 
 late_optional_feature_test = unittest.make(_late_optional_feature_impl)

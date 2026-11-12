@@ -11,7 +11,7 @@ exports_files([
 [
     alias(
         name = name,
-        actual = "@rrwbd//:" + actual,
+        actual = "@rrwbd//" + actual,
     )
     for name, actual in {
         "serde_json": "serde_json",

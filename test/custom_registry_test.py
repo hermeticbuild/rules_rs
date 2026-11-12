@@ -117,7 +117,7 @@ class CustomRegistryTest(unittest.TestCase):
                             "--lockfile_mode=off",
                             "--noimplicit_deps",
                             "--output=xml",
-                            f"deps(@{hub_name}//:{CRATE_NAME}, 4)",
+                            f"deps(@{hub_name}//{CRATE_NAME}, 4)",
                         ],
                         cwd=workspace,
                         check=False,
@@ -140,7 +140,7 @@ class CustomRegistryTest(unittest.TestCase):
                         for value in rule.findall("boolean[@name='emit_warnings']")
                     ]
                     self.assertEqual(warnings, ["false"])
-                    self.assertIn(f"@{hub_name}//:{CRATE_NAME}", labels)
+                    self.assertIn(f"@{hub_name}//{CRATE_NAME}:{CRATE_NAME}", labels)
                     self.assertTrue(
                         any(
                             f"{hub_name}__{CRATE_NAME}-{CRATE_VERSION}" in label
@@ -228,6 +228,7 @@ class CustomRegistryTest(unittest.TestCase):
                     cargo_config = "//:.cargo/config.toml",
                     cargo_lock = "//:Cargo.lock",
                     cargo_toml = "//:Cargo.toml",
+                    incompatible_no_root_alias_targets = True,
                     platform_triples = ["x86_64-unknown-linux-gnu"],
                 )
                 use_repo(crate, "{hub_name}")

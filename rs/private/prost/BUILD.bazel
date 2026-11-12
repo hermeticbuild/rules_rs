@@ -14,7 +14,7 @@ exports_files([
 [
     alias(
         name = name,
-        actual = "@rrprd//:" + name,
+        actual = "@rrprd//" + name,
     )
     for name in [
         "h2",
@@ -47,9 +47,9 @@ rust_binary(
     edition = PROST_RUST_EDITION,
     tags = ["manual"],
     deps = [
-        "@rrprd//:heck-0.5.0",
-        "@rrprd//:prost",
-        "@rrprd//:prost-types",
+        "@rrprd//heck-0.5.0",
+        "@rrprd//prost",
+        "@rrprd//prost-types",
     ],
 )
 
@@ -57,7 +57,7 @@ rust_library_group(
     name = "prost_runtime",
     tags = ["manual"],
     deps = [
-        "@rrprd//:prost",
+        "@rrprd//prost",
     ],
 )
 
@@ -66,8 +66,8 @@ rust_library_group(
     tags = ["manual"],
     deps = [
         ":prost_runtime",
-        "@rrprd//:tonic",
-        "@rrprd//:tonic-prost",
+        "@rrprd//tonic",
+        "@rrprd//tonic-prost",
     ],
 )
 
@@ -77,12 +77,12 @@ rust_prost_toolchain(
         ":compile_well_known_types_setting": True,
         "//conditions:default": False,
     }),
-    prost_plugin = "@rrprd//:protoc-gen-prost__protoc-gen-prost",
+    prost_plugin = "@rrprd//protoc-gen-prost__protoc-gen-prost",
     prost_plugin_flag = "--plugin=protoc-gen-prost=%s",
     prost_runtime = ":prost_runtime",
-    prost_types = "@rrprd//:prost-types",
+    prost_types = "@rrprd//prost-types",
     tags = ["manual"],
-    tonic_plugin = "@rrprd//:protoc-gen-tonic__protoc-gen-tonic",
+    tonic_plugin = "@rrprd//protoc-gen-tonic__protoc-gen-tonic",
     tonic_plugin_flag = "--plugin=protoc-gen-tonic=%s",
     tonic_runtime = ":tonic_runtime",
 )
