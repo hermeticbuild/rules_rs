@@ -14,12 +14,12 @@ rust_binary(
     },
     deps = [
         ":gen_rust_project_lib",
-        "@rrra//:anyhow",
-        "@rrra//:camino",
-        "@rrra//:clap",
-        "@rrra//:env_logger",
-        "@rrra//:log",
-        "@rrra//:serde_json",
+        "@rrra//anyhow",
+        "@rrra//camino",
+        "@rrra//clap",
+        "@rrra//env_logger",
+        "@rrra//log",
+        "@rrra//serde_json",
     ],
 )
 
@@ -32,12 +32,12 @@ rust_binary(
     },
     deps = [
         ":gen_rust_project_lib",
-        "@rrra//:anyhow",
-        "@rrra//:camino",
-        "@rrra//:clap",
-        "@rrra//:env_logger",
-        "@rrra//:log",
-        "@rrra//:serde_json",
+        "@rrra//anyhow",
+        "@rrra//camino",
+        "@rrra//clap",
+        "@rrra//env_logger",
+        "@rrra//log",
+        "@rrra//serde_json",
     ],
 )
 
@@ -47,12 +47,12 @@ rust_binary(
     edition = "2021",
     deps = [
         ":gen_rust_project_lib",
-        "@rrra//:anyhow",
-        "@rrra//:camino",
-        "@rrra//:clap",
-        "@rrra//:env_logger",
-        "@rrra//:log",
-        "@rrra//:serde_json",
+        "@rrra//anyhow",
+        "@rrra//camino",
+        "@rrra//clap",
+        "@rrra//env_logger",
+        "@rrra//log",
+        "@rrra//serde_json",
     ],
 )
 
@@ -65,7 +65,7 @@ rust_binary(
     name = "launcher",
     srcs = ["@rules_rust//tools/rust_analyzer:bin/launcher.rs"],
     edition = "2021",
-    deps = ["@rrra//:serde_json"],
+    deps = ["@rrra//serde_json"],
 )
 
 rust_binary(
@@ -96,13 +96,13 @@ rust_binary(
     ],
     deps = [
         ":gen_rust_project_lib",
-        "@rrra//:anyhow",
-        "@rrra//:camino",
-        "@rrra//:clap",
-        "@rrra//:env_logger",
-        "@rrra//:jsonc-parser",
-        "@rrra//:log",
-        "@rrra//:serde_json",
+        "@rrra//anyhow",
+        "@rrra//camino",
+        "@rrra//clap",
+        "@rrra//env_logger",
+        "@rrra//jsonc-parser",
+        "@rrra//log",
+        "@rrra//serde_json",
         "@rules_rust//rust/runfiles",
     ],
 )
@@ -125,9 +125,9 @@ rust_binary(
     },
     toolchains = ["@rules_rust//rust/toolchain:current_rust_analyzer_toolchain"],
     deps = [
-        "@rrra//:clap",
-        "@rrra//:env_logger",
-        "@rrra//:log",
+        "@rrra//clap",
+        "@rrra//env_logger",
+        "@rrra//log",
         "@rules_rust//rust/runfiles",
     ],
 )
@@ -150,12 +150,12 @@ rust_library(
         ":toolchain_info_env",
     ],
     deps = [
-        "@rrra//:anyhow",
-        "@rrra//:camino",
-        "@rrra//:clap",
-        "@rrra//:log",
-        "@rrra//:serde",
-        "@rrra//:serde_json",
+        "@rrra//anyhow",
+        "@rrra//camino",
+        "@rrra//clap",
+        "@rrra//log",
+        "@rrra//serde",
+        "@rrra//serde_json",
         "@rules_rust//rust/runfiles",
     ],
 )
@@ -170,7 +170,7 @@ rust_test(
     name = "gen_rust_project_lib_test",
     crate = ":gen_rust_project_lib",
     deps = [
-        "@rrra//:itertools",
+        "@rrra//itertools",
     ],
 )
 

@@ -73,6 +73,7 @@ crate.from_cargo(
     name = "rrra",
     cargo_lock = "//tools/rust_analyzer:Cargo.lock",
     cargo_toml = "//tools/rust_analyzer:Cargo.toml",
+    incompatible_no_root_alias_targets = True,
     platform_triples = [
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",
@@ -86,6 +87,7 @@ crate.from_cargo(
     name = "rrprd",
     cargo_lock = "//rs/private/prost:Cargo.lock",
     cargo_toml = "//rs/private/prost:Cargo.toml",
+    incompatible_no_root_alias_targets = True,
     platform_triples = [
         "aarch64-unknown-linux-gnu",
         "aarch64-unknown-linux-musl",
@@ -103,6 +105,7 @@ crate.from_cargo(
     name = "rrwbd",
     cargo_lock = "//rs/private/wasm_bindgen:Cargo.lock",
     cargo_toml = "//rs/private/wasm_bindgen:Cargo.toml",
+    incompatible_no_root_alias_targets = True,
     platform_triples = [
         "aarch64-unknown-linux-gnu",
         "aarch64-unknown-linux-musl",
@@ -121,6 +124,7 @@ crate.from_cargo(
     name = "rpyo3c",
     cargo_lock = "//rs/private/pyo3:Cargo.lock",
     cargo_toml = "//rs/private/pyo3:Cargo.toml",
+    incompatible_no_root_alias_targets = True,
     platform_triples = [
         "aarch64-apple-darwin",
         "aarch64-pc-windows-msvc",

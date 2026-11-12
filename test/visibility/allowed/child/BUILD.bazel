@@ -4,6 +4,6 @@ build_test(
     name = "subpackages_test",
     targets = [
         "@visibility_macro//:sample",
-        "@visibility_hub//:itoa",
+        "@visibility_hub//itoa",
     ],
 )

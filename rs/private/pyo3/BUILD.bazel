@@ -31,8 +31,8 @@ current_rust_pyo3_introspection_toolchain(
 
 rust_pyo3_toolchain(
     name = "rust_pyo3_toolchain",
-    pyo3 = "@rpyo3c//:pyo3",
-    pyo3_introspection = "@rpyo3c//:pyo3-introspection",
+    pyo3 = "@rpyo3c//pyo3",
+    pyo3_introspection = "@rpyo3c//pyo3-introspection",
 )
 
 rust_binary(

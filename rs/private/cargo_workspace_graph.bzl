@@ -420,7 +420,7 @@ def resolve_cargo_workspace_members(
         materialize_workspace_members,
         validate_lockfile = True,
         debug = False,
-        dep_label_prefix = "//:",
+        dep_label_prefix = "//",
         skip_internal_rustc_placeholder_crates = True):
     platform_triples = platforms.bits.keys()
 

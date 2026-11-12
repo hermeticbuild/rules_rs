@@ -6,5 +6,5 @@ rust_binary(
     name = "vendored_crate_demo",
     srcs = ["app/src/main.rs"],
     edition = "2024",
-    deps = ["@vendored_crate_override//:itoa"],
+    deps = ["@vendored_crate_override//itoa"],
 )

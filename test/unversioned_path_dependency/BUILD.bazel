@@ -4,5 +4,5 @@ rust_test(
     name = "unversioned_path_demo_test",
     srcs = ["app/src/lib.rs"],
     edition = "2024",
-    deps = ["@unversioned_path_dependency//:unversioned"],
+    deps = ["@unversioned_path_dependency//unversioned"],
 )

@@ -142,46 +142,46 @@ rust_binary(
     name = "rust_binary",
     srcs = ["main.rs"],
     deps = [
-        "@many_workspace_deps//:actix-web",
-        "@many_workspace_deps//:apple-codesign",
-        "@many_workspace_deps//:apriltag",
-        "@many_workspace_deps//:axum",
-        "@many_workspace_deps//:ballista",
-        "@many_workspace_deps//:cssparser",
-        "@many_workspace_deps//:datafusion",
-        "@many_workspace_deps//:deltalake",
-        "@many_workspace_deps//:diesel",
-        "@many_workspace_deps//:ethers",
-        "@many_workspace_deps//:iced",
-        "@many_workspace_deps//:image",
-        "@many_workspace_deps//:oxc",
-        "@many_workspace_deps//:polars",
-        "@many_workspace_deps//:reqwest",
-        "@many_workspace_deps//:swc",
-        "@many_workspace_deps//:tantivy",
-        "@many_workspace_deps//:tao",
-        "@many_workspace_deps//:tonic",
-        "@many_workspace_deps//:tower",
-        "@many_workspace_deps//:walrus",
-        "@many_workspace_deps//:warp",
-        "@many_workspace_deps//:wasmtime",
-        "@many_workspace_deps//:wgpu",
-        "@many_workspace_deps//:yew",
+        "@many_workspace_deps//actix-web",
+        "@many_workspace_deps//apple-codesign",
+        "@many_workspace_deps//apriltag",
+        "@many_workspace_deps//axum",
+        "@many_workspace_deps//ballista",
+        "@many_workspace_deps//cssparser",
+        "@many_workspace_deps//datafusion",
+        "@many_workspace_deps//deltalake",
+        "@many_workspace_deps//diesel",
+        "@many_workspace_deps//ethers",
+        "@many_workspace_deps//iced",
+        "@many_workspace_deps//image",
+        "@many_workspace_deps//oxc",
+        "@many_workspace_deps//polars",
+        "@many_workspace_deps//reqwest",
+        "@many_workspace_deps//swc",
+        "@many_workspace_deps//tantivy",
+        "@many_workspace_deps//tao",
+        "@many_workspace_deps//tonic",
+        "@many_workspace_deps//tower",
+        "@many_workspace_deps//walrus",
+        "@many_workspace_deps//warp",
+        "@many_workspace_deps//wasmtime",
+        "@many_workspace_deps//wgpu",
+        "@many_workspace_deps//yew",
     ],
 )
 
 rust_test(
     name = "tracy_client_sys_test",
     srcs = ["tracy_client_sys_test.rs"],
-    deps = ["@many_workspace_deps//:tracy-client-sys"],
+    deps = ["@many_workspace_deps//tracy-client-sys"],
 )
 
 rust_test(
     name = "aws_lc_sys_test",
     srcs = ["aws_lc_sys_test.rs"],
     deps = [
-        "@many_workspace_deps//:aws-lc-rs-1.17.1",
-        "@many_workspace_deps//:aws-lc-sys-0.42.0",
+        "@many_workspace_deps//aws-lc-rs-1.17.1",
+        "@many_workspace_deps//aws-lc-sys-0.42.0",
     ],
 )
 
@@ -189,9 +189,9 @@ rust_binary(
     name = "aws_lc_openssl",
     srcs = ["aws_lc_openssl.rs"],
     deps = [
-        "@many_workspace_deps//:aws-lc-rs-1.17.1",
-        "@many_workspace_deps//:aws-lc-sys-0.42.0",
-        "@many_workspace_deps//:openssl-0.10.80",
+        "@many_workspace_deps//aws-lc-rs-1.17.1",
+        "@many_workspace_deps//aws-lc-sys-0.42.0",
+        "@many_workspace_deps//openssl-0.10.80",
     ],
 )
 
@@ -203,8 +203,8 @@ cargo_bin_name_test(
 
 genquery(
     name = "rav1e_has_annotation_tag",
-    expression = 'attr("tags", ".*annotation-tag-test.*", deps(@build_script_runtime_env//:rav1e))',
-    scope = ["@build_script_runtime_env//:rav1e"],
+    expression = 'attr("tags", ".*annotation-tag-test.*", deps(@build_script_runtime_env//rav1e))',
+    scope = ["@build_script_runtime_env//rav1e"],
     target_compatible_with = select({
         "@platforms//os:windows": ["@platforms//:incompatible"],
         "//conditions:default": [],
@@ -213,8 +213,8 @@ genquery(
 
 genquery(
     name = "rav1e_build_script_has_annotation_tag",
-    expression = 'attr("tags", ".*annotation-build-script-tag-test.*", deps(@build_script_runtime_env//:rav1e))',
-    scope = ["@build_script_runtime_env//:rav1e"],
+    expression = 'attr("tags", ".*annotation-build-script-tag-test.*", deps(@build_script_runtime_env//rav1e))',
+    scope = ["@build_script_runtime_env//rav1e"],
     target_compatible_with = select({
         "@platforms//os:windows": ["@platforms//:incompatible"],
         "//conditions:default": [],
@@ -223,20 +223,20 @@ genquery(
 
 genquery(
     name = "cfg_feature_target_dep_inner_deps",
-    expression = "deps(@cfg_feature_target_dep//:inner-0.1.0)",
-    scope = ["@cfg_feature_target_dep//:inner-0.1.0"],
+    expression = "deps(@cfg_feature_target_dep//inner-0.1.0)",
+    scope = ["@cfg_feature_target_dep//inner-0.1.0"],
 )
 
 genquery(
     name = "annotation_select_deps",
-    expression = "deps(@build_script_env_select//:bitflags-2.9.4)",
-    scope = ["@build_script_env_select//:bitflags-2.9.4"],
+    expression = "deps(@build_script_env_select//bitflags-2.9.4)",
+    scope = ["@build_script_env_select//bitflags-2.9.4"],
 )
 
 genquery(
     name = "annotation_link_deps",
-    expression = "deps(@build_script_aliases//:proc-macro2-1.0.101)",
-    scope = ["@build_script_aliases//:proc-macro2-1.0.101"],
+    expression = "deps(@build_script_aliases//proc-macro2-1.0.101)",
+    scope = ["@build_script_aliases//proc-macro2-1.0.101"],
 )
 
 genrule(
@@ -275,8 +275,8 @@ genrule(
 
 genquery(
     name = "first_party_feature_propagation_dep_leaf_deps",
-    expression = "deps(@first_party_feature_propagation//:dep_leaf-0.1.0)",
-    scope = ["@first_party_feature_propagation//:dep_leaf-0.1.0"],
+    expression = "deps(@first_party_feature_propagation//dep_leaf-0.1.0)",
+    scope = ["@first_party_feature_propagation//dep_leaf-0.1.0"],
 )
 
 genrule(
@@ -296,14 +296,14 @@ genrule(
 
 genquery(
     name = "workspace_member_annotation_features_dep_leaf_deps",
-    expression = "deps(@workspace_member_annotation_features//:dep_leaf-0.1.0)",
-    scope = ["@workspace_member_annotation_features//:dep_leaf-0.1.0"],
+    expression = "deps(@workspace_member_annotation_features//dep_leaf-0.1.0)",
+    scope = ["@workspace_member_annotation_features//dep_leaf-0.1.0"],
 )
 
 genquery(
     name = "vendored_workspace_dep_itoa_deps",
-    expression = "deps(@vendored_workspace_dep//:itoa-1.0.11)",
-    scope = ["@vendored_workspace_dep//:itoa-1.0.11"],
+    expression = "deps(@vendored_workspace_dep//itoa-1.0.11)",
+    scope = ["@vendored_workspace_dep//itoa-1.0.11"],
 )
 
 genrule(
@@ -457,12 +457,12 @@ filegroup(
         ":verify_workspace_renamed_path_dep_aliases",
         "//prost:echo_rust_proto",
         "//self_dev_dependency/mycrate",
-        "@binaries//:protoc-gen-prost-extra",
-        "@binaries//:protoc-gen-prost__protoc-gen-prost",
-        "@binary_only//:b3sum__b3sum",
-        "@build_script_aliases//:workspace_cargo_lints",
-        "@git_crates_aliased_deps//:nucleo-matcher_additive",
-        "@git_crates_aliased_deps//:nucleo_additive",
+        "@binaries//protoc-gen-prost-extra",
+        "@binaries//protoc-gen-prost__protoc-gen-prost",
+        "@binary_only//b3sum__b3sum",
+        "@build_script_aliases//workspace_cargo_lints",
+        "@git_crates_aliased_deps//nucleo-matcher_additive",
+        "@git_crates_aliased_deps//nucleo_additive",
         "@root_package//:_workspace_deps",
     ] + select({
         "@platforms//os:windows": [],
