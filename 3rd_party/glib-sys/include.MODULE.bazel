@@ -4,15 +4,15 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.annotation(
     crate = "gio-sys",
     gen_build_script = "off",
-    deps = ["@glib//gio"],
+    link_deps = ["@glib//gio"],
 )
 crate.annotation(
     crate = "glib-sys",
     gen_build_script = "off",
-    deps = ["@glib//glib"],
+    link_deps = ["@glib//glib"],
 )
 crate.annotation(
     crate = "gobject-sys",
     gen_build_script = "off",
-    deps = ["@glib//gobject"],
+    link_deps = ["@glib//gobject"],
 )
