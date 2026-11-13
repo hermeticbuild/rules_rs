@@ -311,12 +311,6 @@ crate.annotation(
     patches = ["//:windows-version.patch"],
 )
 crate.annotation(
-    crate = "datafusion-common",
-    patch_args = ["-p1"],
-    patches = ["//:datafusion-common.patch"],
-    repositories = ["many_workspace_deps"],
-)
-crate.annotation(
     crate = "wasmtime-internal-component-macro",
     patch_args = ["-p1"],
     patches = ["//:wasmtime-internal-component-macro.patch"],
@@ -363,6 +357,8 @@ include("//:3rd_party/apriltag-sys/include.MODULE.bazel")
 include("//:3rd_party/tracy-client-sys/include.MODULE.bazel")
 
 include("//:3rd_party/objc-sys/include.MODULE.bazel")
+
+include("//:3rd_party/datafusion-common/include.MODULE.bazel")
 
 include("//:3rd_party/zstd-sys/include.MODULE.bazel")
 
