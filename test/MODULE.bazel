@@ -364,6 +364,8 @@ include("//:3rd_party/tracy-client-sys/include.MODULE.bazel")
 
 include("//:3rd_party/objc-sys/include.MODULE.bazel")
 
+include("//:3rd_party/datafusion-common/include.MODULE.bazel")
+
 include("//:3rd_party/zstd-sys/include.MODULE.bazel")
 
 # TODO(zbarsky): alsa-sys is not currently tested, fix it

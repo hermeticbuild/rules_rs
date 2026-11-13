@@ -1,0 +1,6 @@
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.annotation(
+    crate = "datafusion-common",
+    gen_build_script = "on",
+    patches = ["@rules_rs//:3rd_party/datafusion-common/env.patch"],
+)
