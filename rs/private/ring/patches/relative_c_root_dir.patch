@@ -1,0 +1,19 @@
+diff --git a/build.rs b/build.rs
+--- a/build.rs
++++ b/build.rs
+@@ -266,10 +266,9 @@ const APPLE_ABI: &[&str] = &["ios", "macos", "tvos", "visionos", "watchos"];
+ const WINDOWS: &str = "windows";
+ 
+ fn main() {
+-    // Avoid assuming the working directory is the same is the $CARGO_MANIFEST_DIR so that toolchains
+-    // which may assume other working directories can still build this code.
+-    let c_root_dir = PathBuf::from(
+-        env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should always be set"),
+-    );
++    // Use a relative path rather than $CARGO_MANIFEST_DIR so that compilers (e.g. Clang under
++    // ASan/UBSan) do not embed the absolute working directory into object file metadata, which
++    // trips rules_rust's --check-output-for-working-dir check.
++    let c_root_dir = PathBuf::new();
+ 
+     // Keep in sync with `core_name_and_version!` in prefixed.rs.
+     let core_name_and_version = [
