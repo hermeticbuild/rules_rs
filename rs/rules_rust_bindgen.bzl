@@ -61,6 +61,7 @@ def _clang_compile_flags(ctx, cc_toolchain, feature_configuration):
         "-nostdlibinc",
         "-resource-dir=",
         "-std=",
+        "-Wno-",
         "--no-standard-includes",
     )
     xclang_flags_to_strip = (
