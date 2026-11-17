@@ -104,13 +104,26 @@ _WINDOWS_GNULLVM_CRATES = [
     "windows_x86_64_gnullvm",
 ]
 
+def _ring_implicit_annotation():
+    return _crate_annotation(
+        patch_args = ["-p1"],
+        patches = [Label("//rs/private/ring/patches:relative_c_root_dir.patch")],
+    )
+
+def _implicit_annotation_for(crate_name, version, hub_name):
+    if crate_name in _WINDOWS_GNULLVM_CRATES:
+        return _windows_gnullvm_implicit_annotation(crate_name, version, hub_name)
+    if crate_name == "ring" and version.startswith("0.17."):
+        return _ring_implicit_annotation()
+    return None
+
 def annotation_for(annotations_by_crate, crate_name, version, hub_name):
     """Return the annotation matching crate/version, falling back to '*' or default."""
     version_map = annotations_by_crate.get(crate_name, {})
     annotation = version_map.get(version) or version_map.get("*")
+    implicit = _implicit_annotation_for(crate_name, version, hub_name)
     if annotation:
-        if crate_name in _WINDOWS_GNULLVM_CRATES:
-            implicit = _windows_gnullvm_implicit_annotation(crate_name, version, hub_name)
+        if implicit:
             values = structs.to_dict(implicit)
             defaults = structs.to_dict(_DEFAULT_CRATE_ANNOTATION)
             for field, value in structs.to_dict(annotation).items():
@@ -118,7 +131,7 @@ def annotation_for(annotations_by_crate, crate_name, version, hub_name):
                 # annotation representation uses None.
                 if value == defaults.get(field) or (value == "" and defaults.get(field) == None):
                     continue
-                if field == "deps":
+                if field in ("deps", "patches"):
                     values[field] += value
                 elif field == "extra_aliased_targets":
                     values[field].update(value)
@@ -129,8 +142,8 @@ def annotation_for(annotations_by_crate, crate_name, version, hub_name):
             return _crate_annotation(**values)
         return annotation
 
-    if crate_name in _WINDOWS_GNULLVM_CRATES:
-        return _windows_gnullvm_implicit_annotation(crate_name, version, hub_name)
+    if implicit:
+        return implicit
     return _DEFAULT_CRATE_ANNOTATION
 
 _SELECTABLE_ANNOTATION_FIELDS = {
