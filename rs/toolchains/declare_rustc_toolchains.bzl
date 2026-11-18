@@ -282,6 +282,14 @@ def declare_rustc_toolchains(
                     # UEFI has no C/C++ allocator shim or weak symbol support.
                     "allocator_library": "@rules_rust//rust/private/cc:empty",
                     "global_allocator_library": "@rules_rust//rust/private/cc:empty",
+                    # rustc records its unremapped executable and command line
+                    # in CodeView, including absolute --remap-path-prefix inputs.
+                    # Suppress CodeView and PDBs until rustc can sanitize these
+                    # records; otherwise debug-mode UEFI outputs embed exec paths.
+                    "extra_rustc_flags": _rustc_flags_to_select(extra_rustc_flags) + [
+                        "-Cdebuginfo=0",
+                        "-Clink-arg=/DEBUG:none",
+                    ],
                 })
             )
 
