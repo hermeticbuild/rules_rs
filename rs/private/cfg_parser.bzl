@@ -470,5 +470,5 @@ def cfg_matches_expr_for_cfg_attrs(expr, cfg_attrs, features = []):
 
 def cfg_matches_ast_for_triples(ast, cfg_attrs, features = []):
     # type: (_Node, Collection[CfgAttrs], Collection[str]) -> list[str]
-    has_feature = lambda name: name in features
+    has_feature = lambda name: name in features  # type: Callable[[str], bool]
     return [cfg_attr["_triple"] for cfg_attr in cfg_attrs if cfg_matches_ast(ast, cfg_attr, has_feature)]

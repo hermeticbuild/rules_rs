@@ -2,6 +2,14 @@
 
 def rust_version_channel(version):
     # type: (str) -> Literal["nightly", "beta", "stable"]
+    """Returns the Rust release channel named by a version string.
+
+    Args:
+        version: Rust version or release channel.
+
+    Returns:
+        The nightly, beta, or stable release channel.
+    """
     if version.startswith("nightly"):
         return "nightly"
     if version.startswith("beta"):

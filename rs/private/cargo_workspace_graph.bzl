@@ -662,26 +662,38 @@ def workspace_dep_data(
 
     return dep_data
 
+_PACKAGE_DATA_FIELDS = """
+    "aliases": dict[str, str],
+    "binaries": dict[str, str],
+    "build_deps": list[str],
+    "build_deps_by_platform": dict[str, list[str]],
+    "crate_features": list[str],
+    "crate_features_by_platform": dict[str, list[str]],
+    "crate_name": str,
+    "deps": list[str],
+    "deps_by_platform": dict[str, list[str]],
+    "dev_deps": list[str],
+    "dev_deps_by_platform": dict[str, list[str]],
+    "edition": str,
+    "lint_config": NotRequired[str],
+    "package_name": str,
+    "shared_libraries": dict[str, str],
+"""
+
+def _package_data_type(with_platforms = False):
+    fields = _PACKAGE_DATA_FIELDS
+    if with_platforms:
+        fields += '    "platforms": list[str],\n'
+    return """# TODO(https://github.com/bazelbuild/bazel/issues/31770): Use a native alias
+# when supported Bazel versions accept typed dictionary fields.
+# type _CrateData = dict[{
+%s
+# }]
+""" % "\n".join(["# " + line for line in fields.strip("\n").splitlines()])
+
 def render_dep_data(dep_data):
-    return """\
-# TODO(https://github.com/bazelbuild/bazel/issues/31770): Annotate DEP_DATA
-# directly once supported Bazel versions accept typed dictionary fields.
-# type: dict[str, dict[{
-#     "aliases": dict[str, str],
-#     "binaries": dict[str, str],
-#     "build_deps": list[str],
-#     "build_deps_by_platform": dict[str, list[str]],
-#     "crate_features": list[str],
-#     "crate_features_by_platform": dict[str, list[str]],
-#     "crate_name": str,
-#     "deps": list[str],
-#     "deps_by_platform": dict[str, list[str]],
-#     "dev_deps": list[str],
-#     "dev_deps_by_platform": dict[str, list[str]],
-#     "edition": str,
-#     "lint_config": NotRequired[str],
-#     "shared_libraries": dict[str, str],
-# }]]
+    return _package_data_type() + """
+# type: dict[str, _CrateData]
 DEP_DATA = {
 %s
 }
@@ -690,3 +702,51 @@ DEP_DATA = {
         "    %s: %s," % (repr(package), repr(dep_data[package]))
         for package in sorted(dep_data.keys())
     ])
+
+def render_package_data(data, platforms, hub_name):
+    """Renders dependency metadata and accessors for one Cargo workspace package.
+
+    Args:
+        data: Package metadata produced by workspace_dep_data.
+        platforms: Resolved platform labels, including empty dependency branches.
+        hub_name: Repository name used to filter Cargo-only dependencies.
+
+    Returns:
+        Starlark source for the package's data.bzl.
+    """
+    return """load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
+
+{schema}
+# type: _CrateData
+_CRATE_DATA = {crate_data}
+
+def crate_data():
+    # type: () -> _CrateData
+    return _CRATE_DATA
+
+def aliases():
+    # type: () -> dict[str, str]
+    return _CRATE_DATA["aliases"]
+
+def all_crate_deps(
+        normal = False,
+        normal_dev = False,
+        build = False,
+        cargo_only = False):
+    # type: (bool, bool, bool, bool) -> list[str] | select[list[str], Literal['list']]
+    # TODO(https://github.com/tamird/sty/blob/ed623d51f/docs/type-interfaces.md#selectors):
+    # Use a native return type when Bazel can express a selector with a list branch.
+    return _all_crate_deps(
+        _CRATE_DATA,
+        platforms = _CRATE_DATA["platforms"],
+        normal = normal,
+        normal_dev = normal_dev,
+        build = build,
+        filter_prefix = {this_repo} if cargo_only else None,
+    )
+""".format(
+        schema = _package_data_type(with_platforms = True),
+        # Keep empty branches so platform-only deps stay conditional.
+        crate_data = repr(data | {"platforms": platforms}),
+        this_repo = repr("@" + hub_name + "//"),
+    )

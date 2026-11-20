@@ -19,10 +19,7 @@ type _Node = (
     | dict[{"kind": _Combinator, "args": list[_Node]}]
 )
 type _Frame = dict[{"fn": str, "args": list[_Node]}]
-type _Instruction = (
-    dict[{"op": Literal["VISIT"], "node": _Node}]
-    | dict[{"op": Literal["REDUCE"], "name": _Combinator, "n": int}]
-)
+type CfgExpression = _Node
 type _Cfg = Mapping[str, object]
 type _TripleAttrs = dict[{
     "_triple": str,
@@ -43,7 +40,7 @@ type _TripleAttrs = dict[{
 
 type CfgAttrs = dict[{"_triple": ReadOnly[str]}, ...]
 
-type _Matches = struct[{"matches": list[str], "uses_feature_cfg": bool}]
+type _Matches = struct[{"matches": list[str], "feature_cfg": CfgExpression | None}]
 
 # TODO(https://github.com/bazelbuild/bazel/pull/30373): Move these generic
 # signatures into .bzl when the minimum Bazel parses def with type parameters.

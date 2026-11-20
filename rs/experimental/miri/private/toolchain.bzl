@@ -38,7 +38,8 @@ def _toolchain_info(ctx, all_files, extra = None):
         "process_wrapper": ctx.executable.process_wrapper,
         "target_triple": ctx.attr.target_triple,
     }
-    fields.update(extra or {})
+    if extra:
+        fields.update(extra)
     return platform_common.ToolchainInfo(**fields)
 
 def _miri_toolchain_impl(ctx):

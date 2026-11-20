@@ -1,6 +1,7 @@
 load("//rs/private:cfg_parser.bzl", "cfg_matches_ast")
 
 def _count(states):
+    # type: (Collection[_State]) -> int
     count = 0
     for state in states:
         resolution = state.resolution
@@ -10,6 +11,7 @@ def _count(states):
     return count
 
 def _cfg_platforms(ast, mask, features, platforms):
+    # type: (CfgExpression, int, Mapping[str, int], _Platforms) -> int
     for triple, bit in platforms.bits.items():
         if mask & bit:
             if not cfg_matches_ast(ast, platforms.attrs[triple], lambda name: bool(features.get(name, 0) & bit)):
@@ -17,6 +19,7 @@ def _cfg_platforms(ast, mask, features, platforms):
     return mask
 
 def _enable(state, name, mask, dirty):
+    # type: (_State, str, int, set[int]) -> None
     previous = state.features.get(name, 0)
     added = mask & ~previous
     if not added:
@@ -29,6 +32,7 @@ def _enable(state, name, mask, dirty):
         state.implications.append((implications, added))
 
 def _resolve_features(state, states, dirty, platforms, debug):
+    # type: (_State, Sequence[_State], set[int], _Platforms, bool) -> None
     features = state.features
     for implications, mask in state.implications[:]:
         for implication in implications:
@@ -61,6 +65,7 @@ def _resolve_features(state, states, dirty, platforms, debug):
                 print("Skipping enabling subfeature", implication, "for", state.package["name"], "@", state.package["version"], "on", [t for t, bit in platforms.bits.items() if unmatched & bit])
 
 def _resolve_dependencies(state, pending, states, dirty, platforms):
+    # type: (_State, Collection[tuple[_ResolvedDependency, int]], Sequence[_State], set[int], _Platforms) -> list[tuple[_ResolvedDependency, int]]
     remaining = []
     for dep, mask in pending:
         active = mask
@@ -85,6 +90,7 @@ def _resolve_dependencies(state, pending, states, dirty, platforms):
     return remaining
 
 def _sorted_by_triple(masks, bits):
+    # type: (Mapping[str, int], Mapping[str, int]) -> dict[str, list[str]]
     items = sorted(masks)
     if len(set(masks.values())) == 1:
         mask = masks[items[0]]
@@ -98,23 +104,26 @@ def _sorted_by_triple(masks, bits):
 _MAX_ROUNDS = 200
 
 def resolve(mctx, packages, platforms, debug):
+    # type: (module_ctx | None, Sequence[_Package], _Platforms, bool) -> None
     # Each feature maps to the platforms that enable it. Propagate those
     # platforms together, then expand them into the per-triple repository attributes.
     platform_bits = platforms.bits
-    states = []
-    pending = []
+    states = []  # type: list[_State]
+    pending = []  # type: list[list[tuple[_ResolvedDependency, int]]]
     dirty = set(range(len(packages)))
     for package in packages:
         resolution = package["feature_resolutions"]
 
-        deps_by_name = {}
-        dependencies = []
+        deps_by_name = {}  # type: dict[str, list[_ResolvedDependency]]
+        dependencies = []  # type: list[tuple[_ResolvedDependency, int]]
         for dep in resolution.possible_deps:
             if "package_index" not in dep:
                 continue
             dependencies.append((dep, dep["platforms"]))
             deps_by_name.setdefault(dep["name"], []).append(dep)
         pending.append(dependencies)
+
+        # type: _State
         state = struct(
             package = package,
             resolution = resolution,

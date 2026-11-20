@@ -79,14 +79,6 @@ def inherit_workspace_package_fields(cargo_toml, workspace_cargo_toml):
 
     return cargo_toml
 
-def spoke_repo_name(hub_name, name, version):
-    # type: (object, object, object) -> str
-    """Returns the repository name for a crate's hub spoke."""
-    s = "%s__%s-%s" % (hub_name, name, version)
-    if "+" in s:
-        s = s.replace("+", "-")
-    return s
-
 def package_version(package):
     """Returns the `[package]` version of a decoded Cargo.toml, or Cargo's default `0.0.0`."""
 
@@ -103,6 +95,19 @@ def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", g
 
 def cargo_build_file_values_for_package(rctx, cargo_toml, gen_binaries, package_dir, package, gen_build_script):
     # type: (_CargoFiles, CargoManifest, Collection[str], path, CargoPackage, str) -> _CargoBuildValues
+    """Computes crate build values after resolving the package and script option.
+
+    Args:
+        rctx: Repository context used to read paths and create helper files.
+        cargo_toml: Decoded Cargo manifest.
+        gen_binaries: Binary target names to generate.
+        package_dir: Resolved package directory.
+        package: Manifest package fields after workspace inheritance.
+        gen_build_script: Explicit build-script generation option.
+
+    Returns:
+        A struct containing the Bazel metadata and Cargo build values.
+    """
     name = package["name"]
     version = package_version(package)
     parsed_version = parse_full_version(version)

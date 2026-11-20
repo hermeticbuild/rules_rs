@@ -24,7 +24,7 @@ jobs:
         id: downloads
         run: sed -i '/^common --remote_cache=/d; /^common --experimental_remote_downloader=/d; /^common --bes_backend=/d' .bazelrc test/.bazelrc
       - name: Check test repository fixtures
-        uses: &sty tamird/sty@8d51556a1e3153dc52c3cc335b05fb1dd8cd929b
+        uses: &sty tamird/sty@1ec32e3ef847d9086034792ed587ac659c6548f6
         with:
           working-directory: test
           artifact-name: sty-test
@@ -39,15 +39,13 @@ jobs:
         id: workspace
         shell: bash
         run: |
-          location=$(bazel query --output=location '@rrra//:BUILD.bazel')
-          hub="${location%/BUILD.bazel:*}"
-          for file in data.bzl defs.bzl; do
-            if [[ ! -f "$hub/$file" ]]; then
-              echo "Missing generated Cargo workspace file: $hub/$file" >&2
-              exit 1
-            fi
-          done
-          printf 'path=%s\n' "$hub" >> "$GITHUB_OUTPUT"
+          location=$(bazel query --output=location '@rrra//rules_rs_rust_analyzer:BUILD.bazel')
+          package_dir="${location%/BUILD.bazel:*}"
+          if [[ ! -f "$package_dir/data.bzl" ]]; then
+            echo "Missing generated Cargo workspace file: $package_dir/data.bzl" >&2
+            exit 1
+          fi
+          printf 'path=%s\n' "$package_dir" >> "$GITHUB_OUTPUT"
       - uses: *sty
         if: ${{ !cancelled() && steps.workspace.outcome == 'success' }}
         with:
@@ -84,4 +82,3 @@ jobs:
             rs/rules_rust_wasm_bindgen.bzl
             tools/rust_analyzer/defs.bzl
             ${{ steps.workspace.outputs.path }}/data.bzl
-            ${{ steps.workspace.outputs.path }}/defs.bzl
