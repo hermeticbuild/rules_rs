@@ -2,7 +2,10 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 cc_library(
     name = "tracy_client",
-    srcs = ["tracy/TracyClient.cpp"] + glob(["tracy/**/*.h", "tracy/**/*.hpp"]),
+    srcs = ["tracy/TracyClient.cpp"] + glob([
+        "tracy/**/*.h",
+        "tracy/**/*.hpp",
+    ]),
     linkstatic = True,
     local_defines = [
         "TRACY_ENABLE",

@@ -6,8 +6,8 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "dep-crate",
     srcs = ["src/lib.rs"],
+    aliases = aliases(),
     crate_name = "dep_crate",
     edition = "2024",
-    aliases = aliases(),
     deps = all_crate_deps(normal = True),
 )

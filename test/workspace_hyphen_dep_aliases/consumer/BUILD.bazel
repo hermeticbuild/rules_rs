@@ -4,7 +4,7 @@ load("@workspace_hyphen_dep_aliases//:defs.bzl", "aliases", "all_crate_deps")
 
 rust_test(
     name = "consumer_test",
-    aliases = aliases(),
     srcs = ["src/lib.rs"],
+    aliases = aliases(),
     deps = all_crate_deps(normal = True),
 )

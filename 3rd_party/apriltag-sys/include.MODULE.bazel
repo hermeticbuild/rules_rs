@@ -22,7 +22,7 @@ cc_library(
     crate = "apriltag-sys",
     extra_aliased_targets = {"apriltags_cc": "apriltags"},
     gen_build_script = "off",
+    link_deps = ["@many_workspace_deps//apriltags_cc-0.3.0"],
     repositories = ["many_workspace_deps"],
     version = "0.3.0",
-    link_deps = ["@many_workspace_deps//apriltags_cc-0.3.0"],
 )
