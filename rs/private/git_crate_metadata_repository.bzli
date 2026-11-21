@@ -1,0 +1,22 @@
+"""Context consumed by the generated Git crate wrapper repository."""
+
+load(":repository_utils.bzli", "CrateAttributes")
+
+# TODO(https://github.com/bazelbuild/bazel/issues/32020): Type _repo_impl in its source when
+# Bazel exposes a repository context with the crate attributes shared from repository_utils.
+# Source comments cannot import its type-only CrateAttributes.
+type _Metadata = repo_metadata
+
+class _MetadataContext(Protocol):
+    @property
+    def attr(self) -> Intersection[CrateAttributes, struct[{
+        "hub_name": str,
+        "gen_build_script": str,
+        "package_name": str,
+        "purl": str,
+        "package_version": str,
+    }, ...]]: ...
+
+    def file(self, path: str, content: str) -> None: ...
+
+    def repo_metadata(self, *, reproducible: bool) -> _Metadata: ...

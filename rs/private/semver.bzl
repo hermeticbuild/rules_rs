@@ -1,4 +1,12 @@
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Use native type aliases
+# for these dictionary fields once all supported Bazel versions check them.
+# type Version = tuple[int, int, int, str]
+# type VersionCore = tuple[int, int, int]
+# type ParsedVersion = dict[{"version": Version, "specified": int, "wildcard_pos": int | None}]
+# type Comparator = tuple[str, Version]
+
 def _is_numeric_identifier(s):
+    # type: (str) -> bool
     if not s:
         return False
     for ch in s.elems():
@@ -7,6 +15,7 @@ def _is_numeric_identifier(s):
     return True
 
 def _parse_version_pattern(v):
+    # type: (str) -> ParsedVersion | None
     """
     Parse a Cargo-semver-like version pattern.
 
@@ -53,6 +62,7 @@ def _parse_version_pattern(v):
         if comp in ("*", "x", "X"):
             wildcard_pos = i
             specified = i
+
             # Cargo supports wildcard only in the trailing position.
             if pre or i != len(comps) - 1:
                 return None
@@ -68,23 +78,27 @@ def _parse_version_pattern(v):
     }
 
 def parse_full_version(v):
+    # type: (str) -> Version
     parsed = _parse_version_pattern(v)
     if not parsed:
         fail("Invalid semver version: %s" % v)
     return parsed["version"]
 
 def _parse_version(v):
+    # type: (str) -> VersionCore
     return parse_full_version(v)[:3]
 
 def _cmp_core(a, b):
+    # type: (VersionCore, VersionCore) -> int
     for i in range(3):
         if a[i] != b[i]:
             return -1 if a[i] < b[i] else 1
     return 0
 
 def _cmp(a, b):
+    # type: (Version, Version) -> int
     # First compare major/minor/patch.
-    core_cmp = _cmp_core(a, b)
+    core_cmp = _cmp_core(a[:3], b[:3])
     if core_cmp != 0:
         return core_cmp
 
@@ -127,9 +141,11 @@ def _cmp(a, b):
     return -1 if len(a_ids) < len(b_ids) else 1
 
 def _core_to_version(core):
+    # type: (VersionCore) -> Version
     return (core[0], core[1], core[2], "")
 
 def _cargo_default_upper_bound(parsed):
+    # type: (ParsedVersion) -> VersionCore
     # Implements semver caret upper bound:
     # increment the leftmost NON-ZERO component of the *specified* version,
     # zeroing the rest; if all zero, bump patch.
@@ -153,12 +169,14 @@ def _cargo_default_upper_bound(parsed):
     return (0, 0, 1)
 
 def _tilde_upper_bound(parsed):
+    # type: (ParsedVersion) -> VersionCore
     major, minor = parsed["version"][:2]
     if parsed["specified"] <= 1:
         return (major + 1, 0, 0)
     return (major, minor + 1, 0)
 
 def _next_partial_upper_bound(parsed):
+    # type: (ParsedVersion) -> VersionCore
     major, minor = parsed["version"][:2]
     if parsed["specified"] <= 1:
         return (major + 1, 0, 0)
@@ -167,6 +185,7 @@ def _next_partial_upper_bound(parsed):
     return (major, minor, parsed["version"][2] + 1)
 
 def _wildcard_upper_bound(parsed):
+    # type: (ParsedVersion) -> VersionCore | None
     wildcard_pos = parsed["wildcard_pos"]
     major, minor = parsed["version"][:2]
     if wildcard_pos == 0:
@@ -178,21 +197,29 @@ def _wildcard_upper_bound(parsed):
     return None
 
 def _split_req_operator(req):
+    # type: (str) -> tuple[str, str]
     for op in (">=", "<=", ">", "<", "=", "^", "~"):
         if req.startswith(op):
             return op, req[len(op):].strip()
     return "", req
 
 def _satisfies_comparator(op, rhs_tuple, ver_tuple):
+    # type: (str, Version, Version) -> bool
     c = _cmp(ver_tuple, rhs_tuple)
-    if op == "<":  return c < 0
-    if op == "<=": return c <= 0
-    if op == ">":  return c > 0
-    if op == ">=": return c >= 0
-    if op == "=": return c == 0
+    if op == "<":
+        return c < 0
+    if op == "<=":
+        return c <= 0
+    if op == ">":
+        return c > 0
+    if op == ">=":
+        return c >= 0
+    if op == "=":
+        return c == 0
     return False
 
 def _normalize_req_to_comparators(req):
+    # type: (str) -> list[Comparator]
     """
     Turn a single requirement string into a list of (op, tuple) comparators.
     Supports Cargo-like requirement syntax for a single clause:
@@ -254,6 +281,7 @@ def _normalize_req_to_comparators(req):
     return [(op, version)]
 
 def _parse_requirement(req):
+    # type: (str) -> list[Comparator] | None
     clauses = [p.strip() for p in req.split(",") if p.strip()]
     if not clauses:
         return None
@@ -267,6 +295,7 @@ def _parse_requirement(req):
     return comparators
 
 def _prerelease_allowed(version, comparators):
+    # type: (Version, Collection[Comparator]) -> bool
     # Cargo/semver: prereleases only match if at least one comparator with
     # the same major/minor/patch also has a prerelease.
     if not version[3]:
@@ -278,6 +307,7 @@ def _prerelease_allowed(version, comparators):
     return False
 
 def select_matching_version(req, versions):
+    # type: (str, Collection[str]) -> str | None
     """
     Supports:
       - caret or bare default: "^X.Y.Z", "X.Y", "0", etc. (Cargo semantics)

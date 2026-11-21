@@ -58,6 +58,7 @@ _build_script_test = unittest.make(_build_script_test_impl)
 _readme_test = unittest.make(_readme_test_impl)
 
 def cargo_manifest_tests():
+    """Defines tests for generated Cargo repository values."""
     _build_script_test(name = "repository_build_script_test")
     _readme_test(name = "repository_readme_test")
     native.test_suite(

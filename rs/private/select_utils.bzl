@@ -1,9 +1,11 @@
 def platform_label(triple, use_legacy_rules_rust_platforms):
+    # type: (str, bool) -> str
     if use_legacy_rules_rust_platforms:
         return "@rules_rust//rust/platform:" + triple.replace("-musl", "-gnu").replace("-gnullvm", "-msvc")
     return "@rules_rs//rs/platforms/config:" + triple
 
 def compute_select(non_platform_items, platform_items):
+    # type: (Collection[str], Mapping[str, Collection[str]]) -> tuple[Collection[str], dict[str, list[str]]]
     if not platform_items:
         return non_platform_items, {}
 

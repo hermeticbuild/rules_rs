@@ -40,9 +40,11 @@ BINDGEN_PREBUILTS = [
 ]
 
 def bindgen_binary_name(os):
+    # type: (object) -> str
     return "bindgen.exe" if os == "windows" else "bindgen"
 
 def _bindgen_toolchain_impl(ctx):
+    # type: (...) -> list[ToolchainInfo]
     return [platform_common.ToolchainInfo(bindgen = ctx.executable.bindgen)]
 
 _bindgen_toolchain = rule(
@@ -58,6 +60,7 @@ _bindgen_toolchain = rule(
 )
 
 def declare_bindgen_toolchains():
+    # type: () -> None
     """Declares one toolchain for each bindgen prebuilt."""
     for prebuilt in BINDGEN_PREBUILTS:
         _bindgen_toolchain(

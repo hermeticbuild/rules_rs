@@ -3,6 +3,14 @@ load("//rs:rust_binary.bzl", "rust_binary")
 
 package(default_visibility = ["//rs/experimental/miri:__pkg__"])
 
+exports_files(
+    [
+        "providers.bzli",
+        "toolchain.bzli",
+    ],
+    visibility = ["//rs/experimental/miri:__pkg__"],
+)
+
 rust_binary(
     name = "miri_test_runner",
     srcs = ["miri_test_runner.rs"],
