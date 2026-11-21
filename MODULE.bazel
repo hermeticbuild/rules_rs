@@ -1,5 +1,7 @@
 module(
     name = "rules_rs",
+    # TODO(https://github.com/bazelbuild/bazel/pull/30373): Convert simple .bzl type
+    # comments to annotations once every supported Bazel parses them (8.8+ on 8.x).
     bazel_compatibility = [">=8.7.0"],
 )
 
@@ -198,7 +200,7 @@ use_repo(crate, "rpyo3c")
 bazel_dep(name = "rules_go", version = "0.59.0", dev_dependency = True)
 bazel_dep(name = "gazelle", version = "0.47.0", dev_dependency = True)
 bazel_dep(name = "bazel_skylib_gazelle_plugin", version = "1.8.2", dev_dependency = True)
-bazel_dep(name = "buildifier_prebuilt", version = "6.1.2", dev_dependency = True)
+bazel_dep(name = "buildifier_prebuilt", version = "8.5.1.4", dev_dependency = True)
 
 register_toolchains(
     "@default_rust_toolchains//...",

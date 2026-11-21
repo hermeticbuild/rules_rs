@@ -1,6 +1,20 @@
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Use native type aliases
+# for these dictionary fields once all supported Bazel versions check them.
+# type _RegistryConfig = dict[{"dl": str}, ...]
+# type _Source = dict[{
+#     "replace-with": NotRequired[str],
+#     "registry": NotRequired[str],
+# }, ...]
+# type _Registry = dict[{"index": NotRequired[str]}, ...]
+# type _CargoConfig = dict[{
+#     "source": NotRequired[dict[str, _Source]],
+#     "registries": NotRequired[dict[str, _Registry]],
+# }, ...]
+
 CRATES_IO_REGISTRY = "sparse+https://index.crates.io/"
 
 def resolve_registry_source(source, cargo_config = {}):
+    # type: (str | None, _CargoConfig) -> str | None
     """Resolves a Cargo.lock registry source using Cargo source replacements."""
     if source == None:
         return None
@@ -38,6 +52,7 @@ def resolve_registry_source(source, cargo_config = {}):
     fail("Cargo registry source replacements could not be resolved")
 
 def registry_download_template(config):
+    # type: (_RegistryConfig) -> str
     """Returns the crate download template from a registry config.
 
     Args:
@@ -58,6 +73,7 @@ def registry_download_template(config):
     return dl
 
 def registry_download_url_from_template(template, crate, version, checksum):
+    # type: (str, str, str, str) -> str
     """Expands a registry download template for one crate.
 
     Args:
@@ -78,6 +94,7 @@ def registry_download_url_from_template(template, crate, version, checksum):
     })
 
 def registry_download_url(config, crate, version, checksum):
+    # type: (_RegistryConfig, str, str, str) -> str
     """Expands a registry config into the download URL for one crate."""
     return registry_download_url_from_template(
         registry_download_template(config),
@@ -87,12 +104,15 @@ def registry_download_url(config, crate, version, checksum):
     )
 
 def registry_config_repo_name(hub_name, source):
+    # type: (str, str) -> str
     return hub_name + "_" + registry_repo_name(source)
 
 def registry_repo_name(source):
+    # type: (str) -> str
     return source.removeprefix("sparse+").replace(":", "_").replace("/", "_")
 
 def registry_path_prefix(crate):
+    # type: (str) -> str
     """Returns Cargo's case-preserving registry directory prefix.
 
     Args:
@@ -113,5 +133,6 @@ def registry_path_prefix(crate):
     return "%s/%s" % (crate[0:2], crate[2:4])
 
 def sharded_path(crate):
+    # type: (str) -> str
     """Returns the sparse-index path containing a crate's metadata."""
     return registry_path_prefix(crate) + "/" + crate

@@ -8,6 +8,7 @@ load(
     "cargo_toml_fact",
     "platform_label",
     "render_dep_data",
+    "render_package_data",
     "render_string_list",
     "resolve_cargo_workspace_members",
     "resolve_package_facts",
@@ -579,6 +580,7 @@ _PLATFORMS = [
 ]
 
 def aliases(package_name = None):
+    # type: (str | None) -> dict[str, str]
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return {{}}
@@ -586,6 +588,7 @@ def aliases(package_name = None):
     return dep_data["aliases"]
 
 def crate_name(package_name = None):
+    # type: (str | None) -> str | None
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
@@ -593,6 +596,7 @@ def crate_name(package_name = None):
     return dep_data["crate_name"]
 
 def edition(package_name = None):
+    # type: (str | None) -> str | None
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
@@ -600,6 +604,7 @@ def edition(package_name = None):
     return dep_data["edition"]
 
 def lint_config(package_name = None):
+    # type: (str | None) -> str | None
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
         return None
@@ -612,6 +617,9 @@ def all_crate_deps(
         build = False,
         package_name = None,
         cargo_only = False):
+    # type: (bool, bool, bool, str | None, bool) -> list[str] | select[list[str], Literal['list']]
+    # TODO(https://github.com/tamird/sty/blob/8d51556a1/docs/type-interfaces.md#selectors):
+    # Use a native return type when Bazel can express a selector whose first branch is a list.
 
     dep_data = DEP_DATA.get(package_name or native.package_name())
     if not dep_data:
@@ -635,34 +643,7 @@ def _write_package_data(files, dep_data, platforms, hub_name):
     for data in dep_data.values():
         name = data["package_name"]
         files.setdefault(name + "/BUILD.bazel", "")
-        files[name + "/data.bzl"] = """load("@rules_rs//rs/private:all_crate_deps.bzl", _all_crate_deps = "all_crate_deps")
-
-_CRATE_DATA = {crate_data}
-
-def crate_data():
-    return _CRATE_DATA
-
-def aliases():
-    return _CRATE_DATA["aliases"]
-
-def all_crate_deps(
-        normal = False,
-        normal_dev = False,
-        build = False,
-        cargo_only = False):
-    return _all_crate_deps(
-        _CRATE_DATA,
-        platforms = _CRATE_DATA["platforms"],
-        normal = normal,
-        normal_dev = normal_dev,
-        build = build,
-        filter_prefix = {this_repo} if cargo_only else None,
-    )
-""".format(
-            # Keep empty branches so platform-only deps stay conditional.
-            crate_data = repr(data | {"platforms": platforms}),
-            this_repo = repr("@" + hub_name + "//"),
-        )
+        files[name + "/data.bzl"] = render_package_data(data, platforms, hub_name)
 
 _ALLOW_GIT_ENV = "RULES_RS_ALLOW_GIT"
 

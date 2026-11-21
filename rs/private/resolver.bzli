@@ -1,0 +1,49 @@
+"""Cargo feature resolution using one platform bitmask per enabled item."""
+
+load(":cfg_parser.bzli", "CfgAttrs", "CfgExpression")
+
+# TODO(https://github.com/bazelbuild/bazel/issues/31770): Declare these fields
+# in source when Bazel supports typed dictionary keys.
+type _UnresolvedDependency = dict[{
+    "package_index": NotRequired[Never],
+}, ...]
+
+class _ResolvedDependency(TypedDict):
+    name: ReadOnly[str]
+    bazel_target: ReadOnly[str]
+    package_index: ReadOnly[int]
+    platforms: ReadOnly[int]
+    feature_cfg: NotRequired[ReadOnly[CfgExpression]]
+    kind: NotRequired[ReadOnly[str]]
+    package: NotRequired[ReadOnly[str]]
+    optional: NotRequired[ReadOnly[bool]]
+    features: NotRequired[ReadOnly[Collection[str]]]
+
+type _FeatureResolutions = struct[{
+    "feature_seeds": list[tuple[Collection[str], int]],
+    "features_enabled": dict[str, list[str]],
+    "build_deps": dict[str, list[str]],
+    "deps": dict[str, list[str]],
+    "aliases": dict[str, str],
+    "package_index": int,
+    "possible_deps": Collection[_UnresolvedDependency | _ResolvedDependency],
+    "possible_features": Mapping[str, Collection[str]],
+}]
+type _Package = dict[{
+    "name": ReadOnly[str],
+    "version": ReadOnly[str],
+    "feature_resolutions": ReadOnly[_FeatureResolutions],
+}, ...]
+type _Platforms = struct[{
+    "bits": Mapping[str, int],
+    "attrs": Mapping[str, CfgAttrs],
+}, ...]
+type _State = struct[{
+    "package": _Package,
+    "resolution": _FeatureResolutions,
+    "features": dict[str, int],
+    "implications": list[tuple[Collection[str], int]],
+    "deps": dict[str, int],
+    "build_deps": dict[str, int],
+    "deps_by_name": dict[str, list[_ResolvedDependency]],
+}]

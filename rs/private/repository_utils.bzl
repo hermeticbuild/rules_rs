@@ -6,9 +6,11 @@ load(":semver.bzl", "parse_full_version")
 _label_list_dict = getattr(attr, "label_list_dict", attr.string_list_dict)
 
 def spoke_repo_name(hub_name, name, version):
+    # type: (str, str, str) -> str
     return ("%s__%s-%s" % (hub_name, name, version)).replace("+", "-")
 
 def _format_branches(branches):
+    # type: (Collection[tuple[str, str]]) -> str
     return """select({
         %s
     })""" % (
@@ -16,6 +18,7 @@ def _format_branches(branches):
     )
 
 def render_select(non_platform_items, platform_items, use_legacy_rules_rust_platforms):
+    # type: (Collection[object], Mapping[str, Collection[object]], bool) -> tuple[list[str], str]
     non_platform_items = [str(item) for item in non_platform_items]
     platform_items = {
         platform: [str(item) for item in items]
@@ -33,6 +36,7 @@ def render_select(non_platform_items, platform_items, use_legacy_rules_rust_plat
     return common_items, _format_branches(branches)
 
 def render_select_build_script_env(platform_items, use_legacy_rules_rust_platforms):
+    # type: (Mapping[str, str], bool) -> str
     branches = [
         (platform_label(triple, use_legacy_rules_rust_platforms), items)
         for triple, items in platform_items.items()
@@ -46,6 +50,7 @@ def render_select_build_script_env(platform_items, use_legacy_rules_rust_platfor
     return _format_branches(branches)
 
 def _exclude_deps_from_features(features):
+    # type: (Collection[str]) -> list[str]
     return [f for f in features if not f.startswith("dep:")]
 
 _INHERITABLE_PACKAGE_FIELDS = [
@@ -81,11 +86,28 @@ def package_version(package):
     return package.get("version", "0.0.0")
 
 def cargo_build_file_values(rctx, cargo_toml, gen_binaries, package_path = "", gen_build_script = None):
+    # type: (_CargoContext, CargoManifest, Collection[str], str | path, str | None) -> _CargoBuildValues
     package_dir = rctx.path(package_path or ".")
     package = cargo_toml["package"]
     if gen_build_script == None:
         gen_build_script = rctx.attr.gen_build_script
+    return cargo_build_file_values_for_package(rctx, cargo_toml, gen_binaries, package_dir, package, gen_build_script)
 
+def cargo_build_file_values_for_package(rctx, cargo_toml, gen_binaries, package_dir, package, gen_build_script):
+    # type: (_CargoFiles, CargoManifest, Collection[str], path, CargoPackage, str) -> _CargoBuildValues
+    """Computes crate build values after resolving the package and script option.
+
+    Args:
+        rctx: Repository context used to read paths and create helper files.
+        cargo_toml: Decoded Cargo manifest.
+        gen_binaries: Binary target names to generate.
+        package_dir: Resolved package directory.
+        package: Manifest package fields after workspace inheritance.
+        gen_build_script: Explicit build-script generation option.
+
+    Returns:
+        A struct containing the Bazel metadata and Cargo build values.
+    """
     name = package["name"]
     version = package_version(package)
     parsed_version = parse_full_version(version)
@@ -227,6 +249,7 @@ _RUST_CRATE_MACRO_CALL = """{indent}rust_crate(
 """
 
 def render_rust_crate_call(attr, values, bazel_metadata = {}, extra_deps = "", indent = "", skip_deps_verification = False):
+    # type: (CrateAttributes, CrateValues, BazelMetadata, str, str, bool) -> str
     # We keep conditional_crate_features unrendered here because it must be treated specially for build scripts.
     # See `rs/private/rust_crate.bzl` for details.
     crate_features, conditional_crate_features = compute_select(
