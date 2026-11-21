@@ -4,5 +4,5 @@ crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
 crate.annotation(
     crate = "cairo-sys-rs",
     gen_build_script = "off",
-    deps = ["@cairo"],
+    link_deps = ["@cairo"],
 )
