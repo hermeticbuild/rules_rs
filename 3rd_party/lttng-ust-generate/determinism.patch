@@ -1,0 +1,49 @@
+diff --git src/generator/tracepoint_impl.rs src/generator/tracepoint_impl.rs
+index 3d82012..711fc2c 100644
+--- src/generator/tracepoint_impl.rs
++++ src/generator/tracepoint_impl.rs
+@@ -11,7 +11,7 @@ pub(in super) fn generate_tp_impl(path: &PathBuf, include_path: &PathBuf) -> io:
+         .expect(&format!("Failed to create tracepoint impl {:?}\n", path));
+     write!(outf, "#define TRACEPOINT_CREATE_PROBES\n")?;
+     write!(outf, "#define TRACEPOINT_DEFINE\n")?;
+-    write!(outf, "#include \"{}\"\n", include_path.to_string_lossy())
++    write!(outf, "#include \"{}\"\n", include_path.file_name().unwrap().to_string_lossy())
+ }
+
+ pub(in super) fn generate_tp_header(path: &PathBuf, providers: &[Provider]) -> io::Result<()> {
+@@ -19,7 +19,7 @@ pub(in super) fn generate_tp_header(path: &PathBuf, providers: &[Provider]) -> i
+         .expect(&format!("Failed to create tracepoint header {:?}\n", path));
+
+     write!(outf, "#undef TRACEPOINT_INCLUDE\n")?;
+-    write!(outf, "#define TRACEPOINT_INCLUDE \"{}\"\n\n", path.to_string_lossy())?;
++    write!(outf, "#define TRACEPOINT_INCLUDE \"{}\"\n\n", path.file_name().unwrap().to_string_lossy())?;
+
+     write!(outf, "#if !defined(_RUST_TRACEPOINT_GUARD)")?;
+     write!(outf, " || defined(TRACEPOINT_HEADER_MULTI_READ)\n")?;
+diff --git src/generator/tracepoint_interface.rs src/generator/tracepoint_interface.rs
+index cf69a6f..7e553f2 100644
+--- src/generator/tracepoint_interface.rs
++++ src/generator/tracepoint_interface.rs
+@@ -14,8 +14,8 @@ pub(in super) fn generate_interface_impl(path: &PathBuf,
+     let mut outf = File::create(path)
+         .expect(&format!("Failed to create tracepoint interface implementation {:?}\n", path));
+
+-    write!(outf, "#include \"{}\"\n", interface_header.to_string_lossy())?;
+-    write!(outf, "#include \"{}\"\n", tracepoint_header.to_string_lossy())?;
++    write!(outf, "#include \"{}\"\n", interface_header.file_name().unwrap().to_string_lossy())?;
++    write!(outf, "#include \"{}\"\n", tracepoint_header.file_name().unwrap().to_string_lossy())?;
+
+     for provider in providers {
+         generate_provider_impl(provider, &mut outf)?;
+diff --git src/generator/rust_bindings.rs src/generator/rust_bindings.rs
+index 6eab432..6f2b864 100644
+--- src/generator/rust_bindings.rs
++++ src/generator/rust_bindings.rs
+@@ -30,6 +30,7 @@ fn write_include<F: Write>(outf: &mut F, raw_bindings_path: &PathBuf) -> io::Res
+
+ fn write_providers<F: Write>(outf: &mut F, providers: &[Provider]) -> io::Result<()> {
+     for provider in providers {
++        write!(outf, "#[allow(clippy::useless_transmute)]\n")?;
+         write!(outf, "pub(in super) mod {} {{", provider.name)?;
+         for event_class in &provider.classes {
+             for instance in &event_class.instances {
