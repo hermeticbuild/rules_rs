@@ -8,11 +8,11 @@ publish = false
 path = "empty.rs"
 
 [dependencies]
-pyo3 = { version = "0.28.3", features = [
+pyo3 = { version = "0.29.3", features = [
     "abi3",
     "abi3-py311",
     "extension-module",
     "experimental-inspect",
 ] }
-pyo3-ffi = "0.28.3"
-pyo3-introspection = "0.28.3"
+pyo3-ffi = "0.29.3"
+pyo3-introspection = "0.29.3"
