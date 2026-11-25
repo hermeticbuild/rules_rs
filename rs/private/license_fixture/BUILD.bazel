@@ -1,0 +1,11 @@
+load(":tests.bzl", "license_test")
+
+exports_files(["license_test.py"])
+
+license_test(
+    name = "inherited_license_test",
+    expression = "NOASSERTION",
+    original = "@inheritance_source//:a/LICENSE",
+    purl = "pkg:cargo/implicit@1.2.3",
+    target = "@inheritance_checkout//a/crates/member:implicit",
+)
