@@ -11,8 +11,16 @@ def parse_git_url(url):
         fail("No commit SHA (#...) fragment found in URL: " + url)
     return parts[0].partition("?")[0].removeprefix("git+"), parts[1]
 
-def _sanitize_path_fragment(path):
-    return path.replace("/", "_").replace(":", "_").replace("?", "_")
+def git_source_path(path):
+    """Encode a source URL in bounded, filesystem-safe path components."""
+
+    # Escape percent first so a literal escape never aliases an encoded character.
+    encoded = path.replace("%", "%25")
+    for character, escape in [("/", "%2F"), (":", "%3A"), ("?", "%3F"), ("\\", "%5C"), ("*", "%2A"), ("<", "%3C"), (">", "%3E"), ("|", "%7C"), ('"', "%22")]:
+        encoded = encoded.replace(character, escape)
+
+    # A fixed leaf avoids file/directory collisions for prefix-related URLs.
+    return "/".join(["git-metadata"] + ["part_" + encoded[i:i + 60] for i in range(0, len(encoded), 60)] + ["Cargo.toml"])
 
 def new_downloader_state():
     return struct(
@@ -28,7 +36,7 @@ def start_github_download(mctx, state, package):
     fetch = state.in_flight_git_crate_fetches_by_url.get(url)
     if not fetch:
         fetch = struct(
-            download_token = mctx.download(url, _sanitize_path_fragment(url), allow_fail = True, block = False),
+            download_token = mctx.download(url, git_source_path(url), allow_fail = True, block = False),
             packages = [],
         )
         state.in_flight_git_crate_fetches_by_url[url] = fetch
@@ -87,7 +95,7 @@ def _find_path_dependency(dependencies, name):
 def _member_manifest(mctx, manifest, member, github_url, allow_fail = False):
     if github_url:
         url = github_url.rsplit("/", 1)[0] + "/" + member + "/Cargo.toml"
-        path = _sanitize_path_fragment(url)
+        path = git_source_path(url)
         return struct(path = path, token = mctx.download(url, path, allow_fail = allow_fail, block = False))
     return struct(path = manifest.dirname.get_child(member + "/Cargo.toml"), token = None)
 
@@ -167,11 +175,11 @@ def _read_git_cargo_tomls(mctx, packages, manifest, github_url = None):
 def download_metadata_for_git_crates(mctx, state):
     for url, fetch in state.in_flight_git_crate_fetches_by_url.items():
         fetch.download_token.wait()
-        _read_git_cargo_tomls(mctx, fetch.packages, mctx.path(_sanitize_path_fragment(url)), github_url = url)
+        _read_git_cargo_tomls(mctx, fetch.packages, mctx.path(git_source_path(url)), github_url = url)
 
-    for source, packages in state.pending_git_clones_by_source.items():
+    for index, packages in enumerate(state.pending_git_clones_by_source.values()):
         remote, commit = packages[0]["git_source"]
-        clone_dir = mctx.path(_sanitize_path_fragment(source))
+        clone_dir = mctx.path("git-sources/%d" % index)
         git_repo(struct(
             delete = lambda _: 0,
             execute = mctx.execute,
