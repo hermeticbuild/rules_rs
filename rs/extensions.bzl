@@ -112,7 +112,6 @@ def _add_git_crate(git_repos, hub, package, remote, commit):
             "patches": set(),
             "remote": remote,
             "use_git": False,
-            "workspace_cargo_toml": annotation.workspace_cargo_toml,
         }
         git_repos[repo_name] = git_repo
     elif git_repo["remote"] != remote or git_repo["commit"] != commit:
@@ -862,6 +861,7 @@ def _crate_impl(mctx):
             },
             archive_integrity = facts.get("git_archive_integrity:" + attrs["archive_url"], ""),
             build_files = {path: annotation.additive_build_file_content for path, annotation in annotations.items()},
+            workspace_cargo_tomls = {path: annotation.workspace_cargo_toml for path, annotation in annotations.items()},
             **attrs
         )
 
