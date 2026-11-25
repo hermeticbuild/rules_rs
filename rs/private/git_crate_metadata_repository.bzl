@@ -36,6 +36,7 @@ def crate(
                 version = repr(rctx.attr.package_version),
             ),
             extra_deps = "package_metadata_bazel_deps",
+            extra_compile_data = ["//:__rules_rs_cargo_sources"],
             indent = "    ",
         ),
     ))
