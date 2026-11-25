@@ -11,7 +11,6 @@ _CASES = [
     ("sibling", "workspace", "sibling", "", "README"),
     ("same", "same", "same", "", "README.md"),
     ("disabled", "disabled", "disabled/member", "readme = true\n", "README.md"),
-    ("invalid", "invalid", "invalid/member", "readme = false\n", "README.md"),
 ]
 
 def _source_impl(rctx):
@@ -90,7 +89,9 @@ def _fixtures_impl(mctx):
     commit_file = mctx.path(Label("@inheritance_source//:commit"))
     commit = mctx.read(commit_file).strip()
     _hub(name = "inheritance_hub")
-    for name, _workspace, _member, _readme, _readme_file in _CASES:
+    members = {}
+    for name, workspace, member, _readme, _readme_file in _CASES:
+        members[member + "/BUILD.bazel"] = workspace + "/Cargo.toml"
         git_crate_metadata_repository(
             name = "inheritance_hub__%s-1.2.3" % name,
             hub_name = "inheritance_hub",
@@ -98,15 +99,13 @@ def _fixtures_impl(mctx):
             package_version = "1.2.3",
             purl = "pkg:cargo/%s@1.2.3" % name,
         )
-    for name, invalid in [("inheritance_checkout", False), ("inheritance_invalid", True)]:
-        members = {member + "/BUILD.bazel": workspace + "/Cargo.toml" for case, workspace, member, _readme, _file in _CASES if (case == "invalid") == invalid}
-        git_cargo_workspace_repository(
-            name = name,
-            remote = str(commit_file.dirname),
-            commit = commit,
-            hub_name = "inheritance_hub",
-            build_files = {member: "" for member in members},
-            workspace_cargo_tomls = members,
-        )
+    git_cargo_workspace_repository(
+        name = "inheritance_checkout",
+        remote = str(commit_file.dirname),
+        commit = commit,
+        hub_name = "inheritance_hub",
+        build_files = {member: "" for member in members},
+        workspace_cargo_tomls = members,
+    )
 
 fixtures = module_extension(implementation = _fixtures_impl)

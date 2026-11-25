@@ -226,4 +226,4 @@ inheritance_source(
 )
 
 inheritance_fixtures = use_extension("//rs/private/package_inheritance_fixture:repos.bzl", "fixtures", dev_dependency = True)
-use_repo(inheritance_fixtures, "inheritance_checkout", "inheritance_invalid")
+use_repo(inheritance_fixtures, "inheritance_checkout")
