@@ -51,21 +51,28 @@ def rust_crate(
         visibility = ["//visibility:public"],
     )
 
-    compile_data = native.glob(
-        include = ["**"],
-        exclude = [
-            "**/* *",
-            ".git",
-            ".tmp_git_root/**/*",
-            "BUILD",
-            "BUILD.bazel",
-            "REPO.bazel",
-            "Cargo.toml.orig",
-            "WORKSPACE",
-            "WORKSPACE.bazel",
-        ],
-        allow_empty = True,
-    ) + extra_compile_data
+    native.filegroup(
+        name = name + "_compile_data",
+        srcs = native.glob(
+            include = ["**"],
+            exclude = [
+                "**/* *",
+                ".git",
+                ".tmp_git_root/**/*",
+                "BUILD",
+                "BUILD.bazel",
+                "REPO.bazel",
+                "Cargo.toml.orig",
+                "WORKSPACE",
+                "WORKSPACE.bazel",
+            ],
+            allow_empty = True,
+        ),
+    )
+
+    # CARGO_MANIFEST_PATH is derived via `$(execpath :Cargo.toml)`, and execpath only expands labels
+    # the target depends on directly, so specify it here even though the ** glob above covers it
+    compile_data = ["Cargo.toml", name + "_compile_data"] + extra_compile_data
 
     srcs = native.glob(
         include = ["**/*.rs"],
